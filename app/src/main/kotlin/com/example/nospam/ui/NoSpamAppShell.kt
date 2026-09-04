@@ -1,5 +1,7 @@
 package com.example.nospam.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -75,6 +77,14 @@ fun NoSpamAppShell() {
                         },
                         icon = { Icon(Icons.Filled.Warning, null) }
                     )
+                    androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    NavigationDrawerItem(
+                        label = { Text("Mark all as read") },
+                        selected = false,
+                        onClick = { scope.launch { drawerState.close() } },
+                        icon = { Icon(Icons.Filled.Warning, null) }
+                    )
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
                     NavigationDrawerItem(
                         label = { Text("Settings") },
                         selected = currentRoute?.contains("Settings") == true,
@@ -106,4 +116,12 @@ fun NoSpamAppShell() {
             }
         }
     }
+}
+
+// Preview
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Shell Light")
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Shell Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Composable
+fun NoSpamAppShellPreview() {
+    NoSpamAppShell()
 }

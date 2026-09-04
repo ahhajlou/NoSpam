@@ -93,3 +93,14 @@ fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
         Text("All contacts — placeholder (Stitch new_conversation)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+// Previews
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Thread Light")
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Thread Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Thread RTL", locale = "fa")
+@Composable
+fun ThreadScreenPreview() {
+    com.example.nospam.core.designsystem.theme.NoSpamTheme {
+        ThreadScreen(threadId = 1)
+    }
+}
