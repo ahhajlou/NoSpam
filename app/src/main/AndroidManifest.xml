@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.READ_CELL_BROADCASTS" />
 
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".NoSpamApplication"
@@ -50,44 +51,18 @@
             </intent-filter>
         </activity>
 
-        <!-- 1. BroadcastReceiver for Incoming SMS -->
+        <!-- Single SMS_DELIVER entry point. The legacy .receiver.* classes are kept
+             as files until end-of-project cleanup but are NOT registered here, so
+             each incoming SMS is handled exactly once. MMS + direct-reply service
+             come from core:telephony's manifest fragment via manifest merge. -->
         <receiver
-            android:name=".receiver.SmsReceiver"
+            android:name=".sms.AppSmsReceiver"
             android:permission="android.permission.BROADCAST_SMS"
             android:exported="true">
             <intent-filter>
-                <!-- FIXED: Must be SMS_DELIVER -->
                 <action android:name="android.provider.Telephony.SMS_DELIVER" />
             </intent-filter>
         </receiver>
-
-        <!-- 2. BroadcastReceiver for Incoming MMS -->
-        <receiver
-            android:name=".receiver.MmsReceiver"
-            android:permission="android.permission.BROADCAST_WAP_PUSH"
-            android:exported="true">
-            <intent-filter>
-                <!-- FIXED: Must be WAP_PUSH_DELIVER -->
-                <action android:name="android.provider.Telephony.WAP_PUSH_DELIVER" />
-                <data android:mimeType="application/vnd.wap.mms-message" />
-            </intent-filter>
-        </receiver>
-
-        <!-- 3. Headless Service for Quick Responses -->
-        <service
-            android:name=".service.HeadlessSmsSendService"
-            android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.RESPOND_VIA_MESSAGE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <!-- FIXED: Added mms and mmsto schemas -->
-                <data android:scheme="sms" />
-                <data android:scheme="smsto" />
-                <data android:scheme="mms" />
-                <data android:scheme="mmsto" />
-            </intent-filter>
-        </service>
 
         <!-- Per-app language persistence for API <33 -->
         <service

@@ -12,4 +12,8 @@ interface TelephonyDataSource {
     suspend fun sendMessage(address: String, body: String, subscriptionId: Int? = null): Result<Unit>
     suspend fun markAsRead(threadId: ThreadId)
     suspend fun deleteConversation(threadId: ThreadId)
+    /** Inserts an incoming message into the system inbox. Returns the row id, or null on failure. */
+    suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long?
+    /** Resolves the thread id for an address, or -1 on failure. */
+    suspend fun getOrCreateThreadId(address: String): Long
 }

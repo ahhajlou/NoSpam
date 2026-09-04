@@ -37,4 +37,17 @@ class SpamRepository(
     }
 
     suspend fun getVerdict(threadId: ThreadId) = db.spamVerdictDao.getByThread(threadId.value)
+
+    /**
+     * Retention: drops auto-classified spam verdicts older than [maxAgeDays].
+     * User corrections ("not spam" / "report spam") are never pruned.
+     */
+    suspend fun pruneOldSpam(maxAgeDays: Int = SPAM_RETENTION_DAYS): Int {
+        val cutoff = System.currentTimeMillis() - maxAgeDays * 24L * 60L * 60L * 1000L
+        return db.spamVerdictDao.deleteAutoSpamOlderThan(cutoff)
+    }
+
+    companion object {
+        const val SPAM_RETENTION_DAYS = 30
+    }
 }

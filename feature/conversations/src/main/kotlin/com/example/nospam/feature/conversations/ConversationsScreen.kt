@@ -226,7 +226,10 @@ fun ArchivedScreen(onConversationClick: (Long) -> Unit = {}) {
 }
 
 @Composable
-fun SpamScreen(onConversationClick: (Long) -> Unit = {}) {
+fun SpamScreen(
+    onConversationClick: (Long) -> Unit = {},
+    onNotSpam: (Long) -> Unit = {},
+) {
     var spamList by androidx.compose.runtime.remember {
         mutableStateOf(
             listOf(
@@ -261,6 +264,7 @@ fun SpamScreen(onConversationClick: (Long) -> Unit = {}) {
                         if (value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
                             spamList = spamList.filterNot { it.threadId == conv.threadId }
                             showNotSpamSnack = "${conv.participants.first().address} marked as not spam"
+                            onNotSpam(conv.threadId.value)
                             true
                         } else false
                     }
@@ -298,6 +302,7 @@ fun SpamScreen(onConversationClick: (Long) -> Unit = {}) {
                             androidx.compose.material3.TextButton(onClick = {
                                 spamList = spamList.filterNot { it.threadId == conv.threadId }
                                 showNotSpamSnack = "${conv.participants.first().address} marked as not spam"
+                                onNotSpam(conv.threadId.value)
                             }) { Text("Not spam") }
                         }
                     }

@@ -98,4 +98,23 @@ class RealTelephonyDataSource(
         )
         Unit
     }
+
+    override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? =
+        withContext(Dispatchers.IO) {
+            try {
+                val values = TelephonyMapper.buildMessageValues(address, body, date, if (read) 1 else 0)
+                val uri = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
+                uri?.lastPathSegment?.toLongOrNull()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+    override suspend fun getOrCreateThreadId(address: String): Long = withContext(Dispatchers.IO) {
+        try {
+            Telephony.Threads.getOrCreateThreadId(context, address)
+        } catch (_: Exception) {
+            -1L
+        }
+    }
 }

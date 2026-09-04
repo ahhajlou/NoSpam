@@ -79,10 +79,10 @@
 
 **Gate:** Device receives real SMS → classified → routed correctly; instrumented test on emulator with seeded SMS.
 
-- [ ] **5.1 SmsReceiver wiring** — Hilt-injected `SpamClassifier`, `TelephonyDataSource`, `SpamRepository`. On `SMS_DELIVER`, extract `getMessagesFromIntent`, `preprocess→ngrams→score`, write via `ContentResolver.insert(Inbox.CONTENT_URI)` with `READ=0/1` (spam=1 to suppress heads-up per `receiver/SmsReceiver.kt:49`). Store verdict in Room for later correction. *Verify:* emulator `adb emu sms send` + logcat `Prediction: spam/ham`.
-- [ ] **5.2 Notifications routing** — Ham → `MessagingStyle` notification with direct-reply `PendingIntent` (via `core:model` keys → `HeadlessSmsSendService`); spam → no heads-up or bundled "Spam" summary per settings. *Verify:* notification appears for ham, suppressed for spam.
-- [ ] **5.3 HeadlessSmsSendService** — Implement `onStartCommand` for `RESPOND_VIA_MESSAGE` (direct reply via `SmsManager` with correct `SubscriptionId`). *Verify:* inline reply from notification sends SMS.
-- [ ] **5.4 Corrections & retention** — "Not spam"/"Report spam" + blocklist CRUD → Room + threshold re-tuning (no retrain). WorkManager periodic re-classification if needed. *Verify:* correction persists, re-opens thread in Inbox.
+- [x] **5.1 SmsReceiver wiring** — Manual `AppContainer` (no Hilt — lighter alternative per CLAUDE.md; receivers can't use constructor injection anyway). `SmsIngressUseCase` (`core/data`) orchestrates: `getMessagesFromIntent` → `TfidfSpamClassifier.classify` → `getOrCreateThreadId` → `insertInboxMessage` with READ=1 for spam → verdict upsert → opportunistic prune. `AppSmsReceiver` (`:app`) uses `goAsync` + IO scope. Manifest owns exactly one SMS_DELIVER entry; legacy + telephony receiver entries removed (files kept). *Verify:* `./gradlew :core:data:testDebugUnitTest` (4 ingress tests) + emulator `adb emu sms send` + logcat `Prediction: spam/ham`. Done 2026-09-05.
+- [x] **5.2 Notifications routing** — Ham → `MessagingStyle` + `RemoteInput` direct-reply `PendingIntent` (explicit package, `thread_id` + `subscription_id` extras); spam → silent (low-importance channel only). `POST_NOTIFICATIONS` added. *Verify:* notification for ham, suppressed for spam. Done 2026-09-05.
+- [x] **5.3 HeadlessSmsSendService** — `onStartCommand` handles `RESPOND_VIA_MESSAGE`: `RemoteInput` text (fallback `EXTRA_TEXT`/`sms_body`), subscription-aware `SmsManager`, writes sent message to provider, cancels notification. Pure `pickReplyText`/`normalizeSubscriptionId` unit-tested. Done 2026-09-05.
+- [x] **5.4 Corrections & retention** — `markNotSpam`/`markSpam` (override-preserving) + `BlocklistRepository` CRUD + `pruneOldSpam(30d)` (overrides never pruned; opportunistic prune on each ingress, no WorkManager for v1). SpamScreen "Not spam" (button + swipe) persists via `NavHost → SpamRepository`. *Verify:* `SmsIngressUseCaseTest.pruneOldSpam keeps user overrides` PASS. Done 2026-09-05.
 
 ---
 

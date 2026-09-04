@@ -19,6 +19,12 @@ object TelephonyConstants {
     const val EXTRA_MESSAGE = "android.intent.extra.TEXT"
     const val EXTRA_URI = "android.intent.extra.\"SMS_URI\"" // not used directly, placeholder
 
+    // RemoteInput key for notification inline reply. Single source of truth so
+    // core:telephony never imports core:notifications (core→core is forbidden).
+    const val KEY_TEXT_REPLY = "key_text_reply"
+    const val EXTRA_THREAD_ID = "thread_id"
+    const val EXTRA_SUBSCRIPTION_ID = "subscription_id"
+
     // MMS mime
     const val MMS_MIME_TYPE = "application/vnd.wap.mms-message"
 

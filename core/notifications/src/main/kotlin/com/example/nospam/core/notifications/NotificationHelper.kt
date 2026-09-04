@@ -15,7 +15,7 @@ import com.example.nospam.core.model.TelephonyConstants
 object NotificationHelper {
     const val CHANNEL_ID_MESSAGES = "messages"
     const val CHANNEL_ID_SPAM = "spam"
-    const val KEY_TEXT_REPLY = "key_text_reply"
+    const val KEY_TEXT_REPLY = TelephonyConstants.KEY_TEXT_REPLY
     const val REQUEST_CODE_REPLY = 1001
 
     fun createChannels(context: Context) {
@@ -40,7 +40,8 @@ object NotificationHelper {
         threadId: Long,
         sender: String,
         messageBody: String,
-        isSpam: Boolean = false
+        isSpam: Boolean = false,
+        subscriptionId: Int? = null,
     ): android.app.Notification {
         val channelId = if (isSpam) CHANNEL_ID_SPAM else CHANNEL_ID_MESSAGES
         val person = Person.Builder().setName(sender).build()
@@ -51,6 +52,7 @@ object NotificationHelper {
             `package` = context.packageName
             data = android.net.Uri.parse("sms:$sender")
             putExtra("thread_id", threadId)
+            if (subscriptionId != null) putExtra("subscription_id", subscriptionId)
         }
         val replyPending = PendingIntent.getService(
             context, REQUEST_CODE_REPLY + threadId.toInt(), replyIntent,

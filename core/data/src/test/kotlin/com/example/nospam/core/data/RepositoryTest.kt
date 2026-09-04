@@ -19,12 +19,19 @@ import org.junit.Test
 class RepositoryTest {
     class FakeTelephony(private val convs: List<Conversation> = emptyList()) : TelephonyDataSource {
         private val flow = MutableStateFlow(convs)
+        val inserted = mutableListOf<Triple<String, String, Boolean>>()
+        var nextThreadId: Long = 42L
         override fun observeConversations(): Flow<List<Conversation>> = flow
         override suspend fun getConversations(): List<Conversation> = flow.value
         override suspend fun getMessages(threadId: ThreadId): List<Message> = emptyList()
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = Result.success(Unit)
         override suspend fun markAsRead(threadId: ThreadId) {}
         override suspend fun deleteConversation(threadId: ThreadId) {}
+        override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? {
+            inserted.add(Triple(address, body, read))
+            return 1L
+        }
+        override suspend fun getOrCreateThreadId(address: String): Long = nextThreadId
     }
 
     class FakeClassifier(private val isSpam: Boolean = false) : SpamClassifier {

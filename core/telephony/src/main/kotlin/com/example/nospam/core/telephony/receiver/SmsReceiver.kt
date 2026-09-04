@@ -7,6 +7,10 @@ import android.provider.Telephony
 import android.util.Log
 import com.example.nospam.core.model.TelephonyConstants
 
+@Deprecated(
+    "Superseded by :app AppSmsReceiver, which classifies via SmsIngressUseCase. " +
+        "Kept until end-of-project cleanup; no longer registered in the manifest."
+)
 class SmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
