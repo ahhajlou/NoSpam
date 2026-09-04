@@ -1,20 +1,28 @@
 package com.example.nospam.feature.thread
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -24,6 +32,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,13 +96,102 @@ fun ThreadScreen(threadId: Long, viewModel: ThreadViewModel = viewModel()) {
     }
 }
 
+private data class Contact(val name: String, val detail: String)
+
+// Placeholder until the Contacts provider is wired (needs READ_CONTACTS
+// query in core:telephony + a repository). Mirrors the Stitch mock.
+private fun fakeContacts() = listOf(
+    Contact("Alice Freeman", "Mobile • 555-0102"),
+    Contact("Amanda Jones", "Work • 555-0193"),
+    Contact("Ben Carter", "Home • 555-0144"),
+    Contact("Brian Smith", "Mobile • 555-0188"),
+    Contact("Catherine O'Neil", "Mobile • 555-0167"),
+    Contact("David Kim", "Work • 555-0112"),
+)
+
 @Composable
 fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
+    // Hoisted + saveable: the field previously used value = "" with a no-op
+    // onValueChange, so every keystroke was discarded and the IME ended up
+    // writing to an inactive InputConnection.
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    val contacts = androidx.compose.runtime.remember { fakeContacts() }
+    val filtered = remember(query) {
+        if (query.isBlank()) contacts
+        else contacts.filter {
+            it.name.contains(query, ignoreCase = true) || it.detail.contains(query, ignoreCase = true)
+        }
+    }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("To:", style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(value = "", onValueChange = {}, placeholder = { Text("Type a name, phone number, or email") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Type a name, phone number, or email") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
         Text("Top contacts", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
-        Text("All contacts — placeholder (Stitch new_conversation)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            contacts.take(5).forEach { contact ->
+                Column(
+                    modifier = Modifier.clickable { onThreadCreated(contact.name.hashCode().toLong()) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        modifier = Modifier.size(56.dp).clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            contact.name.take(1).uppercase(),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    Text(
+                        contact.name.substringBefore(" "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+        Text("All contacts", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(filtered, key = { it.name }) { contact ->
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { onThreadCreated(contact.name.hashCode().toLong()) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier.size(40.dp).clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            contact.name.take(1).uppercase(),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(contact.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            contact.detail,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

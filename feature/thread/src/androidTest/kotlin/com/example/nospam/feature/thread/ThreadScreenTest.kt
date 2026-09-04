@@ -20,4 +20,14 @@ class ThreadScreenTest {
         rule.waitForIdle()
         rule.onNodeWithText("See you!").assertIsDisplayed()
     }
+
+    @Test fun `new_conversation_recipient_field_accepts_input_and_filters`() {
+        rule.setContent { NewConversationScreen() }
+        // Regression: the field used value = "" with a no-op onValueChange,
+        // so keystrokes were discarded (inactive InputConnection in logcat).
+        rule.onNodeWithText("Type a name, phone number, or email").performTextInput("Ben")
+        rule.waitForIdle()
+        rule.onNodeWithText("Ben", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithText("Alice Freeman").assertDoesNotExist()
+    }
 }
