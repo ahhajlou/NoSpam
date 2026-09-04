@@ -3,9 +3,8 @@ plugins {
 }
 
 java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(25))
-    }
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 kotlin {
@@ -15,5 +14,8 @@ kotlin {
 }
 
 dependencies {
+    api(project(":core:model"))
+    api(project(":core:common"))
+    api(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
 }

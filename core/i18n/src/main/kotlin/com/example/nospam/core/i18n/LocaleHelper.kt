@@ -1,0 +1,27 @@
+package com.example.nospam.core.i18n
+
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+object LocaleHelper {
+    private val _currentLocale = MutableStateFlow(currentLocaleTag())
+
+    val currentLocale: StateFlow<String> = _currentLocale
+
+    fun setLocale(tag: String) {
+        val localeList = LocaleListCompat.forLanguageTags(tag)
+        AppCompatDelegate.setApplicationLocales(localeList)
+        _currentLocale.value = tag
+    }
+
+    fun currentLocaleTag(): String {
+        val locales = AppCompatDelegate.getApplicationLocales()
+        return if (locales.isEmpty) "en" else locales.get(0)?.toLanguageTag() ?: "en"
+    }
+
+    fun isRtl(tag: String = currentLocaleTag()): Boolean {
+        return tag.startsWith("fa") || tag.startsWith("ar") || tag.startsWith("he") || tag.startsWith("ur")
+    }
+}

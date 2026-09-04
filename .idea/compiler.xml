@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="CompilerConfiguration">
-    <bytecodeTargetLevel target="21" />
+    <bytecodeTargetLevel target="17">
+      <module name="NoSpam.core.domain" target="21" />
+      <module name="NoSpam.core.navigation" target="21" />
+      <module name="NoSpam.feature.conversation" target="21" />
+      <module name="NoSpam.feature.inbox" target="21" />
+    </bytecodeTargetLevel>
   </component>
 </project>
