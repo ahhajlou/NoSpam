@@ -51,10 +51,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Single SMS_DELIVER entry point. The legacy .receiver.* classes are kept
-             as files until end-of-project cleanup but are NOT registered here, so
-             each incoming SMS is handled exactly once. MMS + direct-reply service
-             come from core:telephony's manifest fragment via manifest merge. -->
+        <!-- Single SMS_DELIVER entry point, so each incoming SMS is handled
+             exactly once. MMS + direct-reply service come from core:telephony's
+             manifest fragment via manifest merge. -->
         <receiver
             android:name=".sms.AppSmsReceiver"
             android:permission="android.permission.BROADCAST_SMS"
