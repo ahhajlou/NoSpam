@@ -1,13 +1,20 @@
 package com.example.nospam.feature.conversations
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.nospam.core.data.ConversationsRepository
 import com.example.nospam.core.model.Conversation
 import com.example.nospam.core.model.ConversationFilter
 import com.example.nospam.core.model.Participant
 import com.example.nospam.core.model.ThreadId
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 
 data class ConversationsUiState(
     val conversations: List<Conversation> = emptyList(),
@@ -17,24 +24,73 @@ data class ConversationsUiState(
     val isSearchFocused: Boolean = false
 )
 
-class ConversationsViewModel : ViewModel() {
+/**
+ * @param repository when null (previews, unit tests), serves the fake list.
+ * When provided (NavHost via AppContainer), serves the real provider query
+ * through [ConversationsRepository], filtered client-side by chip + search.
+ */
+class ConversationsViewModel(
+    repository: ConversationsRepository? = null,
+) : ViewModel() {
+    private val _filter = MutableStateFlow(ConversationFilter.ALL)
+    private val _searchQuery = MutableStateFlow("")
+    private val _isSearchFocused = MutableStateFlow(false)
+
+    // Fake fallback: plain StateFlow, no Main dispatcher needed (tests/previews).
     private val all = fakeConversations()
-    private val _uiState = MutableStateFlow(ConversationsUiState(
-        conversations = all.drop(1),
-        pinned = all.take(1)
-    ))
-    val uiState: StateFlow<ConversationsUiState> = _uiState.asStateFlow()
+    private val _fakeState = MutableStateFlow(
+        ConversationsUiState(
+            conversations = all.drop(1),
+            pinned = all.take(1)
+        )
+    )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val _realState: StateFlow<ConversationsUiState>? = repository?.let { repo ->
+        combine(
+            _filter.flatMapLatest { repo.observeConversations(it) },
+            _filter,
+            _searchQuery,
+            _isSearchFocused,
+        ) { conversations, filter, query, focused ->
+            val searched = if (query.isBlank()) conversations
+            else conversations.filter { matchesQuery(it, query) }
+            ConversationsUiState(
+                conversations = searched.filterNot { it.isPinned },
+                pinned = searched.filter { it.isPinned },
+                filter = filter,
+                searchQuery = query,
+                isSearchFocused = focused,
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationsUiState())
+    }
+
+    val uiState: StateFlow<ConversationsUiState> = _realState ?: _fakeState.asStateFlow()
+
+    /** True when serving live provider data (used for empty-state copy). */
+    val isLive: Boolean = _realState != null
 
     fun onFilterSelected(filter: ConversationFilter) {
-        _uiState.value = _uiState.value.copy(filter = filter)
+        _filter.value = filter
+        _fakeState.value = _fakeState.value.copy(filter = filter)
     }
 
     fun onSearchQueryChanged(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
+        _searchQuery.value = query
+        _fakeState.value = _fakeState.value.copy(searchQuery = query)
     }
 
     fun onSearchFocusChanged(focused: Boolean) {
-        _uiState.value = _uiState.value.copy(isSearchFocused = focused)
+        _isSearchFocused.value = focused
+        _fakeState.value = _fakeState.value.copy(isSearchFocused = focused)
+    }
+
+    private fun matchesQuery(conversation: Conversation, query: String): Boolean {
+        if (conversation.snippet.contains(query, ignoreCase = true)) return true
+        return conversation.participants.any {
+            it.address.contains(query, ignoreCase = true) ||
+                (it.displayName?.contains(query, ignoreCase = true) == true)
+        }
     }
 
     private fun fakeConversations(): List<Conversation> = listOf(

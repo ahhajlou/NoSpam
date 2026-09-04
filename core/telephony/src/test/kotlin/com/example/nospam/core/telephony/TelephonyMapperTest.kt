@@ -16,6 +16,28 @@ class TelephonyMapperTest {
         assertTrue(TelephonyDataSource::class.java.isInterface)
     }
 
+    @Test fun `toConversation groups by latest message`() {
+        val thread = com.example.nospam.core.model.ThreadId(5L)
+        val messages = listOf(
+            com.example.nospam.core.model.Message(
+                com.example.nospam.core.model.MessageId(1), thread,
+                "+1555", "older", 1000L,
+                com.example.nospam.core.model.MessageType.INBOX, read = true,
+            ),
+            com.example.nospam.core.model.Message(
+                com.example.nospam.core.model.MessageId(2), thread,
+                "+1555", "latest unread", 2000L,
+                com.example.nospam.core.model.MessageType.INBOX, read = false,
+            ),
+        )
+        val conv = TelephonyMapper.toConversation(thread, messages)
+        assertEquals("latest unread", conv.snippet)
+        assertEquals(2000L, conv.date)
+        assertEquals(2, conv.messageCount)
+        assertFalse(conv.read)
+        assertEquals("+1555", conv.participants.first().address)
+    }
+
     @Test fun `reply text prefers RemoteInput over extras`() {
         assertEquals(
             "hello",

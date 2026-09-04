@@ -10,8 +10,11 @@ import com.example.nospam.core.model.ThreadId
 import com.example.nospam.core.ml.SpamClassifier
 import com.example.nospam.core.telephony.TelephonyDataSource
 import com.example.nospam.core.model.Message
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
@@ -19,6 +22,7 @@ import org.junit.Test
 class RepositoryTest {
     class FakeTelephony(private val convs: List<Conversation> = emptyList()) : TelephonyDataSource {
         private val flow = MutableStateFlow(convs)
+        fun emit(convs: List<Conversation>) { flow.value = convs }
         val inserted = mutableListOf<Triple<String, String, Boolean>>()
         var nextThreadId: Long = 42L
         override fun observeConversations(): Flow<List<Conversation>> = flow
@@ -31,6 +35,7 @@ class RepositoryTest {
             inserted.add(Triple(address, body, read))
             return 1L
         }
+        override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? = 2L
         override suspend fun getOrCreateThreadId(address: String): Long = nextThreadId
     }
 
@@ -50,6 +55,25 @@ class RepositoryTest {
         spamRepo.classifyAndStore(ThreadId(1), RawMessage("+98912", "win prize", 0L))
         val verdict = spamRepo.getVerdict(ThreadId(1))
         assertTrue(verdict!!.isSpam)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `observeConversations re-emits on provider change`() = runTest {
+        val first = Conversation(ThreadId(1), listOf(Participant("+98912")), "one", 1L, 1, true)
+        val second = Conversation(ThreadId(2), listOf(Participant("+98913")), "two", 2L, 1, true)
+        val tele = FakeTelephony(listOf(first))
+        val repo = ConversationsRepository(tele, NoSpamDatabase.inMemory())
+        val emissions = mutableListOf<List<Conversation>>()
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            repo.observeConversations().collect { emissions.add(it) }
+        }
+        testScheduler.advanceUntilIdle()
+        tele.emit(listOf(first, second))
+        testScheduler.advanceUntilIdle()
+        job.cancel()
+        assertEquals(2, emissions.size)
+        assertEquals(1, emissions[0].size)
+        assertEquals(2, emissions[1].size)
     }
 
     @Test fun `BlocklistRepository blocks`() = runTest {

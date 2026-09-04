@@ -1,13 +1,16 @@
 package com.example.nospam.feature.thread
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.nospam.core.model.Message
 import com.example.nospam.core.model.MessageId
 import com.example.nospam.core.model.MessageType
 import com.example.nospam.core.model.ThreadId
+import com.example.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 data class ThreadUiState(
     val threadId: Long,
@@ -15,12 +18,30 @@ data class ThreadUiState(
     val draft: String = ""
 )
 
-class ThreadViewModel : ViewModel() {
+/**
+ * @param dataSource when null (previews, unit tests), serves the fake thread
+ * and appends sent messages locally. When provided, messages come from the
+ * system provider and sending goes through SmsManager + sent-box write.
+ */
+class ThreadViewModel(
+    private val dataSource: TelephonyDataSource? = null,
+) : ViewModel() {
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
 
     fun loadThread(id: Long) {
-        _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages())
+        val dataSource = this.dataSource
+        if (dataSource == null) {
+            _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages())
+            return
+        }
+        _uiState.value = _uiState.value.copy(threadId = id, messages = emptyList())
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                threadId = id,
+                messages = dataSource.getMessages(ThreadId(id)),
+            )
+        }
     }
 
     fun onDraftChanged(text: String) {
@@ -30,16 +51,30 @@ class ThreadViewModel : ViewModel() {
     fun onSend() {
         val current = _uiState.value
         if (current.draft.isBlank()) return
-        val newMsg = Message(
-            id = MessageId(System.currentTimeMillis()),
-            threadId = ThreadId(current.threadId),
-            address = "me",
-            body = current.draft,
-            date = System.currentTimeMillis(),
-            type = MessageType.SENT,
-            read = true
-        )
-        _uiState.value = current.copy(messages = current.messages + newMsg, draft = "")
+        val dataSource = this.dataSource
+        if (dataSource == null) {
+            val newMsg = Message(
+                id = MessageId(System.currentTimeMillis()),
+                threadId = ThreadId(current.threadId),
+                address = "me",
+                body = current.draft,
+                date = System.currentTimeMillis(),
+                type = MessageType.SENT,
+                read = true
+            )
+            _uiState.value = current.copy(messages = current.messages + newMsg, draft = "")
+            return
+        }
+        // Address = the other party: first incoming message's sender.
+        val address = current.messages.firstOrNull { it.type == MessageType.INBOX }?.address
+            ?: return
+        val body = current.draft
+        _uiState.value = current.copy(draft = "")
+        viewModelScope.launch {
+            dataSource.sendMessage(address, body, subscriptionId = null)
+            dataSource.insertSentMessage(address, body, System.currentTimeMillis(), subscriptionId = null)
+            _uiState.value = _uiState.value.copy(messages = dataSource.getMessages(ThreadId(current.threadId)))
+        }
     }
 
     private fun fakeMessages(): List<Message> = listOf(

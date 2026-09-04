@@ -14,6 +14,8 @@ interface TelephonyDataSource {
     suspend fun deleteConversation(threadId: ThreadId)
     /** Inserts an incoming message into the system inbox. Returns the row id, or null on failure. */
     suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long?
+    /** Persists an outgoing message to the sent box (SmsManager never writes it). Null on failure. */
+    suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int? = null): Long?
     /** Resolves the thread id for an address, or -1 on failure. */
     suspend fun getOrCreateThreadId(address: String): Long
 }

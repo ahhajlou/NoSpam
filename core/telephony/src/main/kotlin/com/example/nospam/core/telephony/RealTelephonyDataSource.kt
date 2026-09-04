@@ -1,43 +1,102 @@
 package com.example.nospam.core.telephony
 
 import android.content.Context
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.provider.Telephony
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
 import com.example.nospam.core.model.Conversation
 import com.example.nospam.core.model.Message
 import com.example.nospam.core.model.ThreadId
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 
 class RealTelephonyDataSource(
     private val context: Context
 ) : TelephonyDataSource {
-    override fun observeConversations(): Flow<List<Conversation>> = flow {
-        emit(getConversations())
+    /**
+     * Emits the inbox on subscribe and re-emits on every provider change
+     * (incoming SMS, sent message, read-state update). The ContentObserver
+     * lives here — callers only see a cold Flow. Rapid bursts are coalesced
+     * by [mapLatest], which cancels an in-flight reload.
+     */
+    override fun observeConversations(): Flow<List<Conversation>> =
+        observeSmsChanges()
+            .onStart { emit(Unit) }
+            .mapLatest { getConversations() }
+
+    private fun observeSmsChanges(): Flow<Unit> = callbackFlow {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                trySend(Unit)
+            }
+        }
+        context.contentResolver.registerContentObserver(
+            Telephony.Sms.CONTENT_URI,
+            true,
+            observer
+        )
+        awaitClose { context.contentResolver.unregisterContentObserver(observer) }
     }
 
     override suspend fun getConversations(): List<Conversation> = withContext(Dispatchers.IO) {
-        val list = mutableListOf<Conversation>()
-        val uri = Telephony.Threads.CONTENT_URI
+        // Without READ_SMS (or before the app is default) the provider throws
+        // SecurityException — surface as an empty list, never crash the UI.
+        try {
+            queryConversations()
+        } catch (e: Exception) {
+            // SecurityException (no permission) or SQLiteException (provider
+            // column differences) — surface as empty, never crash the UI.
+            android.util.Log.w("RealTelephony", "Provider query failed", e)
+            emptyList()
+        }
+    }
+
+    private fun queryConversations(): List<Conversation> {
+        // Group raw SMS rows client-side instead of querying Threads.CONTENT_URI:
+        // thread columns like `snippet` are not present on all Android versions
+        // (SQLiteException: no such column) and we don't support MMS yet anyway.
+        val messages = mutableListOf<Message>()
         val projection = arrayOf(
-            Telephony.Threads._ID,
-            Telephony.Threads.SNIPPET,
-            Telephony.Threads.DATE,
-            Telephony.Threads.MESSAGE_COUNT,
-            Telephony.Threads.READ
+            Telephony.Sms._ID,
+            Telephony.Sms.THREAD_ID,
+            Telephony.Sms.ADDRESS,
+            Telephony.Sms.BODY,
+            Telephony.Sms.DATE,
+            Telephony.Sms.TYPE,
+            Telephony.Sms.READ
         )
-        context.contentResolver.query(uri, projection, null, null, "${Telephony.Threads.DATE} DESC")?.use { cursor ->
+        context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI, projection, null, null, "${Telephony.Sms.DATE} DESC"
+        )?.use { cursor ->
             while (cursor.moveToNext()) {
-                list.add(TelephonyMapper.mapCursorToConversation(cursor))
+                messages.add(TelephonyMapper.mapCursorToMessage(cursor))
             }
         }
-        list
+        return messages.groupBy { it.threadId }
+            .map { (threadId, threadMessages) -> TelephonyMapper.toConversation(threadId, threadMessages) }
+            .sortedByDescending { it.date }
     }
 
     override suspend fun getMessages(threadId: ThreadId): List<Message> = withContext(Dispatchers.IO) {
+        try {
+            queryMessages(threadId)
+        } catch (e: Exception) {
+            // SecurityException (no permission) or SQLiteException (provider
+            // column differences) — surface as empty, never crash the UI.
+            android.util.Log.w("RealTelephony", "Provider query failed", e)
+            emptyList()
+        }
+    }
+
+    private fun queryMessages(threadId: ThreadId): List<Message> {
         val list = mutableListOf<Message>()
         val uri = Telephony.Sms.CONTENT_URI
         val projection = arrayOf(
@@ -56,7 +115,7 @@ class RealTelephonyDataSource(
                 list.add(TelephonyMapper.mapCursorToMessage(cursor))
             }
         }
-        list
+        return list
     }
 
     override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = withContext(Dispatchers.IO) {
@@ -109,6 +168,21 @@ class RealTelephonyDataSource(
                 null
             }
         }
+
+    override suspend fun insertSentMessage(
+        address: String,
+        body: String,
+        date: Long,
+        subscriptionId: Int?,
+    ): Long? = withContext(Dispatchers.IO) {
+        try {
+            val values = TelephonyMapper.buildSentValues(address, body, date, subscriptionId)
+            val uri = context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+            uri?.lastPathSegment?.toLongOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     override suspend fun getOrCreateThreadId(address: String): Long = withContext(Dispatchers.IO) {
         try {

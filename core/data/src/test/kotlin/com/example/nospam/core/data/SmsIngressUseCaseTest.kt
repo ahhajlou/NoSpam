@@ -34,6 +34,7 @@ class SmsIngressUseCaseTest {
             inserted.add(Triple(address, body, read))
             return insertResult
         }
+        override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? = 2L
         override suspend fun getOrCreateThreadId(address: String): Long = threadId
     }
 

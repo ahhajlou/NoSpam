@@ -171,8 +171,11 @@ reply. "Not spam" on a spam row persists an override that survives the
 
 ## Known limitations / next steps
 
-- Conversation/thread lists still render fake `ViewModel` data; repos are
-  real and tested — UI→repo wiring is the natural next slice.
+- Inbox/Spam/Thread read live provider data via `AppContainer` repos
+  (fake fallback only in previews/tests). Archived is truthfully empty —
+  the provider has no archived flag, so an app-owned archive store is
+  still future work. Contact-name resolution is also future work
+  (rows show the raw address until then).
 - Room is an in-memory stand-in (KSP + AGP 9.0/Kotlin 2.2 incompat);
   swap in the real `RoomDatabase` behind the same DAO interfaces.
 - Fonts are `FontFamily.Default` placeholders; wire Inter/Hanken via the

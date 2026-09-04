@@ -117,6 +117,26 @@ fun ConversationsScreen(
                 items(uiState.conversations, key = { it.threadId.value }) { conv ->
                     ConversationRow(conv, onClick = { onConversationClick(conv.threadId.value) })
                 }
+                if (uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                if (viewModel.isLive) "No conversations yet" else "No conversations",
+                                style = MaterialTheme.typography.headlineMedium
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                if (viewModel.isLive) "Messages you receive will appear here."
+                                else "Start a new chat below.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -160,15 +180,22 @@ private fun formatTime(millis: Long): String {
 }
 
 @Composable
-fun ArchivedScreen(onConversationClick: (Long) -> Unit = {}) {
-    var archived by androidx.compose.runtime.remember {
+fun ArchivedScreen(
+    viewModel: ArchivedViewModel? = null,
+    onConversationClick: (Long) -> Unit = {},
+) {
+    // Live data when a ViewModel is provided (empty until an archived-thread
+    // store exists); fake seed for previews.
+    val live = viewModel?.conversations?.collectAsState()?.value
+    var fakeArchived by androidx.compose.runtime.remember(viewModel) {
         mutableStateOf(
-            listOf(
+            if (viewModel == null) listOf(
                 Conversation(com.example.nospam.core.model.ThreadId(101), listOf(com.example.nospam.core.model.Participant("Bank Alerts")), "Your statement for account ending in 1234 is ready to view.", System.currentTimeMillis() - 86400000, 1, true, isArchived = true),
                 Conversation(com.example.nospam.core.model.ThreadId(102), listOf(com.example.nospam.core.model.Participant("Home Depot")), "Your order #987654321 is ready for pickup.", System.currentTimeMillis() - 3 * 86400000, 1, true, isArchived = true),
-            )
+            ) else emptyList()
         )
     }
+    var archived = live ?: fakeArchived
     if (archived.isEmpty()) {
         androidx.compose.foundation.layout.Column(
             modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -186,13 +213,23 @@ fun ArchivedScreen(onConversationClick: (Long) -> Unit = {}) {
             Text("Messages you archive will appear here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
+        // Live mode has no archive store yet, so unarchive only dismisses for
+        // this session; fake mode mutates its local seed.
+        var liveDismissed by androidx.compose.runtime.remember(viewModel) {
+            mutableStateOf(setOf<Long>())
+        }
+        val visible = archived.filterNot { it.threadId.value in liveDismissed }
         androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(archived, key = { it.threadId.value }) { conv ->
+            items(visible, key = { it.threadId.value }) { conv ->
                 val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                     positionalThreshold = { it * 0.5f },
                     confirmValueChange = { value ->
                         if (value == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart || value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                            archived = archived.filterNot { it.threadId == conv.threadId }
+                            if (viewModel == null) {
+                                fakeArchived = fakeArchived.filterNot { it.threadId == conv.threadId }
+                            } else {
+                                liveDismissed = liveDismissed + conv.threadId.value
+                            }
                             true
                         } else false
                     }
@@ -227,19 +264,34 @@ fun ArchivedScreen(onConversationClick: (Long) -> Unit = {}) {
 
 @Composable
 fun SpamScreen(
+    viewModel: SpamViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
     onNotSpam: (Long) -> Unit = {},
 ) {
-    var spamList by androidx.compose.runtime.remember {
+    // Live verdicts when a ViewModel is provided; fake seed for previews/tests.
+    val live = viewModel?.conversations?.collectAsState()?.value
+    val isLive = viewModel != null
+    var fakeSpamList by androidx.compose.runtime.remember(viewModel) {
         mutableStateOf(
-            listOf(
+            if (isLive) emptyList()
+            else listOf(
                 Conversation(com.example.nospam.core.model.ThreadId(201), listOf(com.example.nospam.core.model.Participant("Win A Free Cruise!")), "Congratulations! You've been selected for an all-expenses-paid trip. Click here to claim.", System.currentTimeMillis(), 1, true, isSpam = true),
                 Conversation(com.example.nospam.core.model.ThreadId(202), listOf(com.example.nospam.core.model.Participant("+1 (555) 928-1102")), "URGENT: Your account needs verification immediately or it will be suspended.", System.currentTimeMillis() - 86400000, 1, true, isSpam = true),
                 Conversation(com.example.nospam.core.model.ThreadId(203), listOf(com.example.nospam.core.model.Participant("Crypto Alerts")), "Don't miss the next big pump! Join our exclusive VIP telegram group now.", System.currentTimeMillis() - 2 * 86400000, 1, true, isSpam = true),
             )
         )
     }
+    // Session-dismissed ids for instant feedback; the persisted override also
+    // removes the row via the live flow on the next emission.
+    var dismissed by androidx.compose.runtime.remember(viewModel) { mutableStateOf(setOf<Long>()) }
     var showNotSpamSnack by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
+    fun markNotSpam(conv: Conversation) {
+        if (isLive) dismissed = dismissed + conv.threadId.value
+        else fakeSpamList = fakeSpamList.filterNot { it.threadId == conv.threadId }
+        showNotSpamSnack = "${conv.participants.first().address} marked as not spam"
+        onNotSpam(conv.threadId.value)
+    }
+    val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
     Column(modifier = Modifier.fillMaxSize()) {
         // Banner
         Row(
@@ -250,11 +302,15 @@ fun SpamScreen(
             Spacer(Modifier.width(8.dp))
             Text("Spam messages will be deleted automatically after 30 days.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
         }
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
-            androidx.compose.material3.TextButton(onClick = { spamList = emptyList() }) {
-                Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Empty Spam")
+        // Bulk delete touches the system provider — offered only for the fake
+        // seed. Live spam is cleared thread-by-thread via "Not spam".
+        if (!isLive) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
+                androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
+                    Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Empty Spam")
+                }
             }
         }
         androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -262,9 +318,7 @@ fun SpamScreen(
                 val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                     confirmValueChange = { value ->
                         if (value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                            spamList = spamList.filterNot { it.threadId == conv.threadId }
-                            showNotSpamSnack = "${conv.participants.first().address} marked as not spam"
-                            onNotSpam(conv.threadId.value)
+                            markNotSpam(conv)
                             true
                         } else false
                     }
@@ -299,11 +353,7 @@ fun SpamScreen(
                             }
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            androidx.compose.material3.TextButton(onClick = {
-                                spamList = spamList.filterNot { it.threadId == conv.threadId }
-                                showNotSpamSnack = "${conv.participants.first().address} marked as not spam"
-                                onNotSpam(conv.threadId.value)
-                            }) { Text("Not spam") }
+                            androidx.compose.material3.TextButton(onClick = { markNotSpam(conv) }) { Text("Not spam") }
                         }
                     }
                 }

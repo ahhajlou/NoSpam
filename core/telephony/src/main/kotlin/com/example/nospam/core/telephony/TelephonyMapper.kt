@@ -37,6 +37,25 @@ object TelephonyMapper {
         )
     }
 
+    /**
+     * Builds a [Conversation] from already-loaded messages. Preferred over
+     * querying Threads.CONTENT_URI: provider thread columns (snippet,
+     * message_count) are not guaranteed across Android versions and can
+     * throw SQLiteException on some devices.
+     */
+    fun toConversation(threadId: ThreadId, messages: List<Message>): Conversation {
+        require(messages.isNotEmpty())
+        val latest = messages.maxBy { it.date }
+        return Conversation(
+            threadId = threadId,
+            participants = listOf(Participant(address = latest.address)),
+            snippet = latest.body,
+            date = latest.date,
+            messageCount = messages.size,
+            read = messages.all { it.read },
+        )
+    }
+
     fun mapCursorToConversation(cursor: Cursor): Conversation {
         val threadId = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Threads._ID))
         val snippet = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Threads.SNIPPET)) ?: ""
