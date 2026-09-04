@@ -40,7 +40,7 @@ import kotlinx.serialization.Serializable
 @Serializable object SettingsRoute
 @Serializable object OnboardingRoute
 @Serializable object NewConversationRoute
-@Serializable data class ThreadRoute(val threadId: Long)
+@Serializable data class ThreadRoute(val threadId: Long, val address: String? = null)
 
 private inline fun <reified VM : ViewModel> vmFactory(crossinline create: () -> VM) =
     object : ViewModelProvider.Factory {
@@ -79,6 +79,7 @@ fun NoSpamNavHost(
 
     NavHost(navController = navController, startDestination = start) {
         composable<ConversationsRoute> {
+            val scope = rememberCoroutineScope()
             val vm: ConversationsViewModel = viewModel(
                 factory = vmFactory {
                     container?.let { ConversationsViewModel(it.conversationsRepository) }
@@ -88,16 +89,38 @@ fun NoSpamNavHost(
             ConversationsScreen(
                 viewModel = vm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
-                onNewMessage = { navController.navigate(NewConversationRoute) }
+                onNewMessage = { navController.navigate(NewConversationRoute) },
+                onToggleRead = { id, read ->
+                    scope.launch { container?.conversationsRepository?.setRead(ThreadId(id), read) }
+                },
+                onArchive = { id ->
+                    scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }
+                },
+                onReportSpam = { id ->
+                    scope.launch { container?.spamRepository?.markSpam(ThreadId(id)) }
+                },
+                onBlock = { address ->
+                    scope.launch { container?.blocklistRepository?.block(address) }
+                },
+                onDelete = { id ->
+                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                },
             )
         }
         composable<ArchivedRoute> {
+            val scope = rememberCoroutineScope()
             val vm: ArchivedViewModel? = container?.let {
                 viewModel(factory = vmFactory { ArchivedViewModel(it.conversationsRepository) })
             }
             ArchivedScreen(
                 viewModel = vm,
-                onConversationClick = { id -> navController.navigate(ThreadRoute(id)) }
+                onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
+                onUnarchive = { id ->
+                    scope.launch { container?.conversationsRepository?.unarchive(ThreadId(id)) }
+                },
+                onDelete = { id ->
+                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                },
             )
         }
         composable<SpamRoute> {
@@ -112,7 +135,13 @@ fun NoSpamNavHost(
                     scope.launch {
                         container?.spamRepository?.markNotSpam(ThreadId(id))
                     }
-                }
+                },
+                onBlock = { address ->
+                    scope.launch { container?.blocklistRepository?.block(address) }
+                },
+                onDelete = { id ->
+                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                },
             )
         }
         composable<SettingsRoute> { SettingsScreen() }
@@ -125,15 +154,26 @@ fun NoSpamNavHost(
                 }
             )
         }
-        composable<NewConversationRoute> { NewConversationScreen(onThreadCreated = { id -> navController.navigate(ThreadRoute(id)) }) }
+        composable<NewConversationRoute> {
+            val scope = rememberCoroutineScope()
+            NewConversationScreen(onAddressEntered = { address ->
+                scope.launch {
+                    // Resolve (or create) the provider thread, then open it with
+                    // the address attached so sending works before any message
+                    // exists. Without a container there is no provider access.
+                    val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L
+                    navController.navigate(ThreadRoute(threadId, address))
+                }
+            })
+        }
         composable<ThreadRoute> { backStackEntry ->
             val args = backStackEntry.toRoute<ThreadRoute>()
             val vm: ThreadViewModel = viewModel(
                 factory = vmFactory {
-                    container?.let { ThreadViewModel(it.telephony) } ?: ThreadViewModel()
+                    container?.let { ThreadViewModel(it.telephony, args.address) } ?: ThreadViewModel()
                 }
             )
-            ThreadScreen(threadId = args.threadId, viewModel = vm)
+            ThreadScreen(threadId = args.threadId, address = args.address, viewModel = vm)
         }
     }
 }

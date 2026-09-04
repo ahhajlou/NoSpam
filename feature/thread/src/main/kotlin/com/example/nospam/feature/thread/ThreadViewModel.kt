@@ -25,11 +25,17 @@ data class ThreadUiState(
  */
 class ThreadViewModel(
     private val dataSource: TelephonyDataSource? = null,
+    initialAddress: String? = null,
 ) : ViewModel() {
+    // The other party for threads reached from New Conversation, which have
+    // no messages yet. Mutable because one VM instance can serve successive
+    // ThreadRoutes (same navigation scope).
+    private var pendingAddress: String? = initialAddress
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
 
-    fun loadThread(id: Long) {
+    fun loadThread(id: Long, address: String? = null) {
+        if (address != null) pendingAddress = address
         val dataSource = this.dataSource
         if (dataSource == null) {
             _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages())
@@ -65,8 +71,11 @@ class ThreadViewModel(
             _uiState.value = current.copy(messages = current.messages + newMsg, draft = "")
             return
         }
-        // Address = the other party: first incoming message's sender.
+        // Address = the other party: first incoming message's sender,
+        // falling back to the address the thread was opened with (new threads
+        // reached from New Conversation have no messages yet).
         val address = current.messages.firstOrNull { it.type == MessageType.INBOX }?.address
+            ?: pendingAddress
             ?: return
         val body = current.draft
         _uiState.value = current.copy(draft = "")

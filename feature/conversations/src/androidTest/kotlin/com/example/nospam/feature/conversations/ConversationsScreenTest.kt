@@ -5,6 +5,8 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.*
 import org.junit.Rule
@@ -51,5 +53,31 @@ class ConversationsScreenTest {
         }
         rule.onNodeWithText("Design Team Sync").performClick()
         assertEquals(2L, clicked)
+    }
+
+    @Test fun `long_press_opens_inbox_actions`() {
+        rule.setContent { ConversationsScreen(viewModel = ConversationsViewModel()) }
+        rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
+        rule.waitForIdle()
+        // Thread 2 is read in the fake seed, so the toggle reads "unread".
+        rule.onNodeWithText("Mark as unread").assertIsDisplayed()
+        rule.onNodeWithText("Archive").assertIsDisplayed()
+        rule.onNodeWithText("Report spam").assertIsDisplayed()
+        rule.onNodeWithText("Delete").assertIsDisplayed()
+    }
+
+    @Test fun `long_press_archive_action_reports_id`() {
+        var archived: Long? = null
+        rule.setContent {
+            ConversationsScreen(
+                viewModel = ConversationsViewModel(),
+                onArchive = { archived = it }
+            )
+        }
+        rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
+        rule.waitForIdle()
+        rule.onNodeWithText("Archive").performClick()
+        rule.waitForIdle()
+        assertEquals(2L, archived)
     }
 }

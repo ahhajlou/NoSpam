@@ -29,6 +29,7 @@ class SmsIngressUseCaseTest {
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> =
             Result.success(Unit)
         override suspend fun markAsRead(threadId: ThreadId) {}
+        override suspend fun markAsUnread(threadId: ThreadId) {}
         override suspend fun deleteConversation(threadId: ThreadId) {}
         override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? {
             inserted.add(Triple(address, body, read))

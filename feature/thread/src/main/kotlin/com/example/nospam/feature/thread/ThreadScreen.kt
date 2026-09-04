@@ -47,8 +47,8 @@ import com.example.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.example.nospam.core.model.MessageType
 
 @Composable
-fun ThreadScreen(threadId: Long, viewModel: ThreadViewModel = viewModel()) {
-    LaunchedEffect(threadId) { viewModel.loadThread(threadId) }
+fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewModel = viewModel()) {
+    LaunchedEffect(threadId, address) { viewModel.loadThread(threadId, address) }
     val uiState by viewModel.uiState.collectAsState()
     Column(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -97,21 +97,34 @@ fun ThreadScreen(threadId: Long, viewModel: ThreadViewModel = viewModel()) {
     }
 }
 
-private data class Contact(val name: String, val detail: String)
+internal data class Contact(val name: String, val detail: String, val phone: String)
 
 // Placeholder until the Contacts provider is wired (needs READ_CONTACTS
 // query in core:telephony + a repository). Mirrors the Stitch mock.
-private fun fakeContacts() = listOf(
-    Contact("Alice Freeman", "Mobile • 555-0102"),
-    Contact("Amanda Jones", "Work • 555-0193"),
-    Contact("Ben Carter", "Home • 555-0144"),
-    Contact("Brian Smith", "Mobile • 555-0188"),
-    Contact("Catherine O'Neil", "Mobile • 555-0167"),
-    Contact("David Kim", "Work • 555-0112"),
+internal fun fakeContacts() = listOf(
+    Contact("Alice Freeman", "Mobile • 555-0102", "5550102"),
+    Contact("Amanda Jones", "Work • 555-0193", "5550193"),
+    Contact("Ben Carter", "Home • 555-0144", "5550144"),
+    Contact("Brian Smith", "Mobile • 555-0188", "5550188"),
+    Contact("Catherine O'Neil", "Mobile • 555-0167", "5550167"),
+    Contact("David Kim", "Work • 555-0112", "5550112"),
 )
 
+/**
+ * Resolves a typed query to a destination address: an exact/contains match
+ * on a known contact name wins, otherwise the raw query is treated as a
+ * phone number/address. Pure logic so the IME-Done path is unit-testable.
+ */
+internal fun resolveRecipientAddress(query: String, contacts: List<Contact> = fakeContacts()): String? {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) return null
+    contacts.firstOrNull { it.name.equals(trimmed, ignoreCase = true) }?.let { return it.phone }
+    contacts.firstOrNull { it.name.contains(trimmed, ignoreCase = true) }?.let { return it.phone }
+    return trimmed
+}
+
 @Composable
-fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
+fun NewConversationScreen(onAddressEntered: (String) -> Unit = {}) {
     // Hoisted + saveable: the field previously used value = "" with a no-op
     // onValueChange, so every keystroke was discarded and the IME ended up
     // writing to an inactive InputConnection.
@@ -123,6 +136,9 @@ fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
             it.name.contains(query, ignoreCase = true) || it.detail.contains(query, ignoreCase = true)
         }
     }
+    fun submit() {
+        resolveRecipientAddress(query)?.let { onAddressEntered(it) }
+    }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(stringResource(R.string.new_to), style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
@@ -131,6 +147,13 @@ fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
             placeholder = { Text(stringResource(R.string.new_hint)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onDone = { submit() },
+            ),
         )
         Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
         Row(
@@ -139,7 +162,7 @@ fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
         ) {
             contacts.take(5).forEach { contact ->
                 Column(
-                    modifier = Modifier.clickable { onThreadCreated(contact.name.hashCode().toLong()) },
+                    modifier = Modifier.clickable { onAddressEntered(contact.phone) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
@@ -167,7 +190,7 @@ fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
             items(filtered, key = { it.name }) { contact ->
                 Row(
                     modifier = Modifier.fillMaxWidth()
-                        .clickable { onThreadCreated(contact.name.hashCode().toLong()) }
+                        .clickable { onAddressEntered(contact.phone) }
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

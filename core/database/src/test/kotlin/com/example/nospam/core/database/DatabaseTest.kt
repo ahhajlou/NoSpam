@@ -2,6 +2,8 @@ package com.example.nospam.core.database
 
 import com.example.nospam.core.database.entity.BlocklistEntity
 import com.example.nospam.core.database.entity.SpamVerdictEntity
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
@@ -22,6 +24,16 @@ class DatabaseTest {
         val v = db.spamVerdictDao.getByThread(1)!!
         assertFalse(v.isSpam)
         assertTrue(v.isUserOverride)
+    }
+
+    @Test fun `archived dao tracks flags`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        assertFalse(db.archivedDao.isArchived(7))
+        db.archivedDao.archive(7)
+        assertTrue(db.archivedDao.isArchived(7))
+        assertEquals(1, db.archivedDao.observeAll().take(1).toList().first().size)
+        db.archivedDao.unarchive(7)
+        assertFalse(db.archivedDao.isArchived(7))
     }
 
     @Test fun `clearAutoSpam respects override`() = runTest {

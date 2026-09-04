@@ -1,7 +1,9 @@
 package com.example.nospam.feature.conversations
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,9 +57,15 @@ import com.example.nospam.core.model.ConversationFilter
 fun ConversationsScreen(
     viewModel: ConversationsViewModel = viewModel(),
     onConversationClick: (Long) -> Unit = {},
-    onNewMessage: () -> Unit = {}
+    onNewMessage: () -> Unit = {},
+    onToggleRead: (Long, Boolean) -> Unit = { _, _ -> },
+    onArchive: (Long) -> Unit = {},
+    onReportSpam: (Long) -> Unit = {},
+    onBlock: (String) -> Unit = {},
+    onDelete: (Long) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var menuFor by remember { mutableStateOf<Conversation?>(null) }
     NoSpamTheme {
         Scaffold(
             floatingActionButton = {
@@ -108,7 +116,11 @@ fun ConversationsScreen(
                         }
                     }
                     items(uiState.pinned, key = { it.threadId.value }) { conv ->
-                        ConversationRow(conv, onClick = { onConversationClick(conv.threadId.value) })
+                        ConversationRow(
+                            conv,
+                            onClick = { onConversationClick(conv.threadId.value) },
+                            onLongClick = { menuFor = conv },
+                        )
                     }
                     item { Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))) }
                     item {
@@ -116,7 +128,11 @@ fun ConversationsScreen(
                     }
                 }
                 items(uiState.conversations, key = { it.threadId.value }) { conv ->
-                    ConversationRow(conv, onClick = { onConversationClick(conv.threadId.value) })
+                    ConversationRow(
+                        conv,
+                        onClick = { onConversationClick(conv.threadId.value) },
+                        onLongClick = { menuFor = conv },
+                    )
                 }
                 if (uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
                     item {
@@ -140,13 +156,88 @@ fun ConversationsScreen(
                 }
             }
         }
+        menuFor?.let { conv ->
+            val address = conv.participants.firstOrNull()?.address
+            ConversationActionsDialog(
+                title = conv.participants.firstOrNull()?.displayName ?: address
+                    ?: stringResource(R.string.unknown_sender),
+                actions = inboxActions(
+                    conv = conv,
+                    address = address,
+                    onToggleRead = { onToggleRead(conv.threadId.value, !conv.read) },
+                    onArchive = { onArchive(conv.threadId.value) },
+                    onReportSpam = { onReportSpam(conv.threadId.value) },
+                    onBlock = { address?.let(onBlock) },
+                    onDelete = { onDelete(conv.threadId.value) },
+                ),
+                onDismiss = { menuFor = null },
+            )
+        }
     }
 }
 
 @Composable
-private fun ConversationRow(conv: Conversation, onClick: () -> Unit) {
+private fun inboxActions(
+    conv: Conversation,
+    address: String?,
+    onToggleRead: () -> Unit,
+    onArchive: () -> Unit,
+    onReportSpam: () -> Unit,
+    onBlock: () -> Unit,
+    onDelete: () -> Unit,
+): List<ConversationAction> = buildList {
+    add(
+        ConversationAction(
+            label = stringResource(
+                if (conv.read) R.string.menu_mark_unread else R.string.menu_mark_read
+            ),
+            onClick = onToggleRead,
+        )
+    )
+    add(
+        ConversationAction(
+            label = stringResource(R.string.menu_archive),
+            onClick = onArchive,
+        )
+    )
+    add(
+        ConversationAction(
+            label = stringResource(R.string.menu_report_spam),
+            destructive = true,
+            onClick = onReportSpam,
+        )
+    )
+    if (address != null) {
+        add(
+            ConversationAction(
+                label = stringResource(
+                    if (conv.isBlocked) R.string.menu_unblock else R.string.menu_block
+                ),
+                destructive = !conv.isBlocked,
+                onClick = onBlock,
+            )
+        )
+    }
+    add(
+        ConversationAction(
+            label = stringResource(R.string.menu_delete),
+            destructive = true,
+            onClick = onDelete,
+        )
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ConversationRow(
+    conv: Conversation,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp).height(72.dp),
+        modifier = Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp).height(72.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -196,6 +287,8 @@ private fun formatTime(millis: Long): String {
 fun ArchivedScreen(
     viewModel: ArchivedViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
+    onUnarchive: (Long) -> Unit = {},
+    onDelete: (Long) -> Unit = {},
 ) {
     // Live data when a ViewModel is provided (empty until an archived-thread
     // store exists); fake seed for previews.
@@ -226,23 +319,22 @@ fun ArchivedScreen(
             Text(stringResource(R.string.archive_empty_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
-        // Live mode has no archive store yet, so unarchive only dismisses for
-        // this session; fake mode mutates its local seed.
-        var liveDismissed by androidx.compose.runtime.remember(viewModel) {
-            mutableStateOf(setOf<Long>())
+        var menuFor by remember { mutableStateOf<Conversation?>(null) }
+        fun unarchive(conv: Conversation) {
+            // Live mode persists via the archive store (flow removes the row);
+            // fake mode mutates its local seed.
+            if (viewModel == null) {
+                fakeArchived = fakeArchived.filterNot { it.threadId == conv.threadId }
+            }
+            onUnarchive(conv.threadId.value)
         }
-        val visible = archived.filterNot { it.threadId.value in liveDismissed }
         androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(visible, key = { it.threadId.value }) { conv ->
+            items(archived, key = { it.threadId.value }) { conv ->
                 val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                     positionalThreshold = { it * 0.5f },
                     confirmValueChange = { value ->
                         if (value == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart || value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                            if (viewModel == null) {
-                                fakeArchived = fakeArchived.filterNot { it.threadId == conv.threadId }
-                            } else {
-                                liveDismissed = liveDismissed + conv.threadId.value
-                            }
+                            unarchive(conv)
                             true
                         } else false
                     }
@@ -265,21 +357,47 @@ fun ArchivedScreen(
                     enableDismissFromEndToStart = false
                 ) {
                     Box(
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).clickable { onConversationClick(conv.threadId.value) }
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
                     ) {
-                        ConversationRow(conv, onClick = { onConversationClick(conv.threadId.value) })
+                        ConversationRow(
+                            conv,
+                            onClick = { onConversationClick(conv.threadId.value) },
+                            onLongClick = { menuFor = conv },
+                        )
                     }
                 }
             }
         }
+        menuFor?.let { conv ->
+            ConversationActionsDialog(
+                title = conv.participants.firstOrNull()?.displayName
+                    ?: conv.participants.firstOrNull()?.address
+                    ?: stringResource(R.string.unknown_sender),
+                actions = listOf(
+                    ConversationAction(
+                        label = stringResource(R.string.menu_unarchive),
+                        onClick = { unarchive(conv) },
+                    ),
+                    ConversationAction(
+                        label = stringResource(R.string.menu_delete),
+                        destructive = true,
+                        onClick = { onDelete(conv.threadId.value) },
+                    ),
+                ),
+                onDismiss = { menuFor = null },
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SpamScreen(
     viewModel: SpamViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
     onNotSpam: (Long) -> Unit = {},
+    onBlock: (String) -> Unit = {},
+    onDelete: (Long) -> Unit = {},
 ) {
     // Live verdicts when a ViewModel is provided; fake seed for previews/tests.
     val live = viewModel?.conversations?.collectAsState()?.value
@@ -305,6 +423,7 @@ fun SpamScreen(
         onNotSpam(conv.threadId.value)
     }
     val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
+    var menuFor by remember { mutableStateOf<Conversation?>(null) }
     Column(modifier = Modifier.fillMaxSize()) {
         // Banner
         Row(
@@ -353,7 +472,12 @@ fun SpamScreen(
                     enableDismissFromEndToStart = false
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface).clickable { onConversationClick(conv.threadId.value) }.padding(horizontal = 12.dp, vertical = 8.dp)
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface)
+                            .combinedClickable(
+                                onClick = { onConversationClick(conv.threadId.value) },
+                                onLongClick = { menuFor = conv },
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error), contentAlignment = Alignment.Center) {
@@ -377,6 +501,40 @@ fun SpamScreen(
         }
         showNotSpamSnack?.let {
             androidx.compose.material3.Snackbar(modifier = Modifier.padding(16.dp)) { Text(it) }
+        }
+        menuFor?.let { conv ->
+            val address = conv.participants.firstOrNull()?.address
+            val notSpamMessage = stringResource(R.string.marked_as_not_spam, address.orEmpty())
+            ConversationActionsDialog(
+                title = address ?: stringResource(R.string.unknown_sender),
+                actions = buildList {
+                    add(
+                        ConversationAction(
+                            label = stringResource(R.string.not_spam),
+                            onClick = { markNotSpam(conv, notSpamMessage) },
+                        )
+                    )
+                    if (address != null) {
+                        add(
+                            ConversationAction(
+                                label = stringResource(
+                                    if (conv.isBlocked) R.string.menu_unblock else R.string.menu_block
+                                ),
+                                destructive = !conv.isBlocked,
+                                onClick = { onBlock(address) },
+                            )
+                        )
+                    }
+                    add(
+                        ConversationAction(
+                            label = stringResource(R.string.menu_delete),
+                            destructive = true,
+                            onClick = { onDelete(conv.threadId.value) },
+                        )
+                    )
+                },
+                onDismiss = { menuFor = null },
+            )
         }
     }
 }

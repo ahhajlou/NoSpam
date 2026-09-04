@@ -13,6 +13,8 @@ import com.example.nospam.core.model.Message
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -30,7 +32,11 @@ class RepositoryTest {
         override suspend fun getMessages(threadId: ThreadId): List<Message> = emptyList()
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = Result.success(Unit)
         override suspend fun markAsRead(threadId: ThreadId) {}
-        override suspend fun deleteConversation(threadId: ThreadId) {}
+        override suspend fun markAsUnread(threadId: ThreadId) {}
+        val deletedIds = mutableListOf<Long>()
+        override suspend fun deleteConversation(threadId: ThreadId) {
+            deletedIds.add(threadId.value)
+        }
         override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? {
             inserted.add(Triple(address, body, read))
             return 1L
@@ -74,6 +80,41 @@ class RepositoryTest {
         assertEquals(2, emissions.size)
         assertEquals(1, emissions[0].size)
         assertEquals(2, emissions[1].size)
+    }
+
+    @Test fun `archive hides from inbox and shows in archived`() = runTest {
+        val conv = Conversation(ThreadId(1), listOf(Participant("+98912")), "hello", 1L, 1, true)
+        val tele = FakeTelephony(listOf(conv))
+        val db = NoSpamDatabase.inMemory()
+        val repo = ConversationsRepository(tele, db)
+        assertEquals(1, repo.observeConversations().take(1).toList().first().size)
+
+        repo.archive(ThreadId(1))
+        val inbox = repo.observeConversations().take(1).toList().first()
+        assertTrue(inbox.isEmpty())
+        val archived = repo.observeArchived().take(1).toList().first()
+        assertEquals(1, archived.size)
+        assertTrue(archived.first().isArchived)
+
+        repo.unarchive(ThreadId(1))
+        assertEquals(1, repo.observeConversations().take(1).toList().first().size)
+    }
+
+    @Test fun `deleteConversation drops provider and app rows`() = runTest {
+        val conv = Conversation(ThreadId(1), listOf(Participant("+98912")), "hello", 1L, 1, true)
+        val tele = FakeTelephony(listOf(conv))
+        val db = NoSpamDatabase.inMemory()
+        db.spamVerdictDao.upsert(
+            com.example.nospam.core.database.entity.SpamVerdictEntity(
+                threadId = 1, isSpam = true, score = 1.0
+            )
+        )
+        db.archivedDao.archive(1)
+        val repo = ConversationsRepository(tele, db)
+        repo.deleteConversation(ThreadId(1))
+        assertEquals(listOf(1L), tele.deletedIds)
+        assertNull(db.spamVerdictDao.getByThread(1))
+        assertFalse(db.archivedDao.isArchived(1))
     }
 
     @Test fun `BlocklistRepository blocks`() = runTest {

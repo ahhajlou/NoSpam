@@ -23,4 +23,12 @@
     <string name="empty_spam">Empty Spam</string>
     <string name="not_spam">Not spam</string>
     <string name="marked_as_not_spam">%1$s marked as not spam</string>
+    <string name="menu_mark_read">Mark as read</string>
+    <string name="menu_mark_unread">Mark as unread</string>
+    <string name="menu_archive">Archive</string>
+    <string name="menu_unarchive">Unarchive</string>
+    <string name="menu_report_spam">Report spam</string>
+    <string name="menu_block">Block</string>
+    <string name="menu_unblock">Unblock</string>
+    <string name="menu_delete">Delete</string>
 </resources>

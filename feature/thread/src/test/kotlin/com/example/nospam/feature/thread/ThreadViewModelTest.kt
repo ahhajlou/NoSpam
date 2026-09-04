@@ -34,6 +34,7 @@ class ThreadViewModelTest {
             return Result.success(Unit)
         }
         override suspend fun markAsRead(threadId: ThreadId) {}
+        override suspend fun markAsUnread(threadId: ThreadId) {}
         override suspend fun deleteConversation(threadId: ThreadId) {}
         override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? = 1L
         override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? {

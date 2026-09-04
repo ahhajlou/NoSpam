@@ -1,10 +1,12 @@
 package com.example.nospam.core.telephony
 
+import android.content.ContentUris
 import android.content.Context
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
+import android.util.Log
 import com.example.nospam.core.model.Conversation
 import com.example.nospam.core.model.Message
 import com.example.nospam.core.model.ThreadId
@@ -20,6 +22,9 @@ import kotlinx.coroutines.withContext
 class RealTelephonyDataSource(
     private val context: Context
 ) : TelephonyDataSource {
+    companion object {
+        private const val TAG = "RealTelephony"
+    }
     /**
      * Emits the inbox on subscribe and re-emits on every provider change
      * (incoming SMS, sent message, read-state update). The ContentObserver
@@ -128,22 +133,60 @@ class RealTelephonyDataSource(
     }
 
     override suspend fun markAsRead(threadId: ThreadId) = withContext(Dispatchers.IO) {
-        val values = android.content.ContentValues().apply { put(Telephony.Sms.READ, 1) }
-        context.contentResolver.update(
-            Telephony.Sms.CONTENT_URI,
-            values,
-            "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
-            arrayOf(threadId.value.toString())
-        )
+        try {
+            val values = android.content.ContentValues().apply { put(Telephony.Sms.READ, 1) }
+            context.contentResolver.update(
+                Telephony.Sms.CONTENT_URI,
+                values,
+                "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
+                arrayOf(threadId.value.toString())
+            )
+        } catch (e: Exception) {
+            // Best effort: provider may deny the write when not default app.
+            Log.w(TAG, "markAsRead failed", e)
+        }
+        Unit
+    }
+
+    override suspend fun markAsUnread(threadId: ThreadId) = withContext(Dispatchers.IO) {
+        try {
+            val values = android.content.ContentValues().apply { put(Telephony.Sms.READ, 0) }
+            context.contentResolver.update(
+                Telephony.Sms.CONTENT_URI,
+                values,
+                "${Telephony.Sms.THREAD_ID} = ?",
+                arrayOf(threadId.value.toString())
+            )
+        } catch (e: Exception) {
+            // Best effort: provider may deny the write when not default app.
+            Log.w(TAG, "markAsUnread failed", e)
+        }
         Unit
     }
 
     override suspend fun deleteConversation(threadId: ThreadId) = withContext(Dispatchers.IO) {
-        context.contentResolver.delete(
-            Telephony.Threads.CONTENT_URI,
-            "${Telephony.Threads._ID} = ?",
-            arrayOf(threadId.value.toString())
-        )
+        try {
+            // Delete the message rows (the provider-supported operation); the
+            // thread drops out of the conversation list once empty. A Threads
+            // delete is attempted best-effort for providers supporting it —
+            // Threads.CONTENT_URI is a query UNION on most builds, so deleting
+            // there alone is a silent no-op.
+            context.contentResolver.delete(
+                Telephony.Sms.CONTENT_URI,
+                "${Telephony.Sms.THREAD_ID} = ?",
+                arrayOf(threadId.value.toString())
+            )
+            runCatching {
+                context.contentResolver.delete(
+                    ContentUris.withAppendedId(Telephony.Threads.CONTENT_URI, threadId.value),
+                    null,
+                    null,
+                )
+            }
+        } catch (e: Exception) {
+            // Best effort: provider denies writes unless this is the default app.
+            Log.w(TAG, "deleteConversation failed", e)
+        }
         Unit
     }
 
@@ -153,7 +196,8 @@ class RealTelephonyDataSource(
                 val values = TelephonyMapper.buildMessageValues(address, body, date, if (read) 1 else 0)
                 val uri = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
                 uri?.lastPathSegment?.toLongOrNull()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w(TAG, "insertInboxMessage failed", e)
                 null
             }
         }
@@ -166,17 +210,19 @@ class RealTelephonyDataSource(
     ): Long? = withContext(Dispatchers.IO) {
         try {
             val values = TelephonyMapper.buildSentValues(address, body, date, subscriptionId)
-            val uri = context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
-            uri?.lastPathSegment?.toLongOrNull()
-        } catch (_: Exception) {
-            null
-        }
+                val uri = context.contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+                uri?.lastPathSegment?.toLongOrNull()
+            } catch (e: Exception) {
+                Log.w(TAG, "insertSentMessage failed", e)
+                null
+            }
     }
 
     override suspend fun getOrCreateThreadId(address: String): Long = withContext(Dispatchers.IO) {
         try {
             Telephony.Threads.getOrCreateThreadId(context, address)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "getOrCreateThreadId failed", e)
             -1L
         }
     }
