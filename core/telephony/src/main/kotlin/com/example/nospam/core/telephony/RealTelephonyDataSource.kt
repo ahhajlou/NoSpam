@@ -5,12 +5,11 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Telephony
-import android.telephony.SmsManager
-import android.telephony.SubscriptionManager
 import com.example.nospam.core.model.Conversation
 import com.example.nospam.core.model.Message
 import com.example.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -27,6 +26,7 @@ class RealTelephonyDataSource(
      * lives here — callers only see a cold Flow. Rapid bursts are coalesced
      * by [mapLatest], which cancels an in-flight reload.
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeConversations(): Flow<List<Conversation>> =
         observeSmsChanges()
             .onStart { emit(Unit) }
@@ -120,18 +120,7 @@ class RealTelephonyDataSource(
 
     override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val smsManager = if (subscriptionId != null) {
-                SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
-            } else {
-                val subManager = context.getSystemService(SubscriptionManager::class.java)
-                val defaultId = SubscriptionManager.getDefaultSubscriptionId()
-                if (defaultId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-                    SmsManager.getSmsManagerForSubscriptionId(defaultId)
-                } else {
-                    SmsManager.getDefault()
-                }
-            }
-            smsManager.sendTextMessage(address, null, body, null, null)
+            context.resolveSmsManager(subscriptionId).sendTextMessage(address, null, body, null, null)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

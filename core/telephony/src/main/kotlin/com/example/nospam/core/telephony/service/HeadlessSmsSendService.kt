@@ -10,12 +10,13 @@ import android.util.Log
 import androidx.core.app.RemoteInput
 import com.example.nospam.core.model.TelephonyConstants
 import com.example.nospam.core.telephony.TelephonyMapper
+import com.example.nospam.core.telephony.resolveSmsManager
 
 /**
  * Handles notification direct-reply (RESPOND_VIA_MESSAGE) with the correct
  * subscription and writes the sent message to the provider so it appears
  * in the thread. Keeps only platform APIs — no core:* dependencies except
- * core:model constants and core:notifications keys.
+ * core:model constants and same-module helpers.
  */
 class HeadlessSmsSendService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
@@ -41,18 +42,8 @@ class HeadlessSmsSendService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun smsManagerFor(subscriptionId: Int?): SmsManager {
-        if (subscriptionId != null && subscriptionId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-            return SmsManager.getSmsManagerForSubscriptionId(subscriptionId)
-        }
-        val defaultId = SubscriptionManager.getDefaultSubscriptionId()
-        return if (defaultId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-            SmsManager.getSmsManagerForSubscriptionId(defaultId)
-        } else {
-            @Suppress("DEPRECATION")
-            SmsManager.getDefault()
-        }
-    }
+    private fun smsManagerFor(subscriptionId: Int?): SmsManager =
+        resolveSmsManager(subscriptionId)
 
     private fun cancelNotificationFor(address: String) {
         val manager = getSystemService(android.app.NotificationManager::class.java) ?: return
