@@ -27,7 +27,12 @@ android {
 }
 
 dependencies {
+    implementation(libs.kotlinx.coroutines.core)
+    // compose runtime required for kotlin.compose plugin even if not using compose
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

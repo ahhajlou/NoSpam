@@ -27,7 +27,17 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:model"))
+    implementation(project(":core:database"))
+    implementation(project(":core:telephony"))
+    implementation(project(":core:ml"))
+    implementation(project(":core:common"))
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    testImplementation(project(":core:testing"))
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
