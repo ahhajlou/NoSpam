@@ -78,7 +78,7 @@ fun ThreadScreen(threadId: Long, viewModel: ThreadViewModel = viewModel()) {
                 singleLine = true
             )
             IconButton(onClick = viewModel::onSend) {
-                Icon(Icons.Default.Send, null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Send, "Send message", tint = MaterialTheme.colorScheme.primary)
             }
         }
     }

@@ -1,0 +1,43 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build all modules (assembles APKs/AARs, runs lint + JVM unit tests)
+        run: ./gradlew build --stacktrace
+
+      - name: Compile device-test suites (executed on emulator, see TASKS.md 6.3)
+        run: ./gradlew :feature:conversations:assembleDebugAndroidTest :feature:thread:assembleDebugAndroidTest :feature:settings:assembleDebugAndroidTest :core:telephony:assembleDebugAndroidTest :core:designsystem:assembleDebugAndroidTest
+
+      - name: Merged coverage report + ratchet gate
+        run: ./gradlew :koverXmlReport :koverVerify
+
+      - name: Upload merged coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kover-merged-report
+          path: |
+            build/reports/kover/html
+            build/reports/kover/report.xml
+
+# NOTE: connected tests (./gradlew connectedDebugAndroidTest) are intentionally
+# not run here — they need an emulator with NoSpam set as the default SMS app.
+# Run them locally per TASKS.md Phase 6.3 before release.
