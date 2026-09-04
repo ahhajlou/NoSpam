@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -61,7 +62,7 @@ fun ConversationsScreen(
         Scaffold(
             floatingActionButton = {
                 FloatingActionButton(onClick = onNewMessage, shape = RoundedCornerShape(16.dp)) {
-                    Text("Start chat", modifier = Modifier.padding(horizontal = 16.dp))
+                    Text(stringResource(R.string.start_chat), modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
         ) { padding ->
@@ -74,7 +75,7 @@ fun ConversationsScreen(
                     OutlinedTextField(
                         value = uiState.searchQuery,
                         onValueChange = viewModel::onSearchQueryChanged,
-                        placeholder = { Text("Search conversations") },
+                        placeholder = { Text(stringResource(R.string.search_conversations)) },
                         leadingIcon = { Icon(Icons.Default.Search, null) },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(24.dp),
@@ -95,7 +96,7 @@ fun ConversationsScreen(
                             FilterChip(
                                 selected = selected,
                                 onClick = { viewModel.onFilterSelected(filter) },
-                                label = { Text(filter.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                                label = { Text(filterLabel(filter)) }
                             )
                         }
                     }
@@ -103,7 +104,7 @@ fun ConversationsScreen(
                 if (uiState.pinned.isNotEmpty()) {
                     item {
                         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Pinned", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            Text(stringResource(R.string.section_pinned), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                     items(uiState.pinned, key = { it.threadId.value }) { conv ->
@@ -111,7 +112,7 @@ fun ConversationsScreen(
                     }
                     item { Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))) }
                     item {
-                        Text("Recent", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
                 }
                 items(uiState.conversations, key = { it.threadId.value }) { conv ->
@@ -124,13 +125,13 @@ fun ConversationsScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                if (viewModel.isLive) "No conversations yet" else "No conversations",
+                                if (viewModel.isLive) stringResource(R.string.empty_title_live) else stringResource(R.string.empty_title),
                                 style = MaterialTheme.typography.headlineMedium
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                if (viewModel.isLive) "Messages you receive will appear here."
-                                else "Start a new chat below.",
+                                if (viewModel.isLive) stringResource(R.string.empty_subtitle_live)
+                                else stringResource(R.string.empty_subtitle_new),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -160,7 +161,7 @@ private fun ConversationRow(conv: Conversation, onClick: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(conv.participants.firstOrNull()?.displayName ?: conv.participants.firstOrNull()?.address ?: "Unknown", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(conv.participants.firstOrNull()?.displayName ?: conv.participants.firstOrNull()?.address ?: stringResource(R.string.unknown_sender), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text(formatTime(conv.date), style = MaterialTheme.typography.labelLarge, color = if (!conv.read) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(conv.snippet, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -168,13 +169,25 @@ private fun ConversationRow(conv: Conversation, onClick: () -> Unit) {
     }
 }
 
+@Composable
+private fun filterLabel(filter: ConversationFilter): String = when (filter) {
+    ConversationFilter.ALL -> stringResource(R.string.filter_all)
+    ConversationFilter.UNREAD -> stringResource(R.string.filter_unread)
+    ConversationFilter.KNOWN -> stringResource(R.string.filter_known)
+    ConversationFilter.UNKNOWN -> stringResource(R.string.filter_unknown)
+    ConversationFilter.STARRED -> stringResource(R.string.filter_starred)
+}
+
+@Composable
 private fun formatTime(millis: Long): String {
+    val now = stringResource(R.string.time_now)
+    val yesterday = stringResource(R.string.time_yesterday)
     val diff = System.currentTimeMillis() - millis
     return when {
-        diff < 60_000 -> "now"
+        diff < 60_000 -> now
         diff < 3600_000 -> "${diff / 60000}m"
         diff < 86400000 -> "${diff / 3600000}h"
-        diff < 172800000 -> "Yesterday"
+        diff < 172800000 -> yesterday
         else -> java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(millis))
     }
 }
@@ -209,8 +222,8 @@ fun ArchivedScreen(
                 Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(48.dp))
             }
             Spacer(Modifier.height(16.dp))
-            Text("Archive is empty", style = MaterialTheme.typography.headlineMedium)
-            Text("Messages you archive will appear here.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.archive_empty_title), style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.archive_empty_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
         // Live mode has no archive store yet, so unarchive only dismisses for
@@ -244,7 +257,7 @@ fun ArchivedScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onPrimary)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Unarchive", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                                Text(stringResource(R.string.unarchive), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
                             }
                         }
                     },
@@ -285,10 +298,10 @@ fun SpamScreen(
     // removes the row via the live flow on the next emission.
     var dismissed by androidx.compose.runtime.remember(viewModel) { mutableStateOf(setOf<Long>()) }
     var showNotSpamSnack by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
-    fun markNotSpam(conv: Conversation) {
+    fun markNotSpam(conv: Conversation, message: String) {
         if (isLive) dismissed = dismissed + conv.threadId.value
         else fakeSpamList = fakeSpamList.filterNot { it.threadId == conv.threadId }
-        showNotSpamSnack = "${conv.participants.first().address} marked as not spam"
+        showNotSpamSnack = message
         onNotSpam(conv.threadId.value)
     }
     val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
@@ -300,7 +313,7 @@ fun SpamScreen(
         ) {
             Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
             Spacer(Modifier.width(8.dp))
-            Text("Spam messages will be deleted automatically after 30 days.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+            Text(stringResource(R.string.spam_banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
         }
         // Bulk delete touches the system provider — offered only for the fake
         // seed. Live spam is cleared thread-by-thread via "Not spam".
@@ -309,16 +322,19 @@ fun SpamScreen(
                 androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
                     Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Empty Spam")
+                    Text(stringResource(R.string.empty_spam))
                 }
             }
         }
         androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(spamList, key = { it.threadId.value }) { conv ->
+                // Resolved here (composable scope): confirmValueChange/onClick
+                // lambdas below are not composable and can't call stringResource.
+                val notSpamMessage = stringResource(R.string.marked_as_not_spam, conv.participants.first().address)
                 val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
                     confirmValueChange = { value ->
                         if (value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                            markNotSpam(conv)
+                            markNotSpam(conv, notSpamMessage)
                             true
                         } else false
                     }
@@ -330,7 +346,7 @@ fun SpamScreen(
                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 16.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            Text("Not spam", color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(R.string.not_spam), color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.labelLarge)
                         }
                     },
                     enableDismissFromStartToEnd = true,
@@ -353,7 +369,7 @@ fun SpamScreen(
                             }
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            androidx.compose.material3.TextButton(onClick = { markNotSpam(conv) }) { Text("Not spam") }
+                            androidx.compose.material3.TextButton(onClick = { markNotSpam(conv, notSpamMessage) }) { Text(stringResource(R.string.not_spam)) }
                         }
                     }
                 }

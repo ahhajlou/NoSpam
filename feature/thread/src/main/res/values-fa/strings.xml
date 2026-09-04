@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compose_hint">پیامک</string>
+    <string name="send_message_desc">ارسال پیام</string>
+    <string name="new_to">گیرنده:</string>
+    <string name="new_hint">نام، شماره یا ایمیل را تایپ کنید</string>
+    <string name="new_top">مخاطبان پرتکرار</string>
+    <string name="new_all">همهٔ مخاطبان</string>
+</resources>

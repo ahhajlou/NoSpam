@@ -25,8 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.nospam.R
 import com.example.nospam.core.designsystem.theme.NoSpamTheme
 import com.example.nospam.navigation.ArchivedRoute
 import com.example.nospam.navigation.ConversationsRoute
@@ -49,9 +51,9 @@ fun NoSpamAppShell() {
             drawerState = drawerState,
             drawerContent = {
                 ModalDrawerSheet {
-                    Text("Messages", modifier = Modifier.padding(all = 16.dp))
+                    Text(stringResource(R.string.drawer_messages), modifier = Modifier.padding(all = 16.dp))
                     NavigationDrawerItem(
-                        label = { Text("Inbox") },
+                        label = { Text(stringResource(R.string.drawer_inbox)) },
                         selected = currentRoute?.contains("Conversations") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -60,7 +62,7 @@ fun NoSpamAppShell() {
                         icon = { Icon(Icons.Filled.Menu, null) }
                     )
                     NavigationDrawerItem(
-                        label = { Text("Archived") },
+                        label = { Text(stringResource(R.string.drawer_archived)) },
                         selected = currentRoute?.contains("Archived") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -69,7 +71,7 @@ fun NoSpamAppShell() {
                         icon = { Icon(Icons.Filled.Delete, null) }
                     )
                     NavigationDrawerItem(
-                        label = { Text("Spam & blocked") },
+                        label = { Text(stringResource(R.string.drawer_spam_blocked)) },
                         selected = currentRoute?.contains("Spam") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -79,14 +81,14 @@ fun NoSpamAppShell() {
                     )
                     androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     NavigationDrawerItem(
-                        label = { Text("Mark all as read") },
+                        label = { Text(stringResource(R.string.drawer_mark_all_read)) },
                         selected = false,
                         onClick = { scope.launch { drawerState.close() } },
                         icon = { Icon(Icons.Filled.Warning, null) }
                     )
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
                     NavigationDrawerItem(
-                        label = { Text("Settings") },
+                        label = { Text(stringResource(R.string.drawer_settings)) },
                         selected = currentRoute?.contains("Settings") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
@@ -104,7 +106,7 @@ fun NoSpamAppShell() {
                         title = { Text("NoSpam") },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                                Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.action_menu_desc))
                             }
                         }
                     )

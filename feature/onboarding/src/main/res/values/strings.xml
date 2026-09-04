@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="welcome">Welcome to NoSpam</string>
+    <string name="tagline">On-device spam filtering — no server.</string>
+    <string name="grant">Grant SMS &amp; Contacts permissions</string>
+    <string name="granted">✓ Permissions granted</string>
+    <string name="set_default">Set as default SMS app</string>
+    <string name="is_default">✓ Default SMS app</string>
+    <string name="continue_btn">Continue</string>
+</resources>

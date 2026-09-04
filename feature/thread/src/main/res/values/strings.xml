@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compose_hint">SMS message</string>
+    <string name="send_message_desc">Send message</string>
+    <string name="new_to">To:</string>
+    <string name="new_hint">Type a name, phone number, or email</string>
+    <string name="new_top">Top contacts</string>
+    <string name="new_all">All contacts</string>
+</resources>

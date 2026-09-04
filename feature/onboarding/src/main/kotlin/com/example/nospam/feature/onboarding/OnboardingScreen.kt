@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 
@@ -52,9 +53,9 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Welcome to NoSpam", style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.welcome), style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
-        Text("On-device spam filtering — no server.", style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.tagline), style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(32.dp))
         if (!hasPermissions) {
             Button(onClick = {
@@ -66,22 +67,22 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
                         android.Manifest.permission.READ_CONTACTS
                     )
                 )
-            }) { Text("Grant SMS & Contacts permissions") }
+            }) { Text(stringResource(R.string.grant)) }
             Spacer(Modifier.height(12.dp))
         } else {
-            Text("✓ Permissions granted", color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.granted), color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(12.dp))
         }
         if (!isDefaultSms) {
             Button(onClick = { requestDefaultSmsRole(context, roleLauncher) }) {
-                Text("Set as default SMS app")
+                Text(stringResource(R.string.set_default))
             }
         } else {
-            Text("✓ Default SMS app", color = MaterialTheme.colorScheme.primary)
+            Text(stringResource(R.string.is_default), color = MaterialTheme.colorScheme.primary)
         }
         Spacer(Modifier.height(24.dp))
         if (hasPermissions && isDefaultSms) {
-            Button(onClick = onComplete) { Text("Continue") }
+            Button(onClick = onComplete) { Text(stringResource(R.string.continue_btn)) }
         }
     }
 }

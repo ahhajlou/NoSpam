@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.NoSpam" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- AppCompat parent: required by AppCompatActivity (which in turn is required
+         for per-app locales on pre-33). All UI is Compose (NoSpamTheme), so this
+         view theme only hosts the activity window. -->
+    <style name="Theme.NoSpam" parent="Theme.AppCompat.NoActionBar" />
 </resources>

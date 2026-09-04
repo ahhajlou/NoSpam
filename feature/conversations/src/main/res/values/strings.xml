@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_conversations">Search conversations</string>
+    <string name="filter_all">All</string>
+    <string name="filter_unread">Unread</string>
+    <string name="filter_known">Known</string>
+    <string name="filter_unknown">Unknown</string>
+    <string name="filter_starred">Starred</string>
+    <string name="section_pinned">Pinned</string>
+    <string name="section_recent">Recent</string>
+    <string name="start_chat">Start chat</string>
+    <string name="empty_title">No conversations</string>
+    <string name="empty_title_live">No conversations yet</string>
+    <string name="empty_subtitle_new">Start a new chat below.</string>
+    <string name="empty_subtitle_live">Messages you receive will appear here.</string>
+    <string name="time_now">now</string>
+    <string name="time_yesterday">Yesterday</string>
+    <string name="unknown_sender">Unknown</string>
+    <string name="archive_empty_title">Archive is empty</string>
+    <string name="archive_empty_subtitle">Messages you archive will appear here.</string>
+    <string name="unarchive">Unarchive</string>
+    <string name="spam_banner">Spam messages will be deleted automatically after 30 days.</string>
+    <string name="empty_spam">Empty Spam</string>
+    <string name="not_spam">Not spam</string>
+    <string name="marked_as_not_spam">%1$s marked as not spam</string>
+</resources>

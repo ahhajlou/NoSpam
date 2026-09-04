@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="section_general">عمومی</string>
+    <string name="section_privacy">حریم خصوصی و محافظت</string>
+    <string name="section_advanced">پیشرفته</string>
+    <string name="section_about">درباره</string>
+    <string name="notif_title">اعلان‌ها</string>
+    <string name="notif_on">روشن</string>
+    <string name="notif_off">خاموش — برای فعال‌سازی ضربه بزنید</string>
+    <string name="bubbles_title">حباب‌ها</string>
+    <string name="bubbles_allowed">مجاز</string>
+    <string name="bubbles_off">خاموش — برای تغییر ضربه بزنید</string>
+    <string name="bubbles_system">تنظیمات سیستم</string>
+    <string name="lang_title">زبان</string>
+    <string name="lang_system">پیش‌فرض سیستم</string>
+    <string name="lang_follow">پیروی از زبان دستگاه</string>
+    <string name="lang_english">English</string>
+    <string name="lang_persian">فارسی</string>
+    <string name="lang_persian_sub">فارسی · راست‌به‌چپ</string>
+    <string name="dialog_language">زبان برنامه</string>
+    <string name="action_close">بستن</string>
+    <string name="default_sms_title">برنامهٔ پیش‌فرض پیامک</string>
+    <string name="default_sms_on">NoSpam پیش‌فرض است</string>
+    <string name="default_sms_off">برای پیش‌فرض کردن ضربه بزنید</string>
+    <string name="spam_title">محافظت در برابر هرزنامه</string>
+    <string name="spam_sub">هرزنامه‌ها، کلاهبرداری و فیشینگ را در همین دستگاه پالایش می‌کند</string>
+    <string name="data_title">داده‌های شما در پیام‌ها</string>
+    <string name="data_sub">فقط در همین دستگاه نگه‌داری می‌شود</string>
+    <string name="data_text">پیام‌ها در مخزن پیامک سیستم باقی می‌مانند. نواسپم فقط فهرست مسدودشده‌ها و اصلاحات هرزنامه را در همین دستگاه نگه می‌دارد. چیزی بارگذاری نمی‌شود.</string>
+    <string name="data_ok">متوجه شدم</string>
+    <string name="mms_title">دانلود خودکار MMS</string>
+    <string name="mms_sub">دانلود خودکار پیام‌های چندرسانه‌ای</string>
+    <string name="group_title">پیام‌رسانی گروهی</string>
+    <string name="group_mass">پیامک انبوه</string>
+    <string name="group_mass_individual">پیامک انبوه (پاسخ‌های جداگانه)</string>
+    <string name="group_mass_sub">پاسخ پیامکی برای همه ارسال و پاسخ‌ها جداگانه دریافت می‌شوند</string>
+    <string name="group_mms">MMS گروهی</string>
+    <string name="group_mms_sub">همه پاسخ‌ها را در یک گروه می‌بینند</string>
+    <string name="about_version">اطلاعات نسخه</string>
+    <string name="about_terms">شرایط خدمات</string>
+    <string name="terms_text">شرایط خدمات برای این نسخه هنوز منتشر نشده است.</string>
+</resources>

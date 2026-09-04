@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
@@ -45,10 +46,15 @@ import com.example.nospam.core.i18n.LocaleHelper
 
 private data class LanguageOption(val tag: String, val title: String, val subtitle: String)
 
-private val LANGUAGE_OPTIONS = listOf(
-    LanguageOption(LocaleHelper.SELECTED_SYSTEM, "System default", "Follow device language"),
-    LanguageOption("en", "English", "English"),
-    LanguageOption("fa", "فارسی", "Persian · RTL"),
+@Composable
+private fun languageOptions() = listOf(
+    LanguageOption(
+        LocaleHelper.SELECTED_SYSTEM,
+        stringResource(R.string.lang_system),
+        stringResource(R.string.lang_follow),
+    ),
+    LanguageOption("en", stringResource(R.string.lang_english), stringResource(R.string.lang_english)),
+    LanguageOption("fa", stringResource(R.string.lang_persian), stringResource(R.string.lang_persian_sub)),
 )
 
 @Composable
@@ -87,38 +93,38 @@ fun SettingsScreen() {
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        item { SectionHeader("General") }
+        item { SectionHeader(stringResource(R.string.section_general)) }
         item {
             SettingsRow(
-                title = "Notifications",
-                subtitle = if (notificationsEnabled) "On" else "Off — tap to enable",
+                title = stringResource(R.string.notif_title),
+                subtitle = if (notificationsEnabled) stringResource(R.string.notif_on) else stringResource(R.string.notif_off),
                 onClick = { openAppNotificationSettings(context) }
             )
         }
         item {
             SettingsRow(
-                title = "Bubbles",
+                title = stringResource(R.string.bubbles_title),
                 subtitle = when (bubblesAllowed) {
-                    true -> "Allowed"
-                    false -> "Off — tap to change"
-                    null -> "System setting"
+                    true -> stringResource(R.string.bubbles_allowed)
+                    false -> stringResource(R.string.bubbles_off)
+                    null -> stringResource(R.string.bubbles_system)
                 },
                 onClick = { openBubbleSettings(context) }
             )
         }
         item {
             SettingsRow(
-                title = "Language",
+                title = stringResource(R.string.lang_title),
                 subtitle = languageDisplayName(selectedLanguage),
                 onClick = { showLanguageDialog = true }
             )
         }
 
-        item { SectionHeader("Privacy & protection") }
+        item { SectionHeader(stringResource(R.string.section_privacy)) }
         item {
             SettingsRow(
-                title = "Default SMS app",
-                subtitle = if (isDefault) "NoSpam is default" else "Tap to set as default",
+                title = stringResource(R.string.default_sms_title),
+                subtitle = if (isDefault) stringResource(R.string.default_sms_on) else stringResource(R.string.default_sms_off),
                 trailing = {
                     if (isDefault) Text("✓", color = MaterialTheme.colorScheme.primary)
                     else Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -128,45 +134,45 @@ fun SettingsScreen() {
         }
         item {
             SwitchRow(
-                title = "Spam protection",
-                subtitle = "Filter spam, scams and phishing on this device",
+                title = stringResource(R.string.spam_title),
+                subtitle = stringResource(R.string.spam_sub),
                 checked = spamProtectionEnabled,
                 onCheckedChange = { spamProtectionEnabled = it }
             )
         }
         item {
             SettingsRow(
-                title = "Your data in Messages",
-                subtitle = "Kept on this device",
+                title = stringResource(R.string.data_title),
+                subtitle = stringResource(R.string.data_sub),
                 onClick = { showDataDialog = true }
             )
         }
 
-        item { SectionHeader("Advanced") }
+        item { SectionHeader(stringResource(R.string.section_advanced)) }
         item {
             SwitchRow(
-                title = "Auto-download MMS",
-                subtitle = "Automatically download multimedia messages",
+                title = stringResource(R.string.mms_title),
+                subtitle = stringResource(R.string.mms_sub),
                 checked = autoDownloadMms,
                 onCheckedChange = { autoDownloadMms = it }
             )
         }
         item {
             SettingsRow(
-                title = "Group messaging",
-                subtitle = if (groupMode == "mass") "Mass text (individual replies)" else "Group MMS",
+                title = stringResource(R.string.group_title),
+                subtitle = if (groupMode == "mass") stringResource(R.string.group_mass_individual) else stringResource(R.string.group_mms),
                 onClick = { showGroupDialog = true }
             )
         }
 
-        item { SectionHeader("About") }
+        item { SectionHeader(stringResource(R.string.section_about)) }
         item {
             // Informational only: no chevron, no click action.
-            InfoRow(title = "Version info", subtitle = appVersion(context))
+            InfoRow(title = stringResource(R.string.about_version), subtitle = appVersion(context))
         }
         item {
             SettingsRow(
-                title = "Terms of service",
+                title = stringResource(R.string.about_terms),
                 subtitle = null,
                 onClick = { showTermsDialog = true }
             )
@@ -176,10 +182,10 @@ fun SettingsScreen() {
     if (showLanguageDialog) {
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
-            title = { Text("App language") },
+            title = { Text(stringResource(R.string.dialog_language)) },
             text = {
                 Column {
-                    LANGUAGE_OPTIONS.forEach { option ->
+                    languageOptions().forEach { option ->
                         Row(
                             modifier = Modifier.fillMaxWidth()
                                 .selectable(
@@ -207,7 +213,7 @@ fun SettingsScreen() {
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showLanguageDialog = false }) { Text("Close") }
+                TextButton(onClick = { showLanguageDialog = false }) { Text(stringResource(R.string.action_close)) }
             }
         )
     }
@@ -215,7 +221,7 @@ fun SettingsScreen() {
     if (showGroupDialog) {
         AlertDialog(
             onDismissRequest = { showGroupDialog = false },
-            title = { Text("Group messaging") },
+            title = { Text(stringResource(R.string.group_title)) },
             text = {
                 Column {
                     Row(
@@ -226,8 +232,8 @@ fun SettingsScreen() {
                     ) {
                         RadioButton(selected = groupMode == "mass", onClick = null)
                         Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text("Mass text", style = MaterialTheme.typography.bodyLarge)
-                            Text("Send an SMS reply to all and get individual replies", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.group_mass), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.group_mass_sub), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Row(
@@ -238,14 +244,14 @@ fun SettingsScreen() {
                     ) {
                         RadioButton(selected = groupMode == "mms", onClick = null)
                         Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text("Group MMS", style = MaterialTheme.typography.bodyLarge)
-                            Text("Everyone sees replies in one group", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.group_mms), style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.group_mms_sub), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showGroupDialog = false }) { Text("Close") }
+                TextButton(onClick = { showGroupDialog = false }) { Text(stringResource(R.string.action_close)) }
             }
         )
     }
@@ -253,10 +259,10 @@ fun SettingsScreen() {
     if (showDataDialog) {
         AlertDialog(
             onDismissRequest = { showDataDialog = false },
-            title = { Text("Your data in Messages") },
-            text = { Text("Messages stay in the system SMS store. NoSpam only keeps blocklist entries and spam corrections on this device. Nothing is uploaded.") },
+            title = { Text(stringResource(R.string.data_title)) },
+            text = { Text(stringResource(R.string.data_text)) },
             confirmButton = {
-                TextButton(onClick = { showDataDialog = false }) { Text("Got it") }
+                TextButton(onClick = { showDataDialog = false }) { Text(stringResource(R.string.data_ok)) }
             }
         )
     }
@@ -264,19 +270,20 @@ fun SettingsScreen() {
     if (showTermsDialog) {
         AlertDialog(
             onDismissRequest = { showTermsDialog = false },
-            title = { Text("Terms of service") },
-            text = { Text("Terms are not published yet for this build.") },
+            title = { Text(stringResource(R.string.about_terms)) },
+            text = { Text(stringResource(R.string.terms_text)) },
             confirmButton = {
-                TextButton(onClick = { showTermsDialog = false }) { Text("Close") }
+                TextButton(onClick = { showTermsDialog = false }) { Text(stringResource(R.string.action_close)) }
             }
         )
     }
 }
 
+@Composable
 private fun languageDisplayName(tag: String): String = when {
-    tag == LocaleHelper.SELECTED_SYSTEM -> "System default"
-    tag.startsWith("fa") -> "فارسی"
-    else -> "English"
+    tag == LocaleHelper.SELECTED_SYSTEM -> stringResource(R.string.lang_system)
+    tag.startsWith("fa") -> stringResource(R.string.lang_persian)
+    else -> stringResource(R.string.lang_english)
 }
 
 private fun applyLanguage(tag: String) {

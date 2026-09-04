@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.nospam.core.designsystem.theme.MessageBubbleShapeIncoming
@@ -85,12 +86,12 @@ fun ThreadScreen(threadId: Long, viewModel: ThreadViewModel = viewModel()) {
             OutlinedTextField(
                 value = uiState.draft,
                 onValueChange = viewModel::onDraftChanged,
-                placeholder = { Text("SMS message") },
+                placeholder = { Text(stringResource(R.string.compose_hint)) },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
             IconButton(onClick = viewModel::onSend) {
-                Icon(Icons.AutoMirrored.Filled.Send, "Send message", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_message_desc), tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -123,15 +124,15 @@ fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
         }
     }
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("To:", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.new_to), style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("Type a name, phone number, or email") },
+            placeholder = { Text(stringResource(R.string.new_hint)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        Text("Top contacts", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
+        Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
         Row(
             modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -161,7 +162,7 @@ fun NewConversationScreen(onThreadCreated: (Long) -> Unit = {}) {
             }
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-        Text("All contacts", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(filtered, key = { it.name }) { contact ->
                 Row(

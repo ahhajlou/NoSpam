@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="section_general">General</string>
+    <string name="section_privacy">Privacy &amp; protection</string>
+    <string name="section_advanced">Advanced</string>
+    <string name="section_about">About</string>
+    <string name="notif_title">Notifications</string>
+    <string name="notif_on">On</string>
+    <string name="notif_off">Off — tap to enable</string>
+    <string name="bubbles_title">Bubbles</string>
+    <string name="bubbles_allowed">Allowed</string>
+    <string name="bubbles_off">Off — tap to change</string>
+    <string name="bubbles_system">System setting</string>
+    <string name="lang_title">Language</string>
+    <string name="lang_system">System default</string>
+    <string name="lang_follow">Follow device language</string>
+    <string name="lang_english">English</string>
+    <string name="lang_persian">فارسی</string>
+    <string name="lang_persian_sub">Persian · RTL</string>
+    <string name="dialog_language">App language</string>
+    <string name="action_close">Close</string>
+    <string name="default_sms_title">Default SMS app</string>
+    <string name="default_sms_on">NoSpam is default</string>
+    <string name="default_sms_off">Tap to set as default</string>
+    <string name="spam_title">Spam protection</string>
+    <string name="spam_sub">Filter spam, scams and phishing on this device</string>
+    <string name="data_title">Your data in Messages</string>
+    <string name="data_sub">Kept on this device</string>
+    <string name="data_text">Messages stay in the system SMS store. NoSpam only keeps blocklist entries and spam corrections on this device. Nothing is uploaded.</string>
+    <string name="data_ok">Got it</string>
+    <string name="mms_title">Auto-download MMS</string>
+    <string name="mms_sub">Automatically download multimedia messages</string>
+    <string name="group_title">Group messaging</string>
+    <string name="group_mass">Mass text</string>
+    <string name="group_mass_individual">Mass text (individual replies)</string>
+    <string name="group_mass_sub">Send an SMS reply to all and get individual replies</string>
+    <string name="group_mms">Group MMS</string>
+    <string name="group_mms_sub">Everyone sees replies in one group</string>
+    <string name="about_version">Version info</string>
+    <string name="about_terms">Terms of service</string>
+    <string name="terms_text">Terms are not published yet for this build.</string>
+</resources>

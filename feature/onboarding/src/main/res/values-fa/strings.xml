@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="welcome">به NoSpam خوش آمدید</string>
+    <string name="tagline">پالایش هرزنامه روی دستگاه — بدون سرور.</string>
+    <string name="grant">اعطای دسترسی‌های پیامک و مخاطبان</string>
+    <string name="granted">✓ دسترسی‌ها اعطا شد</string>
+    <string name="set_default">تنظیم به‌عنوان برنامهٔ پیش‌فرض پیامک</string>
+    <string name="is_default">✓ برنامهٔ پیش‌فرض پیامک</string>
+    <string name="continue_btn">ادامه</string>
+</resources>
