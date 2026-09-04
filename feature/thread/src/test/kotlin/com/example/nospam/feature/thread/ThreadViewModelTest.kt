@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -18,22 +19,32 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ThreadViewModelTest {
-    private class FakeTelephony : TelephonyDataSource {
+    private class FakeTelephony(
+        /** Simulates the provider quirk where a reload misses the just-written row. */
+        var hideSentFromQuery: Boolean = false,
+    ) : TelephonyDataSource {
         val store = mutableListOf(
             Message(MessageId(1), ThreadId(9), "+1555", "hi from device", 1L, MessageType.INBOX, false)
         )
         val sent = mutableListOf<Triple<String, String, Int?>>()
+        val markedRead = mutableListOf<Long>()
         private val flow = MutableStateFlow<List<Conversation>>(emptyList())
+        private val messageTick = MutableStateFlow(0)
+        fun emitMessages() { messageTick.value++ }
         override fun observeConversations(): Flow<List<Conversation>> = flow
+        override fun observeMessages(threadId: ThreadId): Flow<List<Message>> =
+            messageTick.map { store.filter { it.threadId == threadId } }
         override suspend fun getConversations(): List<Conversation> = emptyList()
         override suspend fun getMessages(threadId: ThreadId): List<Message> =
             store.filter { it.threadId == threadId }
+                .filterNot { hideSentFromQuery && it.type == MessageType.SENT }
+        override suspend fun markAsRead(threadId: ThreadId) { markedRead.add(threadId.value) }
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> {
             sent.add(Triple(address, body, subscriptionId))
             return Result.success(Unit)
         }
-        override suspend fun markAsRead(threadId: ThreadId) {}
         override suspend fun markAsUnread(threadId: ThreadId) {}
         override suspend fun deleteConversation(threadId: ThreadId) {}
         override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? = 1L
@@ -101,5 +112,51 @@ class ThreadViewModelTest {
         assertEquals(listOf(Triple("+1555", "reply text", null)), telephony.sent)
         assertEquals("", vm.uiState.value.draft)
         assertTrue(vm.uiState.value.messages.any { it.body == "reply text" && it.type == MessageType.SENT })
+    }
+
+    @Test fun `incoming message appears without reopening`() {
+        // The reported bug: provider emissions must reach the open thread.
+        val telephony = FakeTelephony()
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        assertEquals(1, vm.uiState.value.messages.size)
+        telephony.store.add(
+            Message(MessageId(9), ThreadId(9), "+1555", "fresh hello", 5L, MessageType.INBOX, false)
+        )
+        telephony.emitMessages()
+        val state = vm.uiState.value
+        assertEquals(2, state.messages.size)
+        assertTrue(state.messages.any { it.body == "fresh hello" })
+    }
+
+    @Test fun `opening thread with unread marks read once`() {
+        val telephony = FakeTelephony()
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        assertEquals(listOf(9L), telephony.markedRead)
+    }
+
+    @Test fun `all-read thread does not mark`() {
+        val telephony = FakeTelephony()
+        telephony.store[0] = telephony.store[0].copy(read = true)
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        assertTrue(telephony.markedRead.isEmpty())
+        assertEquals(1, vm.uiState.value.messages.size)
+    }
+
+    @Test fun `sent bubble survives a stale provider reload`() {
+        // Reproduces the device bug: the reload right after the sent-box
+        // write missed the new row, leaving the thread looking stale until
+        // reopened. The optimistic row must stay visible.
+        val telephony = FakeTelephony(hideSentFromQuery = true)
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        vm.onDraftChanged("reply text")
+        vm.onSend()
+        val state = vm.uiState.value
+        assertEquals("", state.draft)
+        assertEquals(1, state.messages.count { it.body == "reply text" })
+        assertEquals(MessageType.SENT, state.messages.last().type)
     }
 }

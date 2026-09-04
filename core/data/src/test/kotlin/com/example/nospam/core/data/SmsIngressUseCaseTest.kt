@@ -23,6 +23,7 @@ class SmsIngressUseCaseTest {
     ) : TelephonyDataSource {
         val inserted = mutableListOf<Triple<String, String, Boolean>>()
         private val flow = MutableStateFlow<List<Conversation>>(emptyList())
+        override fun observeMessages(threadId: ThreadId): Flow<List<Message>> = MutableStateFlow(emptyList())
         override fun observeConversations(): Flow<List<Conversation>> = flow
         override suspend fun getConversations(): List<Conversation> = emptyList()
         override suspend fun getMessages(threadId: ThreadId): List<Message> = emptyList()

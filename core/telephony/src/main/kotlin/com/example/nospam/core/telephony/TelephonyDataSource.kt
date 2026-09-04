@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.Flow
 
 interface TelephonyDataSource {
     fun observeConversations(): Flow<List<Conversation>>
+    /** Live messages of one thread; re-emits on every provider change. */
+    fun observeMessages(threadId: ThreadId): Flow<List<Message>>
     suspend fun getConversations(): List<Conversation>
     suspend fun getMessages(threadId: ThreadId): List<Message>
     suspend fun sendMessage(address: String, body: String, subscriptionId: Int? = null): Result<Unit>

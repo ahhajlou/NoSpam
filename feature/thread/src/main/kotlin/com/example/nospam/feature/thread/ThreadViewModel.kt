@@ -1,5 +1,6 @@
 package com.example.nospam.feature.thread
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nospam.core.model.Message
@@ -7,9 +8,11 @@ import com.example.nospam.core.model.MessageId
 import com.example.nospam.core.model.MessageType
 import com.example.nospam.core.model.ThreadId
 import com.example.nospam.core.telephony.TelephonyDataSource
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 data class ThreadUiState(
@@ -20,8 +23,10 @@ data class ThreadUiState(
 
 /**
  * @param dataSource when null (previews, unit tests), serves the fake thread
- * and appends sent messages locally. When provided, messages come from the
- * system provider and sending goes through SmsManager + sent-box write.
+ * and appends sent messages locally. When provided, messages stream from the
+ * system provider via [TelephonyDataSource.observeMessages], so incoming SMS
+ * appear without leaving the screen; sending goes through SmsManager +
+ * sent-box write with an optimistic row for instant feedback.
  */
 class ThreadViewModel(
     private val dataSource: TelephonyDataSource? = null,
@@ -31,8 +36,18 @@ class ThreadViewModel(
     // no messages yet. Mutable because one VM instance can serve successive
     // ThreadRoutes (same navigation scope).
     private var pendingAddress: String? = initialAddress
+
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
+
+    private var messagesJob: Job? = null
+    private var lastRemote: List<Message> = emptyList()
+    // Optimistic rows (negative ids) not yet confirmed by the provider.
+    private var optimistic: List<Message> = emptyList()
+
+    companion object {
+        private const val TAG = "ThreadViewModel"
+    }
 
     fun loadThread(id: Long, address: String? = null) {
         if (address != null) pendingAddress = address
@@ -41,13 +56,30 @@ class ThreadViewModel(
             _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages())
             return
         }
+        optimistic = emptyList()
+        lastRemote = emptyList()
         _uiState.value = _uiState.value.copy(threadId = id, messages = emptyList())
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                threadId = id,
-                messages = dataSource.getMessages(ThreadId(id)),
-            )
+        messagesJob?.cancel()
+        messagesJob = viewModelScope.launch {
+            dataSource.observeMessages(ThreadId(id)).collect { remote ->
+                lastRemote = remote
+                if (remote.any { !it.read }) {
+                    // Terminates: the update re-emits with everything read.
+                    dataSource.markAsRead(ThreadId(id))
+                }
+                _uiState.value = _uiState.value.copy(threadId = id, messages = merged())
+            }
         }
+    }
+
+    /** Provider rows win; unconfirmed optimistic rows are kept. */
+    private fun merged(): List<Message> {
+        val confirmed = lastRemote
+            .filter { it.type == MessageType.SENT }
+            .map { it.body to it.address }
+            .toSet()
+        optimistic = optimistic.filterNot { (it.body to it.address) in confirmed }
+        return (lastRemote + optimistic).sortedBy { it.date }
     }
 
     fun onDraftChanged(text: String) {
@@ -78,11 +110,27 @@ class ThreadViewModel(
             ?: pendingAddress
             ?: return
         val body = current.draft
-        _uiState.value = current.copy(draft = "")
+        // Negative ids never collide with provider row ids.
+        optimistic = optimistic + Message(
+            id = MessageId(-System.currentTimeMillis()),
+            threadId = ThreadId(current.threadId),
+            address = address,
+            body = body,
+            date = System.currentTimeMillis(),
+            type = MessageType.SENT,
+            read = true,
+        )
+        _uiState.value = current.copy(draft = "", messages = merged())
         viewModelScope.launch {
-            dataSource.sendMessage(address, body, subscriptionId = null)
-            dataSource.insertSentMessage(address, body, System.currentTimeMillis(), subscriptionId = null)
-            _uiState.value = _uiState.value.copy(messages = dataSource.getMessages(ThreadId(current.threadId)))
+            val sendResult = dataSource.sendMessage(address, body, subscriptionId = null)
+            if (sendResult.isFailure) {
+                Log.w(TAG, "SmsManager send failed", sendResult.exceptionOrNull())
+            }
+            val rowId = dataSource.insertSentMessage(
+                address, body, System.currentTimeMillis(), subscriptionId = null
+            )
+            if (rowId == null) Log.w(TAG, "insertSentMessage failed")
+            // No manual reload: the provider observer re-emits and reconciles.
         }
     }
 

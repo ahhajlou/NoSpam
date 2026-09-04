@@ -37,6 +37,12 @@ class RealTelephonyDataSource(
             .onStart { emit(Unit) }
             .mapLatest { getConversations() }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeMessages(threadId: ThreadId): Flow<List<Message>> =
+        observeSmsChanges()
+            .onStart { emit(Unit) }
+            .mapLatest { getMessages(threadId) }
+
     private fun observeSmsChanges(): Flow<Unit> = callbackFlow {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) {

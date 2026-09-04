@@ -27,6 +27,7 @@ class RepositoryTest {
         fun emit(convs: List<Conversation>) { flow.value = convs }
         val inserted = mutableListOf<Triple<String, String, Boolean>>()
         var nextThreadId: Long = 42L
+        override fun observeMessages(threadId: ThreadId): Flow<List<Message>> = MutableStateFlow(emptyList())
         override fun observeConversations(): Flow<List<Conversation>> = flow
         override suspend fun getConversations(): List<Conversation> = flow.value
         override suspend fun getMessages(threadId: ThreadId): List<Message> = emptyList()
