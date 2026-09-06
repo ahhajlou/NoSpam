@@ -125,6 +125,24 @@ Compile/package check without a device:
   :core:designsystem:assembleDebugAndroidTest
 ```
 
+### 4. Maestro E2E smoke test — needs an emulator + Maestro CLI
+
+`.maestro/smoke_test.yaml` — launch → drawer navigation → Settings → back to
+Inbox. Text/content-description selectors only (no `testTag` wiring in the
+app), and it passes on fresh installs (asserts the onboarding screen via a
+conditional `runFlow`) as well as on already-set-up devices. It deliberately
+does *not* tap through the permission / default-SMS system dialogs — those
+are Android-version-dependent and belong to manual verification instead.
+
+```bash
+# one-time: install Maestro CLI (https://maestro.dev)
+curl -Ls "https://get.maestro.mobile.dev" | bash
+
+# with an emulator running (or device plugged in):
+./gradlew :app:installDebug
+maestro test .maestro/smoke_test.yaml
+```
+
 ## Coverage (Kover)
 
 Merged report over all 15 modules (Kover `0.9.9`, root is the merging

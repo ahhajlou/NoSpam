@@ -1,0 +1,30 @@
+appId: com.nospam.nospam
+name: NoSpam smoke — launch, drawer navigation, settings
+---
+- launchApp
+- assertVisible: "NoSpam SMS" # shell top bar, visible in every start state
+
+# Fresh installs land on onboarding first (permissions / default-SMS not granted)
+- runFlow:
+    when:
+      visible: "Welcome to NoSpam"
+    commands:
+      - assertVisible: "Grant SMS & Contacts permissions"
+      - assertVisible: "Set as default SMS app"
+
+# Open the navigation drawer (hamburger content-description = "Menu")
+- tapOn: "Menu"
+- assertVisible: "Inbox"
+- assertVisible: "Archived"
+- assertVisible: "Spam & blocked"
+
+# Drawer → Settings screen
+- tapOn: "Settings"
+- assertVisible: "General"
+- assertVisible: "Privacy & protection"
+- assertVisible: "About"
+
+# Drawer → back to Inbox
+- tapOn: "Menu"
+- tapOn: "Inbox"
+- assertVisible: "Start chat" # FAB unique to the conversations screen
