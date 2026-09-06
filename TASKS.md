@@ -9,7 +9,7 @@
 - SMS ownership: only `core:telephony` touches `ContentResolver` (`Telephony.Sms`/`Mms`/`Threads`), `SmsManager`, `SubscriptionManager`. Room holds blocklist/verdicts/metadata only — no SMS mirroring.
 - Fonts: `Hanken Grotesk` + `Inter` via Google Fonts Provider (downloadable, certs in `res/font/*.xml`) with optional bundled fallback for offline; Persian adds `Vazirmatn` (ZWNJ/kashida aware). Dark theme generated from seed `0xFF005BBF` via Material Theme Builder then hand-tuned — do not ship inverted light. Default-SMS via `RoleManager.createRequestRoleIntent(ROLE_SMS)` (Q+) / `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT` (pre-Q) + `isRoleHeld` check.
 - MMS: stub only in v1 (`MmsReceiver` receives `WAP_PUSH_DELIVER` but no full parsing). Architecture stays extensible via `TelephonyDataSource` interface.
-- Execution: incremental PRs in dependency order, `gradlew build` + smoke test after each. `com.example.nospam` rename deferred. `minSdk` raised `24 → 26` in Phase 0.
+- Execution: incremental PRs in dependency order, `gradlew build` + smoke test after each. `com.nospam.nospam` rename deferred. `minSdk` raised `24 → 26` in Phase 0.
 
 **How to use this file**
 - Each task lists: scope, key files, verification command. Check box only after verification passes and screenshot/preview attached where noted.

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">NoSpam</string>
+    <string name="app_name">NoSpam SMS</string>
     <string name="drawer_messages">پیام‌ها</string>
     <string name="drawer_inbox">صندوق ورودی</string>
     <string name="drawer_archived">بایگانی</string>

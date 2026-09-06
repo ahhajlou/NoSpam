@@ -25,12 +25,12 @@ kover {
         filters {
             excludes {
                 classes(
-                    "com.example.nospam.ui.*",
-                    "com.example.nospam.navigation.*",
-                    "com.example.nospam.receiver.*",
-                    "com.example.nospam.service.*",
-                    "com.example.nospam.ml.*",
-                    "com.example.nospam.core.telephony.receiver.SmsReceiver",
+                    "com.nospam.nospam.ui.*",
+                    "com.nospam.nospam.navigation.*",
+                    "com.nospam.nospam.receiver.*",
+                    "com.nospam.nospam.service.*",
+                    "com.nospam.nospam.ml.*",
+                    "com.nospam.nospam.core.telephony.receiver.SmsReceiver",
                 )
             }
         }

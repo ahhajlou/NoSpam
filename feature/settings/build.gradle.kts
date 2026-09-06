@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nospam.feature.settings"
+    namespace = "com.nospam.nospam.feature.settings"
     compileSdk = 36
 
     defaultConfig {

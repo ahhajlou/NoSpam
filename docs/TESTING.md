@@ -180,5 +180,5 @@ reply. "Not spam" on a spam row persists an override that survives the
   swap in the real `RoomDatabase` behind the same DAO interfaces.
 - Fonts are `FontFamily.Default` placeholders; wire Inter/Hanken via the
   Google Fonts provider + bundled Vazirmatn for Persian.
-- `com.example.nospam` rename + legacy `app/src/main/java` deletion at
+- `com.nospam.nospam` rename + legacy `app/src/main/java` deletion at
   end of project (then drop its Kover exclusion).

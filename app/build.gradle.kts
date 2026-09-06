@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nospam"
+    namespace = "com.nospam.nospam"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.example.nospam"
+        applicationId = "com.nospam.nospam"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

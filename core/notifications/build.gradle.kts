@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nospam.core.notifications"
+    namespace = "com.nospam.nospam.core.notifications"
     compileSdk = 36
 
     defaultConfig {

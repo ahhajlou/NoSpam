@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nospam.core.telephony"
+    namespace = "com.nospam.nospam.core.telephony"
     compileSdk = 36
 
     defaultConfig {

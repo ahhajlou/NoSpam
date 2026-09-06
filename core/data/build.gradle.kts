@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nospam.core.data"
+    namespace = "com.nospam.nospam.core.data"
     compileSdk = 36
 
     defaultConfig {

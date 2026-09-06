@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nospam.feature.conversations"
+    namespace = "com.nospam.nospam.feature.conversations"
     compileSdk = 36
 
     defaultConfig {

@@ -429,7 +429,7 @@ app after each step: `core:model` → `core:designsystem` → `core:ml` →
 starting with whichever screen has the least cross-talk with the others (probably
 `feature:settings`).
 
-Before publishing: `com.example.nospam` is the Android Studio template
+Before publishing: `com.nospam.nospam` is the Android Studio template
 `applicationId`/package — rename it to something you actually own.
 
 ## 13. Deliberately deferred (not missing, just not needed yet)

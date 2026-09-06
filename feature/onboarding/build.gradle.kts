@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nospam.feature.onboarding"
+    namespace = "com.nospam.nospam.feature.onboarding"
     compileSdk = 36
 
     defaultConfig {
