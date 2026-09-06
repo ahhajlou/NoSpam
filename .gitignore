@@ -15,7 +15,8 @@ captures/
 local.properties
 navigation.json
 
-# Keep spam_model tracked via core/ml; legacy location ignored until migration
-app/src/main/assets/spam_model.json
-
 .playwright-mcp/
+
+core/common/bin/
+core/model/bin/
+core/testing/bin/
