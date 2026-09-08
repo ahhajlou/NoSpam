@@ -22,7 +22,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -290,9 +293,9 @@ private fun ConversationRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(conv.participants.firstOrNull()?.displayName ?: conv.participants.firstOrNull()?.address ?: stringResource(R.string.unknown_sender), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                if (conv.isPinned) { Text("📌", style = MaterialTheme.typography.labelSmall); Spacer(Modifier.width(4.dp)) }
-                if (conv.isStarred) { Text("★", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(4.dp)) }
-                if (conv.isMuted) { Text("🔇", style = MaterialTheme.typography.labelSmall); Spacer(Modifier.width(4.dp)) }
+                if (conv.isPinned) { Icon(Icons.Filled.PushPin, contentDescription = "Pinned", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(4.dp)) }
+                if (conv.isStarred) { Icon(Icons.Filled.Star, contentDescription = "Starred", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(4.dp)) }
+                if (conv.isMuted) { Icon(Icons.Filled.NotificationsOff, contentDescription = "Muted", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(4.dp)) }
                 if (conv.spamState == com.nospam.nospam.core.model.ThreadSpamState.MIXED) {
                     Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 6.dp, vertical = 2.dp)) {
                         Text("Mixed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
