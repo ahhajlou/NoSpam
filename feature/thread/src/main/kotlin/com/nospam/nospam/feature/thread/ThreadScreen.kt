@@ -19,10 +19,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,9 +35,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +50,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeIncoming
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.nospam.nospam.core.model.MessageType
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -53,25 +59,32 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
     LaunchedEffect(threadId, address) { viewModel.loadThread(threadId, address, context) }
     var selected by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
     val uiState by viewModel.uiState.collectAsState()
-    Column(modifier = Modifier.fillMaxSize()) {
-        val grouped = remember(uiState.messages) {
-            uiState.messages.groupBy {
-                java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-            }.toSortedMap()
-        }
-        LazyColumn(
-            modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            grouped.forEach { (date, msgs) ->
-                stickyHeader(key = date.toString()) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                        Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp)) {
-                            Text(formatDateHeader(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                items(msgs, key = { it.id.value }) { msg ->
+    val lazyState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val atBottom by remember { derivedStateOf { lazyState.firstVisibleItemIndex == 0 } }
+    // Auto-stick to latest when already at bottom (like Google Messages)
+    LaunchedEffect(uiState.messages.size) {
+        if (atBottom && uiState.messages.isNotEmpty()) lazyState.animateScrollToItem(0)
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            val grouped = remember(uiState.messages) {
+                uiState.messages.groupBy {
+                    java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                }.toSortedMap()
+            }
+            // Reverse the grouped map so latest date group is at bottom (index 0)
+            val reversedGrouped = remember(grouped) { grouped.entries.reversed() }
+            LazyColumn(
+                state = lazyState,
+                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                reverseLayout = true
+            ) {
+                reversedGrouped.forEach { (date, msgs) ->
+                    // msgs are ASC; reverse within group so latest at bottom (index 0)
+                    val reversedMsgs = msgs.reversed()
+                    items(reversedMsgs, key = { it.id.value }) { msg ->
                 val isMe = msg.type == MessageType.SENT
                 val isSuspected = msg.id.value in uiState.spamMessageIds && !isMe
                 Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
@@ -108,6 +121,13 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                     }
                 }
             }
+                stickyHeader(key = date.toString()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            Text(formatDateHeader(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
         }
         selected?.let { msg ->
@@ -156,6 +176,17 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
             )
             IconButton(onClick = viewModel::onSend) {
                 Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_message_desc), tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+        }
+        if (!atBottom) {
+            FloatingActionButton(
+                onClick = { scope.launch { lazyState.animateScrollToItem(0) } },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).padding(bottom = 72.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ) {
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
             }
         }
     }
