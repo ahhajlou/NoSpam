@@ -323,6 +323,13 @@ private fun formatTime(millis: Long): String {
     val now = stringResource(R.string.time_now)
     val yesterday = stringResource(R.string.time_yesterday)
     val diff = System.currentTimeMillis() - millis
+    // Future dates (device clock wrong or scheduled) must show absolute, not "now"
+    if (diff < -60_000) {
+        val isCurrentYear = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).year ==
+            java.time.LocalDate.now().year
+        return if (isCurrentYear) java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(millis))
+        else java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date(millis))
+    }
     val isCurrentYear = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).year ==
         java.time.LocalDate.now().year
     return when {
