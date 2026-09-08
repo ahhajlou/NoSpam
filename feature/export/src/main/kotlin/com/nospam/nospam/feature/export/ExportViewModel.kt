@@ -30,7 +30,7 @@ private val exportJson = Json { explicitNulls = true; encodeDefaults = true }
 @Serializable
 data class ExportRow(
     val hwid: String,
-    val date: Long,
+    val timestamp: Long,
     val address: String,
     val text: String,
     val label: String? = null,
@@ -38,11 +38,11 @@ data class ExportRow(
 
 internal fun messageToJsonLine(
     hwid: String,
-    date: Long,
+    timestamp: Long,
     address: String,
     text: String,
     label: String? = null,
-): String = exportJson.encodeToString(ExportRow(hwid, date, address, text, label))
+): String = exportJson.encodeToString(ExportRow(hwid, timestamp, address, text, label))
 
 internal fun writeJsonl(
     output: OutputStream,
