@@ -356,6 +356,7 @@ class RealTelephonyDataSource(
         } catch (_: Exception) { false }
     }
 
+    @Suppress("DEPRECATION")
     @android.annotation.SuppressLint("MissingPermission")
     override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> = withContext(Dispatchers.IO) {
         try {
@@ -382,6 +383,7 @@ class RealTelephonyDataSource(
         } catch (_: Exception) { emptySet() }
     }
 
+    @Suppress("DEPRECATION")
     override suspend fun getContacts(limit: Int, query: String?): List<com.nospam.nospam.core.model.ContactEntry> = withContext(Dispatchers.IO) {
         try {
             if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return@withContext emptyList()
