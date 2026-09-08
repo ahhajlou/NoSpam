@@ -63,6 +63,7 @@ class SmsIngressUseCase(
         )
 
         val threadId = ThreadId(telephony.getOrCreateThreadId(sender))
+        val isMuted = runCatching { db.mutedDao.isMuted(threadId.value) }.getOrDefault(false)
 
         if (isBlocked) {
             if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
@@ -117,6 +118,10 @@ class SmsIngressUseCase(
                     notification = NotificationDecision.NORMAL
                 )
             }
+            // Muted conversations are always silent — override spam policy
+            if (isMuted) {
+                policyOut = policyOut.copy(notification = NotificationDecision.NONE)
+            }
             newState = policyOut.newState.state
             notificationDecision = policyOut.notification
             isSpamForResult = verdict.isSpam
@@ -166,15 +171,17 @@ class SmsIngressUseCase(
                 }
             }
 
-            // Apply READ / notification per decision
+            // Apply READ / notification per decision — muted keeps unread but silent
             when (notificationDecision) {
                 NotificationDecision.NONE, NotificationDecision.SILENT -> {
-                    // For SILENT, mark the inserted row as read to suppress heads-up but keep inbox? Actually spec says MIXED inserted READ=1
-                    // For NONE (spam/blocked) also READ=1
-                    if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
+                    if (!isMuted && messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
                 }
                 NotificationDecision.NORMAL -> { /* leave unread */ }
             }
+        }
+        // If muted and classifier failed (no verdict), still suppress
+        if (isMuted) {
+            notificationDecision = NotificationDecision.NONE
         }
 
         // Opportunistic retention
