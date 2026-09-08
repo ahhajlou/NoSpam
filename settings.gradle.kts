@@ -26,5 +26,6 @@ include(
     ":core:database", ":core:telephony", ":core:ml", ":core:notifications",
     ":core:i18n", ":core:data", ":core:testing",
     ":feature:conversations", ":feature:thread", ":feature:settings", ":feature:onboarding",
+    ":feature:export",
 )
  

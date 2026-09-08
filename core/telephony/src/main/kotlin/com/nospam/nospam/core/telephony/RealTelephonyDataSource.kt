@@ -440,6 +440,32 @@ class RealTelephonyDataSource(
         } catch (_: Exception) { emptySet() }
     }
 
+    override suspend fun getAllMessages(): List<Message> = withContext(Dispatchers.IO) {
+        try {
+            val list = mutableListOf<Message>()
+            val projection = arrayOf(
+                Telephony.Sms._ID,
+                Telephony.Sms.THREAD_ID,
+                Telephony.Sms.ADDRESS,
+                Telephony.Sms.BODY,
+                Telephony.Sms.DATE,
+                Telephony.Sms.TYPE,
+                Telephony.Sms.READ
+            )
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI, projection, null, null, "${Telephony.Sms.DATE} ASC"
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    list.add(TelephonyMapper.mapCursorToMessage(cursor))
+                }
+            }
+            list
+        } catch (e: Exception) {
+            Log.w(TAG, "getAllMessages failed", e)
+            emptyList()
+        }
+    }
+
     @Suppress("DEPRECATION")
     override suspend fun getContacts(limit: Int, query: String?): List<com.nospam.nospam.core.model.ContactEntry> = withContext(Dispatchers.IO) {
         try {

@@ -38,6 +38,8 @@ import com.nospam.nospam.feature.conversations.ConversationsScreen
 import com.nospam.nospam.feature.conversations.ConversationsViewModel
 import com.nospam.nospam.feature.conversations.SpamScreen
 import com.nospam.nospam.feature.conversations.SpamViewModel
+import com.nospam.nospam.feature.export.ExportScreen
+import com.nospam.nospam.feature.export.ExportViewModel
 import com.nospam.nospam.feature.onboarding.OnboardingScreen
 import com.nospam.nospam.feature.settings.SettingsScreen
 import com.nospam.nospam.feature.thread.NewConversationScreen
@@ -51,6 +53,7 @@ import kotlinx.serialization.Serializable
 @Serializable object SettingsRoute
 @Serializable object OnboardingRoute
 @Serializable object NewConversationRoute
+@Serializable object ExportRoute
 @Serializable data class ThreadRoute(val threadId: Long, val address: String? = null)
 
 private inline fun <reified VM : ViewModel> vmFactory(crossinline create: () -> VM) =
@@ -176,6 +179,16 @@ fun NoSpamNavHost(
                     scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
                 },
             )
+        }
+        composable<ExportRoute> {
+            val vm: ExportViewModel = viewModel(
+                factory = vmFactory {
+                    container?.let {
+                        ExportViewModel(it.telephony, it.database.messageVerdictDao)
+                    } ?: ExportViewModel()
+                }
+            )
+            ExportScreen(viewModel = vm)
         }
         composable<SettingsRoute> { SettingsScreen() }
         composable<OnboardingRoute> {
