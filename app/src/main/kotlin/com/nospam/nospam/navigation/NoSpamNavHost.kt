@@ -6,9 +6,18 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Telephony
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
@@ -20,7 +29,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.nospam.nospam.NoSpamApplication
 import com.nospam.nospam.core.model.ThreadId
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.nospam.nospam.feature.conversations.ArchivedScreen
 import com.nospam.nospam.feature.conversations.ArchivedViewModel
 import com.nospam.nospam.feature.conversations.ConversationsScreen
@@ -74,8 +85,24 @@ fun NoSpamNavHost(
     val container = remember(context) {
         (context.applicationContext as? NoSpamApplication)?.container
     }
-    val start = startDestination
-        ?: if (container != null && needsOnboarding(context)) OnboardingRoute else ConversationsRoute
+    var resolvedStart by remember { mutableStateOf<Any?>(startDestination) }
+    LaunchedEffect(context, container, startDestination) {
+        if (startDestination != null) {
+            resolvedStart = startDestination
+        } else if (container == null) {
+            resolvedStart = ConversationsRoute
+        } else {
+            val onboarding = withContext(Dispatchers.IO) { needsOnboarding(context) }
+            resolvedStart = if (onboarding) OnboardingRoute else ConversationsRoute
+        }
+    }
+    val start = resolvedStart
+    if (start == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     NavHost(navController = navController, startDestination = start) {
         composable<ConversationsRoute> {

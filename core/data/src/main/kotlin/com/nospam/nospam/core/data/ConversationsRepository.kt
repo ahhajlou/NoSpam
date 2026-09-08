@@ -7,6 +7,7 @@ import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.mapLatest
 
 class ConversationsRepository(
@@ -60,11 +61,16 @@ class ConversationsRepository(
             }
         }
 
-    @Suppress("UNCHECKED_CAST")
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun observeConversations(filter: ConversationFilter = ConversationFilter.ALL): Flow<List<Conversation>> {
-        return combine(
-            telephony.observeConversations(),
+        // Split per required fix: telephonyFlow (heavy, with adjust) vs flagsFlow (light)
+        val telephonyFlow: Flow<List<Conversation>> = telephony.observeConversations()
+            .distinctUntilChanged()
+            .mapLatest { adjustMixedSnippet(it) }
+
+        // Flags: 7 DB flows combined into one lightweight stream (vararg Array version, no typed 7 overload)
+        @Suppress("UNCHECKED_CAST")
+        val flagsFlow: Flow<Flags> = combine(
             db.spamVerdictDao.observeSpam(),
             db.blocklistDao.observeAll(),
             db.archivedDao.observeAll(),
@@ -73,32 +79,49 @@ class ConversationsRepository(
             db.pinnedDao.observeAll(),
             db.mutedDao.observeAll(),
         ) { args ->
-            val conversations = args[0] as List<Conversation>
-            val spamVerdicts = args[1] as List<com.nospam.nospam.core.database.entity.SpamVerdictEntity>
-            val blocklist = args[2] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
-            val archived = args[3] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
-            val senderStates = args[4] as List<com.nospam.nospam.core.database.entity.SenderStateEntity>
-            val starred = args[5] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
-            val pinned = args[6] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
-            val muted = args[7] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
-            val stateMap = senderStates.associateBy { normalizeAddr(it.normalizedAddress) }
+            val spamVerdicts = args[0] as List<com.nospam.nospam.core.database.entity.SpamVerdictEntity>
+            val blocklist = args[1] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
+            val archived = args[2] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
+            val senderStates = args[3] as List<com.nospam.nospam.core.database.entity.SenderStateEntity>
+            val starred = args[4] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
+            val pinned = args[5] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
+            val muted = args[6] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
+            Flags(
+                spamIds = spamVerdicts.map { it.threadId }.toSet(),
+                blockedAddresses = blocklist.map { it.address }.toSet(),
+                archivedIds = archived.map { it.threadId }.toSet(),
+                senderStates = senderStates.associateBy { normalizeAddr(it.normalizedAddress) },
+                starredIds = starred.map { it.threadId }.toSet(),
+                pinnedIds = pinned.map { it.threadId }.toSet(),
+                mutedIds = muted.map { it.threadId }.toSet(),
+            )
+        }
+
+        return combine(telephonyFlow, flagsFlow) { conversations, flags ->
             val withFlags = withFlags(
                 conversations,
-                stateMap,
-                spamVerdicts.map { it.threadId }.toSet(),
-                blocklist.map { it.address }.toSet(),
-                archived.map { it.threadId }.toSet(),
-                starred.map { it.threadId }.toSet(),
-                pinned.map { it.threadId }.toSet(),
-                muted.map { it.threadId }.toSet(),
+                flags.senderStates,
+                flags.spamIds,
+                flags.blockedAddresses,
+                flags.archivedIds,
+                flags.starredIds,
+                flags.pinnedIds,
+                flags.mutedIds,
             )
-            // Pinned first
             val sorted = withFlags.sortedWith(compareByDescending<Conversation>{ it.isPinned }.thenByDescending{ it.date })
-            applyFilter(sorted, stateMap, filter)
-        }.let { flow ->
-            flow.mapLatest { list -> adjustMixedSnippet(list) }
+            applyFilter(sorted, flags.senderStates, filter)
         }
     }
+
+    private data class Flags(
+        val spamIds: Set<Long>,
+        val blockedAddresses: Set<String>,
+        val archivedIds: Set<Long>,
+        val senderStates: Map<String, com.nospam.nospam.core.database.entity.SenderStateEntity>,
+        val starredIds: Set<Long>,
+        val pinnedIds: Set<Long>,
+        val mutedIds: Set<Long>,
+    )
 
     private suspend fun adjustMixedSnippet(conversations: List<Conversation>): List<Conversation> {
         // Only for MIXED — ensure inbox shows latest ham, not spam promo (now vs Dec 3 bug)

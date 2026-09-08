@@ -62,9 +62,20 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
     val lazyState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val atBottom by remember { derivedStateOf { lazyState.firstVisibleItemIndex == 0 } }
-    // Auto-stick to latest when already at bottom (like Google Messages)
+    var hasScrolledInitially by remember { mutableStateOf(false) }
+    LaunchedEffect(threadId) { hasScrolledInitially = false }
+    // Fix 4: initial scroll must not depend on atBottom race — use threadId + first non-empty
+    LaunchedEffect(threadId, uiState.messages.isNotEmpty()) {
+        if (!hasScrolledInitially && uiState.messages.isNotEmpty()) {
+            lazyState.scrollToItem(0)
+            hasScrolledInitially = true
+        }
+    }
+    // Subsequent inbound while already at bottom auto-stick
     LaunchedEffect(uiState.messages.size) {
-        if (atBottom && uiState.messages.isNotEmpty()) lazyState.animateScrollToItem(0)
+        if (hasScrolledInitially && atBottom && uiState.messages.isNotEmpty()) {
+            lazyState.animateScrollToItem(0)
+        }
     }
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {

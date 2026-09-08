@@ -12,11 +12,17 @@ import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class RealTelephonyDataSource(
@@ -27,21 +33,32 @@ class RealTelephonyDataSource(
     }
 
     private val contactLookup by lazy { ContactLookup(context) }
+    private val conversationCacheMutex = Mutex()
+    private var cachedConversations: List<Conversation>? = null
+    private var cachedMetas: List<ThreadMeta>? = null
+    private var cachedLatestMap: Map<Long, SmsLatest> = emptyMap()
+
+    // ThreadMeta and SmsLatest are shared for cache comparison
+    private data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
+    private data class SmsLatest(val address: String, val body: String, val date: Long)
+
     /**
      * Emits the inbox on subscribe and re-emits on every provider change
      * (incoming SMS, sent message, read-state update). The ContentObserver
      * lives here — callers only see a cold Flow. Rapid bursts are coalesced
-     * by [mapLatest], which cancels an in-flight reload.
+     * by [mapLatest], which cancels an in-flight reload, and debounced 200ms.
      */
-    @OptIn(ExperimentalCoroutinesApi::class)
+    @OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     override fun observeConversations(): Flow<List<Conversation>> =
         observeSmsChanges()
+            .debounce(200)
             .onStart { emit(Unit) }
             .mapLatest { getConversations() }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
+    @OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     override fun observeMessages(threadId: ThreadId): Flow<List<Message>> =
         observeSmsChanges()
+            .debounce(200)
             .onStart { emit(Unit) }
             .mapLatest { getMessages(threadId) }
 
@@ -72,11 +89,10 @@ class RealTelephonyDataSource(
         }
     }
 
-    private fun queryConversations(): List<Conversation> {
+    private suspend fun queryConversations(): List<Conversation> {
         // Try fast path: Threads.CONTENT_URI (provider-side group) when available
         tryThreadsQuery()?.let { return it }
         // Fallback: client-side group but LIMITED to 3000 most recent SMS rows
-        // (covers all threads for typical use; full scan was minutes on 10k+ rows)
         val messages = mutableListOf<Message>()
         val projection = arrayOf(
             Telephony.Sms._ID,
@@ -94,16 +110,20 @@ class RealTelephonyDataSource(
                 messages.add(TelephonyMapper.mapCursorToMessage(cursor))
             }
         }
-        return messages.groupBy { it.threadId }
-            .map { (threadId, threadMessages) ->
-                val base = TelephonyMapper.toConversation(threadId, threadMessages)
-                val contact = runCatching { contactLookup.lookup(base.participants.first().address) }.getOrNull()
-                if (contact != null) base.copy(participants = listOf(contact), photoUri = contact.photoUri) else base
-            }
-            .sortedByDescending { it.date }
+        val grouped = messages.groupBy { it.threadId }
+        // Parallelize contact lookups
+        return coroutineScope {
+            grouped.map { (threadId, threadMessages) ->
+                async(Dispatchers.IO) {
+                    val base = TelephonyMapper.toConversation(threadId, threadMessages)
+                    val contact = runCatching { contactLookup.lookup(base.participants.first().address) }.getOrNull()
+                    if (contact != null) base.copy(participants = listOf(contact), photoUri = contact.photoUri) else base
+                }
+            }.awaitAll()
+        }.sortedByDescending { it.date }
     }
 
-    private fun tryThreadsQuery(): List<Conversation>? {
+    private suspend fun tryThreadsQuery(): List<Conversation>? {
         return try {
             val proj = arrayOf(
                 Telephony.Threads._ID,
@@ -112,7 +132,6 @@ class RealTelephonyDataSource(
                 Telephony.Threads.SNIPPET,
                 Telephony.Threads.READ,
             )
-            data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
             val metas = mutableListOf<ThreadMeta>()
             context.contentResolver.query(Telephony.Threads.CONTENT_URI, proj, null, null, "${Telephony.Threads.DATE} DESC")?.use { c ->
                 while (c.moveToNext()) {
@@ -126,11 +145,37 @@ class RealTelephonyDataSource(
                 }
             }
             if (metas.isEmpty()) return null
-            // Batch lookup of latest Sms row per thread (address + body + date) — single query per chunk
-            val threadIds = metas.map { it.id }
-            data class SmsLatest(val address: String, val body: String, val date: Long)
+
+            // Cache check: if metas identical to cached, reuse cached conversations without Sms re-query
+            val cached = conversationCacheMutex.withLock { cachedMetas }
+            if (cached != null && cached == metas) {
+                conversationCacheMutex.withLock { cachedConversations }?.let { return it }
+            }
+
+            // Determine which threadIds actually changed (DATE/count/read/snippet)
+            val cachedMap = conversationCacheMutex.withLock { cachedMetas?.associateBy { it.id } ?: emptyMap() }
+            val changedIds = metas.filter { meta ->
+                val prev = cachedMap[meta.id]
+                prev == null || prev.date != meta.date || prev.count != meta.count || prev.read != meta.read || prev.snippet != meta.snippet
+            }.map { it.id }.toSet()
+
+            // If all metas unchanged, reuse cache
+            if (changedIds.isEmpty() && cached != null) {
+                return conversationCacheMutex.withLock { cachedConversations }
+            }
+
+            // Batch Sms lookup only for changed (or all if no cache) to get latest address/body/date
+            val idsToQuery = if (cached == null) metas.map { it.id } else changedIds.toList()
             val latestMap = mutableMapOf<Long, SmsLatest>()
-            threadIds.chunked(400).forEach { chunk ->
+            // Also carry over previous latestMap for unchanged threads
+            conversationCacheMutex.withLock { cachedLatestMap }.let { prevLatest ->
+                for (id in metas.map { it.id }) {
+                    if (id !in idsToQuery) {
+                        prevLatest[id]?.let { latestMap[id] = it }
+                    }
+                }
+            }
+            idsToQuery.chunked(400).forEach { chunk ->
                 val sel = "${Telephony.Sms.THREAD_ID} IN (${chunk.joinToString(",") { "?" }})"
                 val args = chunk.map { it.toString() }.toTypedArray()
                 context.contentResolver.query(
@@ -150,21 +195,33 @@ class RealTelephonyDataSource(
                     }
                 }
             }
-            // Build conversations — use Sms latest body/date for consistency with thread screen (fixes inbox wrong date)
-            val conversations = metas.mapNotNull { meta ->
-                val latest = latestMap[meta.id] ?: return@mapNotNull null
-                val participant = runCatching { contactLookup.lookup(latest.address) }.getOrNull() ?: com.nospam.nospam.core.model.Participant(address = latest.address)
-                Conversation(
-                    threadId = ThreadId(meta.id),
-                    participants = listOf(participant),
-                    snippet = latest.body.ifBlank { meta.snippet },
-                    date = latest.date,
-                    messageCount = meta.count,
-                    read = meta.read,
-                    photoUri = participant.photoUri
-                )
+            // Parallelize contact lookups + build
+            val conversations = coroutineScope {
+                metas.mapNotNull { meta ->
+                    val latest = latestMap[meta.id] ?: return@mapNotNull null
+                    async(Dispatchers.IO) {
+                        val participant = runCatching { contactLookup.lookup(latest.address) }.getOrNull() ?: com.nospam.nospam.core.model.Participant(address = latest.address)
+                        Conversation(
+                            threadId = ThreadId(meta.id),
+                            participants = listOf(participant),
+                            snippet = latest.body.ifBlank { meta.snippet },
+                            date = latest.date,
+                            messageCount = meta.count,
+                            read = meta.read,
+                            photoUri = participant.photoUri
+                        )
+                    }
+                }.awaitAll().filterNotNull()
             }
-            if (conversations.isEmpty()) null else conversations
+            if (conversations.isEmpty()) null else {
+                // Update cache
+                conversationCacheMutex.withLock {
+                    cachedMetas = metas.toList()
+                    cachedLatestMap = latestMap.toMap()
+                    cachedConversations = conversations
+                }
+                conversations
+            }
         } catch (_: Exception) { null }
     }
 
