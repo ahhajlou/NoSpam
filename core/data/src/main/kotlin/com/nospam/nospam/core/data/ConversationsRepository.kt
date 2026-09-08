@@ -150,6 +150,8 @@ class ConversationsRepository(
     suspend fun setPin(threadId: ThreadId, pinned: Boolean) { if (pinned) db.pinnedDao.pin(threadId.value) else db.pinnedDao.unpin(threadId.value) }
     suspend fun setMute(threadId: ThreadId, muted: Boolean) { if (muted) db.mutedDao.mute(threadId.value) else db.mutedDao.unmute(threadId.value) }
 
+    suspend fun searchBodyMatch(query: String): Set<Long> = telephony.searchBodyMatch(query)
+
     /**
      * Deletes the provider thread and drops app-owned rows (verdicts, archive
      * flags) so a re-created thread doesn't inherit stale state.

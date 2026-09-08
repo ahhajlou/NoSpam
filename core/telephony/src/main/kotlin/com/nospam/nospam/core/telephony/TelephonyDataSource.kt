@@ -25,4 +25,7 @@ interface TelephonyDataSource {
     suspend fun isSystemBlocked(address: String): Boolean
     suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant?
     suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean
+    suspend fun getActiveSubscriptions(): List<SimInfo>
+    suspend fun searchBodyMatch(query: String): Set<Long>
+    data class SimInfo(val subscriptionId: Int, val displayName: String, val number: String? = null)
 }

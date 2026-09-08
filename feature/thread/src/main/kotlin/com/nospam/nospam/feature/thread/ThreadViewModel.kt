@@ -21,6 +21,8 @@ data class ThreadUiState(
     val spamMessageIds: Set<Long> = emptySet(),
     val onMarkNotSpam: ((Long) -> Unit)? = null,
     val onReportSpam: ((Long) -> Unit)? = null,
+    val sims: List<TelephonyDataSource.SimInfo> = emptyList(),
+    val selectedSimId: Int? = null,
 )
 
 /**
@@ -65,6 +67,11 @@ class ThreadViewModel(
                 val draft = runCatching { DraftStore.load(context, id) }.getOrNull()
                 if (draft != null) _uiState.value = _uiState.value.copy(draft = draft)
             }
+            // Load SIMs for dual-SIM picker
+            viewModelScope.launch {
+                val sims = dataSource?.getActiveSubscriptions() ?: emptyList()
+                _uiState.value = _uiState.value.copy(sims = sims, selectedSimId = sims.firstOrNull()?.subscriptionId)
+            }
         }
         val dataSource = this.dataSource
         if (dataSource == null) {
@@ -105,6 +112,10 @@ class ThreadViewModel(
         }
     }
 
+    fun onSimSelected(subId: Int) {
+        _uiState.value = _uiState.value.copy(selectedSimId = subId)
+    }
+
     fun onSend() {
         val current = _uiState.value
         if (current.draft.isBlank()) return
@@ -140,13 +151,14 @@ class ThreadViewModel(
             read = true,
         )
         _uiState.value = current.copy(draft = "", messages = merged())
+        val selectedSim = current.selectedSimId
         viewModelScope.launch {
-            val sendResult = dataSource.sendMessage(address, body, subscriptionId = null)
+            val sendResult = dataSource.sendMessage(address, body, subscriptionId = selectedSim)
             if (sendResult.isFailure) {
                 Log.w(TAG, "SmsManager send failed", sendResult.exceptionOrNull())
             }
             val rowId = dataSource.insertSentMessage(
-                address, body, System.currentTimeMillis(), subscriptionId = null
+                address, body, System.currentTimeMillis(), subscriptionId = selectedSim
             )
             if (rowId == null) Log.w(TAG, "insertSentMessage failed")
             // No manual reload: the provider observer re-emits and reconciles.

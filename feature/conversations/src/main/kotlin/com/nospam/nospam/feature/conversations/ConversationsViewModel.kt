@@ -48,14 +48,20 @@ class ConversationsViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val _realState: StateFlow<ConversationsUiState>? = repository?.let { repo ->
+        val bodyMatches = _searchQuery.flatMapLatest { q ->
+            kotlinx.coroutines.flow.flow {
+                emit(if (q.isBlank()) emptySet() else runCatching { repo.searchBodyMatch(q) }.getOrDefault(emptySet()))
+            }
+        }
         combine(
             _filter.flatMapLatest { repo.observeConversations(it) },
             _filter,
             _searchQuery,
             _isSearchFocused,
-        ) { conversations, filter, query, focused ->
+            bodyMatches,
+        ) { conversations, filter, query, focused, bodySet ->
             val searched = if (query.isBlank()) conversations
-            else conversations.filter { matchesQuery(it, query) }
+            else conversations.filter { matchesQuery(it, query, bodySet) }
             ConversationsUiState(
                 conversations = searched.filterNot { it.isPinned },
                 pinned = searched.filter { it.isPinned },
@@ -111,8 +117,9 @@ class ConversationsViewModel(
         viewModelScope.launch { repo.toggleMute(ThreadId(threadId)) }
     }
 
-    private fun matchesQuery(conversation: Conversation, query: String): Boolean {
+    private fun matchesQuery(conversation: Conversation, query: String, bodySet: Set<Long> = emptySet()): Boolean {
         if (conversation.snippet.contains(query, ignoreCase = true)) return true
+        if (conversation.threadId.value in bodySet) return true
         return conversation.participants.any {
             it.address.contains(query, ignoreCase = true) ||
                 (it.displayName?.contains(query, ignoreCase = true) == true)

@@ -38,6 +38,8 @@ class SmsIngressUseCaseTest {
             return insertResult
         }
         override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? = 2L
+        override suspend fun searchBodyMatch(query: String): Set<Long> = emptySet()
+        override suspend fun getActiveSubscriptions(): List<com.nospam.nospam.core.telephony.TelephonyDataSource.SimInfo> = emptyList()
         override suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean = false
         override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
         override suspend fun isSystemBlocked(address: String): Boolean = false

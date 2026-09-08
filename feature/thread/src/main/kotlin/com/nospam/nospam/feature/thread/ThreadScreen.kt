@@ -120,6 +120,19 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
         ) {
             IconButton(onClick = {}) { Icon(Icons.Default.AddCircle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             IconButton(onClick = {}) { Icon(Icons.Default.Face, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (uiState.sims.size > 1) {
+                var simMenu by remember { mutableStateOf(false) }
+                Box {
+                    androidx.compose.material3.TextButton(onClick = { simMenu = true }) {
+                        Text(uiState.sims.find { it.subscriptionId == uiState.selectedSimId }?.displayName ?: "SIM", style = MaterialTheme.typography.labelLarge)
+                    }
+                    androidx.compose.material3.DropdownMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
+                        uiState.sims.forEach { sim ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text("${sim.displayName} ${sim.number ?: ""}") }, onClick = { viewModel.onSimSelected(sim.subscriptionId); simMenu = false })
+                        }
+                    }
+                }
+            }
             OutlinedTextField(
                 value = uiState.draft,
                 onValueChange = viewModel::onDraftChanged,
