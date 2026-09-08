@@ -323,12 +323,15 @@ private fun formatTime(millis: Long): String {
     val now = stringResource(R.string.time_now)
     val yesterday = stringResource(R.string.time_yesterday)
     val diff = System.currentTimeMillis() - millis
+    val isCurrentYear = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).year ==
+        java.time.LocalDate.now().year
     return when {
         diff < 60_000 -> now
         diff < 3600_000 -> "${diff / 60000}m"
         diff < 86400000 -> "${diff / 3600000}h"
         diff < 172800000 -> yesterday
-        else -> java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(millis))
+        isCurrentYear -> java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(millis))
+        else -> java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date(millis))
     }
 }
 

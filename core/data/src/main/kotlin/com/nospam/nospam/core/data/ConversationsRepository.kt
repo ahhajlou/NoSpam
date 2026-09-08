@@ -7,6 +7,7 @@ import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.mapLatest
 
 class ConversationsRepository(
     private val telephony: TelephonyDataSource,
@@ -60,6 +61,7 @@ class ConversationsRepository(
         }
 
     @Suppress("UNCHECKED_CAST")
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun observeConversations(filter: ConversationFilter = ConversationFilter.ALL): Flow<List<Conversation>> {
         return combine(
             telephony.observeConversations(),
@@ -93,6 +95,20 @@ class ConversationsRepository(
             // Pinned first
             val sorted = withFlags.sortedWith(compareByDescending<Conversation>{ it.isPinned }.thenByDescending{ it.date })
             applyFilter(sorted, stateMap, filter)
+        }.let { flow ->
+            flow.mapLatest { list -> adjustMixedSnippet(list) }
+        }
+    }
+
+    private suspend fun adjustMixedSnippet(conversations: List<Conversation>): List<Conversation> {
+        // Only for MIXED — ensure inbox shows latest ham, not spam promo (now vs Dec 3 bug)
+        return conversations.map { conv ->
+            if (conv.spamState != com.nospam.nospam.core.model.ThreadSpamState.MIXED) return@map conv
+            val verdicts = runCatching { db.messageVerdictDao.getByThread(conv.threadId.value) }.getOrNull() ?: return@map conv
+            val hamVerdict = verdicts.filter { !it.isSpam }.maxByOrNull { it.createdAt } ?: return@map conv
+            val hamMsg = runCatching { telephony.getMessages(conv.threadId).find { it.id.value == hamVerdict.messageId } }.getOrNull()
+            if (hamMsg != null) conv.copy(snippet = hamMsg.body, date = hamMsg.date)
+            else conv.copy(date = hamVerdict.createdAt)
         }
     }
 
