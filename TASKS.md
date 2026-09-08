@@ -103,6 +103,228 @@
 
 ---
 
+## Phase 7 — Review remediation (P0)
+
+> Source: full-codebase review (manifest → receiver → ingress → repos → DAOs →
+> UI → notifications → direct-reply service) against a standard Android SMS
+> app + the `android-intent-security` skill. See chat log 2026-09-08 for the
+> full finding list (R1–R18, S1–S9, M1–M10); this phase covers the P0/security
+> subset. P1 polish is Phase 9.
+
+**Gate:** `./gradlew build` green; new ingress test proves a message is
+persisted even when the classifier throws; `./gradlew lint` green with
+`UnsafeIntentLaunch`/`MutableImplicitPendingIntent` as errors.
+
+- [ ] **7.1 Persistent app DB** — Replace `NoSpamDatabase.inMemory()` in
+  `AppContainer` with a persistent impl behind the existing DAO interfaces
+  (Room if KSP works on the current AGP; else a `SQLiteOpenHelper`-backed
+  fallback with the same interfaces). All app-owned state (blocklist,
+  verdicts, overrides, archive) currently vanishes on process death — a
+  receiver-driven app dies constantly, so this is the highest-priority fix.
+  *Verify:* block a number, force-stop, relaunch → still blocked.
+- [ ] **7.2 Ingress ordering & resilience** — `SmsIngressUseCase.handle`
+  currently classifies *before* inserting into the provider; if the
+  classifier throws, the SMS is lost. Reorder to insert (READ=0) → classify →
+  update READ/verdict; wrap classification in `withTimeout(8_000)`; warm the
+  classifier (1.2 MB JSON asset) in `NoSpamApplication.onCreate` on a
+  background thread so first-SMS latency doesn't eat the `goAsync()` budget.
+  *Verify:* `SmsIngressUseCaseTest.classifier_failure_still_persists_message`.
+- [ ] **7.3 Blocklist at ingress** — Blocked senders are currently inserted,
+  classified, and (if ham) notified — `Block` only hides rows in the list.
+  Consult the app blocklist **and** write/read
+  `BlockedNumberContract.BlockedNumbers` when this app is default (blocks
+  then apply system-wide and survive uninstall); normalize addresses via
+  `PhoneNumberUtils.formatNumberToE164(raw, countryIso)` (country from
+  `TelephonyManager.networkCountryIso`, fallback `simCountryIso`/`Locale`),
+  falling back to trimmed/upper-cased raw string for alphanumeric senders.
+  Blocked → `NotificationDecision.NONE`. *Verify:* unit test + emulator.
+- [ ] **7.4 Contacts resolution** — No `ContactsContract` usage exists today;
+  `Participant.displayName` is always null so the KNOWN/UNKNOWN filters are
+  dead and the spam policy loses its strongest ham signal. Add
+  `ContactsContract.PhoneLookup` resolution in `core:telephony` (cached per
+  normalized address), fill `displayName`/`photoUri`/`contactId`.
+  `READ_CONTACTS` is already requested in onboarding. *Verify:*
+  `TelephonyInstrumentedTest`.
+- [ ] **7.5 Notification contract** — `NotificationHelper` never sets
+  `setContentIntent` (tapping does nothing), never cancels on thread open,
+  and lacks `setWhen`/`setShortcutId`/`Person.setKey`/group summary. Add:
+  content intent deep-linking to `ThreadRoute`, cancel-on-open in
+  `ThreadViewModel.loadThread` (gated on `repeatOnLifecycle(RESUMED)`, not
+  on every background emission), `setShortcutId`/`Person.setKey(address)` +
+  `ShortcutManagerCompat.pushDynamicShortcut` for the Conversations space,
+  localized channel names/labels, real vector icons instead of
+  `android.R.drawable.*`. Request `POST_NOTIFICATIONS` (API 33+) in
+  onboarding — currently never requested. *Verify:* tap opens thread;
+  opening thread clears its notification.
+- [ ] **7.6 Multipart + sent/failed status** — `sendMessage` uses
+  `sendTextMessage` only; GSM-7 (160 char) / UCS-2 (70 char — Persian is
+  always UCS-2) overflow fails or truncates silently, and send failures are
+  only logged, never surfaced (`ThreadViewModel.onSend` always writes
+  `MESSAGE_TYPE_SENT`). Use `divideMessage`/`sendMultipartTextMessage`; write
+  `OUTBOX` → update to `SENT`/`FAILED` via a `sentIntent`
+  `PendingIntent`/receiver; add retry affordance in `ThreadScreen`.
+  *Verify:* send a >70-char Persian message on emulator; airplane-mode send
+  shows Failed + Retry.
+- [ ] **7.7 Security hardening** (`android-intent-security` skill findings):
+  - S1 (High): the reply `PendingIntent` in `NotificationHelper` is
+    `FLAG_MUTABLE` (required for `RemoteInput`) but its base `Intent` has no
+    explicit target component — set
+    `setClassName(context.packageName, "com.nospam.nospam.core.telephony.service.HeadlessSmsSendService")`.
+  - S2: delete unused `NotificationHelper.buildDirectReplyIntent` (mutable,
+    no `RemoteInput`, no explicit component).
+  - S3: replace `Uri.parse("sms:$sender")` with `Uri.fromParts("sms", sender, null)`
+    — sender is attacker-controlled (alphanumeric IDs can contain `?`/`#`/`;`).
+  - S4: in `HeadlessSmsSendService`, validate `intent.action` and
+    `subscription_id` against `SubscriptionManager.activeSubscriptionInfoList`.
+  - S6: `MainActivity`'s exported `SENDTO` intent-filter data is never read —
+    handle `intent.data`/`onNewIntent` (normalize via `PhoneNumberUtils`,
+    open `NewConversationRoute`/`ThreadRoute`).
+  - S8: drop the unused `READ_CELL_BROADCASTS` permission.
+  - Enable `lint { checkReleaseBuilds = true }` with
+    `UnsafeIntentLaunch`/`MutableImplicitPendingIntent` as errors in
+    `app/build.gradle.kts`.
+  *Verify:* `./gradlew lint` green; manual check of the diff against the
+  skill's "Antipatterns"/"Best Practices" lists.
+- [ ] **7.8 Dead code removal** — `core/telephony/receiver/SmsReceiver.kt`
+  (superseded by `AppSmsReceiver`), `TelephonyMapper.mapCursorToConversation`,
+  `SpamRepository.classifyAndStore`, template `ExampleUnitTest`/
+  `ExampleInstrumentedTest`, add `.kotlin/` to `.gitignore` (currently
+  tracking build error logs).
+
+---
+
+## Phase 8 — Spam/ham categorization v2
+
+> Fixes the root cause behind Phase 7's spam findings: today
+> `SmsIngressUseCase` upserts each new message's verdict directly onto the
+> thread (`SpamVerdictEntity(threadId, isSpam = verdict.isSpam, ...,
+> isUserOverride = false)`), so (a) a single spam message flips an entire ham
+> thread to Spam and a single ham reply flips it back — a mixed sender (bank
+> OTP + bank promo) flaps in and out of the inbox — and (b) every new
+> incoming message overwrites `isUserOverride = false`, silently undoing the
+> user's "Not spam" correction on the very next SMS from that sender.
+>
+> Decision log (chat, 2026-09-08): conversations that mix spam and ham from
+> the same sender must **stay in the inbox** with spam messages silenced
+> per-message, not moved wholesale to Spam. A conversation that goes fully
+> `SPAM` is **sticky** — a later ham-looking message never rescues it
+> automatically, only a user action does (spammers routinely send innocuous
+> openers). The classifier is a strict binary `ham`/`spam` model (no
+> confidence tiers needed): **a first message from a brand-new sender that
+> is classified spam sends the conversation straight to Spam**, *except*
+> when the sender is a known contact (never auto-`SPAM`, at most `MIXED`).
+> Sender state is keyed by **normalized address** (E.164 via
+> `PhoneNumberUtils.formatNumberToE164`, or the raw alphanumeric sender ID
+> when normalization fails), not `threadId` — provider thread ids are
+> recycled after a thread is deleted, so anything keyed on them silently
+> orphans; Google's own `BlockedNumberContract` uses the same
+> original+E164 keying strategy.
+
+**Gate:** `ThreadSpamPolicyTest` covers every row of the table below;
+emulator check: a sender that sends a bank OTP (ham) then a promo (spam)
+stays in the inbox with the promo silenced and labelled; a brand-new unknown
+sender whose first message is spam lands directly in Spam with no
+notification; a "Not spam" correction survives the next incoming SMS from
+that sender.
+
+- [ ] **8.1 `core:model`** — `enum ThreadSpamState { CLEAN, MIXED, SPAM,
+  TRUSTED, BLOCKED }`, `enum NotificationDecision { NORMAL, SILENT, NONE }`,
+  `MessageVerdict` (per-message, immutable evidence), `SenderState`
+  (per-address, keyed by normalized address: `state`, `spamCount`,
+  `hamCount`, `isUserOverride`, `updatedAt`). Pure `ThreadSpamPolicy`
+  (`core:model`, zero Android imports) implementing:
+
+  | Prev state | Signal | New state | Notification |
+  |---|---|---|---|
+  | any | `isBlocked` | `BLOCKED` | `NONE` |
+  | `TRUSTED` (override) | any | `TRUSTED` | `NORMAL` (label spam inline) |
+  | `SPAM` (override or sticky auto) | ham or spam | `SPAM` | `NONE` |
+  | none (new sender) | ham | `CLEAN` | `NORMAL` |
+  | none (new sender) | spam, is contact | `MIXED` | `SILENT` |
+  | none (new sender) | spam, not a contact | `SPAM` | `NONE` |
+  | `CLEAN`/`MIXED` | ham, or `isContact`/`hasOutbound` true | state unchanged or `CLEAN` | `NORMAL` |
+  | `CLEAN` | spam | `MIXED` | `SILENT` |
+  | `MIXED` | spam, `spamCount+1 ≥ 3` and ratio `≥ 0.8` | `SPAM` | `NONE` |
+  | `MIXED` | spam, otherwise | `MIXED` | `SILENT` |
+
+  Contacts and senders the user has replied to (`hasOutbound`) can never be
+  auto-promoted to `SPAM` — at most `MIXED`. Unit tests (pure JVM, one per
+  row above) plus: `override_survives_ingress`,
+  `mixed_thread_never_flaps_back_to_clean_on_single_ham`,
+  `contact_never_auto_spam`, `replied_sender_never_auto_spam`,
+  `first_message_spam_from_unknown_goes_to_spam`,
+  `first_message_spam_from_contact_stays_mixed`,
+  `sticky_spam_ignores_later_ham`, `ratio_graduation_at_3_and_0_8`,
+  `blocked_wins_over_everything`.
+
+- [ ] **8.2 `core:database`** — `MessageVerdictEntity`/`MessageVerdictDao`
+  (keyed by provider message id + threadId, pruned with the thread) and
+  `SenderStateEntity`/`SenderStateDao` (keyed by normalized address,
+  replacing `SpamVerdictEntity`'s thread-keying), both with `observeAll()`.
+  Depends on 7.1 (persistent DB) landing first or in parallel.
+- [ ] **8.3 `core:telephony`** — `hasOutboundMessages(threadId)` on
+  `TelephonyDataSource`; write `SUBSCRIPTION_ID` on inbox insert (currently
+  dropped by `TelephonyMapper.buildMessageValues`); wire in contact lookup
+  from 7.4.
+- [ ] **8.4 `core:data`** — `SmsIngressUseCase` runs `ThreadSpamPolicy`
+  after classification, upserts `SenderState` **only when not
+  `isUserOverride`**, stores the `MessageVerdict`, and returns the resulting
+  `NotificationDecision` instead of a raw `isSpam` boolean.
+  `SpamRepository`: rename `markNotSpam`/`markSpam` intent to
+  `markSenderNotSpam` (→ `TRUSTED`, override) / `markSenderSpam` (→ `SPAM`,
+  override), add `markMessageNotSpam`/`markMessageSpam` for the per-message
+  action inside a `MIXED` thread (flips that message's `userLabel`,
+  recomputes counts, does not touch the sender override).
+  `ConversationsRepository`: Spam section = `state in {SPAM, BLOCKED}`;
+  inbox = `CLEAN`/`MIXED`/`TRUSTED`; `MIXED` conversation snippet = latest
+  **ham** message, not latest message. Retention (30 d) prunes auto
+  `MessageVerdict` rows only; `SenderState` and all user overrides are never
+  pruned (unbounded — spammers should stay flagged).
+- [ ] **8.5 `feature:thread`** — join messages with their `MessageVerdict`;
+  render a muted "Suspected spam" chip + per-message "Not spam"/"Report
+  spam" action on flagged bubbles inside `MIXED` threads.
+- [ ] **8.6 `feature:conversations`** — `MIXED` badge on inbox rows; Spam
+  screen bulk "Block all"/"Delete all" actions.
+- [ ] **8.7 `feature:settings`** — persist "Spam protection" toggle via
+  DataStore (currently `remember { mutableStateOf }`, never read by
+  ingress); when off, `ThreadSpamPolicy` short-circuits to
+  `CLEAN`/`NORMAL` but verdicts/classification are still computed and stored
+  so re-enabling is instant.
+- [ ] **8.8 `:app`** — `AppSmsReceiver` switches its notification path on
+  `NotificationDecision` instead of `result.isSpam`; add a receiver for
+  `ACTION_DEFAULT_SMS_PACKAGE_CHANGED` and an inbox "not default app" banner
+  (today only onboarding checks this).
+
+---
+
+## Phase 9 — P1 polish (post categorization-v2)
+
+Deferred standard-SMS-app gaps found in the same review, lower priority than
+Phases 7–8:
+
+- [ ] 9.1 Star/pin/mute — model fields exist (`Conversation.isStarred/isPinned`)
+  but there is no backing store or UI action for them (mute doesn't exist at
+  all).
+- [ ] 9.2 Draft persistence — `Conversation.hasDraft` is never written to/read
+  from `Telephony.Sms.Draft`.
+- [ ] 9.3 Dual-SIM send UI — `subscriptionId` is threaded through ingress but
+  `ThreadViewModel.onSend` always passes `null`; no SIM picker for outgoing
+  messages on dual-SIM devices.
+- [ ] 9.4 Search message bodies, not just the list snippet.
+- [ ] 9.5 `RealTelephonyDataSource.queryConversations` loads every SMS row on
+  every provider change and groups client-side — fine at hundreds of
+  messages, not thousands; move to a `GROUP BY thread_id` query or guarded
+  `Threads.CONTENT_URI` read, and page the thread screen.
+- [ ] 9.6 MMS placeholder — `MmsReceiver` silently drops WAP push content;
+  show at least a "Media message not supported yet" row instead of nothing.
+- [ ] 9.7 Message-level actions in `ThreadScreen` (copy/forward/delete/share/
+  details, select-multiple) — currently the attach/emoji buttons are
+  `onClick = {}` stubs and there is no per-message long-press menu.
+- [ ] 9.8 Conversation actions gap — "Add to contacts", "Call", "Mark all
+  read", "Select multiple" are absent from the long-press menu.
+
+---
+
 ## Deferred (Not in v1)
 - `build-logic` convention plugins (add at 8+ modules when duplication justifies).
 - Baseline profiles / macrobenchmark.

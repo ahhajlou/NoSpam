@@ -132,9 +132,29 @@ recording why — the reasoning matters more than the diagram:**
   `ContentResolver` for these URIs, `SmsManager`, and `SubscriptionManager` (multi-SIM).
   Do not mirror the message store into Room — you'll create a second source of truth.
 - **Room (`core:database`)** holds app-owned data that the Telephony provider has no
-  concept of: manual blocklist entries, per-thread spam verdicts/overrides ("not
-  spam" corrections), spam-model metadata/version, and any app-specific cache
-  (e.g. resolved contact photo cache).
+  concept of: manual blocklist entries, per-message spam verdicts and per-sender
+  spam state/overrides ("not spam" corrections — see §15 for why sender state is
+  keyed by normalized address, not `threadId`), spam-model metadata/version, and
+  any app-specific cache (e.g. resolved contact photo cache). Deferred until
+  Room's KSP incompatibility with the current AGP/Kotlin combo is resolved (§13)
+  — until then, `NoSpamDatabase.inMemory()` is a placeholder and **must not ship**:
+  it loses the blocklist, all spam corrections, and archive state on every
+  process death, which happens routinely for a receiver-driven app (TASKS.md
+  Phase 7.1).
+- **Ingress ordering matters.** `SmsIngressUseCase` must insert the incoming
+  message into the provider (`READ=0`) *before* invoking the classifier, then
+  update `READ`/verdict after. Classifying first (the current v1 shape) means a
+  classifier exception drops the SMS entirely — never acceptable for a
+  replacement default SMS app. Wrap classification in a timeout so a slow/failed
+  model degrades to "leave unread, no verdict yet" rather than losing the
+  message or blowing the `goAsync()` budget.
+- **Blocklist writes should target `BlockedNumberContract.BlockedNumbers`**
+  when this app holds the default-SMS role (blocks then apply system-wide, to
+  calls too, and survive uninstall); keep the app's own blocklist table as a
+  mirror/fallback for alphanumeric sender IDs and for when the app isn't
+  default. Normalize every address (E.164 via `PhoneNumberUtils`, or the raw
+  alphanumeric ID when normalization fails) before storing or comparing —
+  string-equality on raw `+98912…` vs `0912…` forms is a bug, not an edge case.
 - **DataStore** (add to `core:common` or a thin `core:preferences` if it grows) for
   user settings: selected app language, notification prefs, default-app onboarding
   state.
@@ -440,6 +460,13 @@ Before publishing: `com.nospam.nospam` is the Android Studio template
 - **Baseline profiles / macrobenchmark module** — add once the app is feature-complete
   and you're tuning cold-start, not before.
 - **Dynamic feature modules** — no on-demand delivery use case here.
+- **Room** — not actually deferred by choice; it's *blocked* by `AGP 9.0.0 +
+  Kotlin 2.2.10` KSP incompatibility (`builtInKotlin` cast error) documented in
+  TASKS.md 2.1. `core:database` currently ships in-memory DAOs behind Room-shaped
+  interfaces as a placeholder. This is fine for local dev but **must not ship**:
+  see §5's ingress/persistence note and TASKS.md Phase 7.1 for the required
+  interim fix (Room once unblocked, else a `SQLiteOpenHelper`-backed
+  implementation of the same DAO interfaces).
 
 ## 14. Useful commands
 
@@ -449,3 +476,93 @@ Before publishing: `com.nospam.nospam` is the Android Studio template
 ./gradlew :core:telephony:testDebugUnitTest
 ./gradlew build   # full project, all modules
 ```
+
+## 15. Spam/ham state model (v2 — see TASKS.md Phase 8)
+
+The v1 shape — `SpamVerdictEntity(threadId, isSpam, score, isUserOverride)`,
+upserted on *every* incoming message — is wrong for two real scenarios and
+must not be extended further:
+
+1. A sender that mixes ham and spam (e.g. a bank sending OTPs *and* promos
+   from the same short code) flaps the whole conversation in and out of the
+   Spam section on every message.
+2. Every new incoming message re-upserts with `isUserOverride = false`,
+   silently erasing a user's "Not spam" correction on the very next SMS from
+   that sender.
+
+**Two levels, not one:**
+- `MessageVerdict` — immutable per-message evidence (`messageId`, `threadId`,
+  `isSpam`, `score`, `createdAt`), one row per inbound SMS, never overwritten.
+- `SenderState` — derived, per-**sender** state that the UI actually reads:
+  `ThreadSpamState { CLEAN, MIXED, SPAM, TRUSTED, BLOCKED }` plus
+  `spamCount`/`hamCount`/`isUserOverride`.
+
+**Keyed by normalized address, not `threadId`.** Provider thread ids are
+recycled once a thread is deleted (`ConversationsRepository.deleteConversation`
+already has to clean up the old verdict row for this reason) — a sender-level
+policy keyed on that id silently orphans. Normalize via
+`PhoneNumberUtils.formatNumberToE164(raw, countryIso)` and fall back to the
+raw, trimmed, upper-cased sender ID when normalization fails (alphanumeric
+sender IDs like "Snapp" or "Bank Mellat" — common on Iranian networks).
+`BlockedNumberContract` uses the same original+E164 keying strategy; reuse it
+for both.
+
+**Policy (`ThreadSpamPolicy`, pure Kotlin in `core:model`):**
+- `BLOCKED` and `TRUSTED`/`SPAM` **user overrides** always win and are never
+  touched by ingress — only an explicit user action changes them.
+- `SPAM` is **sticky**: once auto-classified spam, later ham-looking messages
+  from that sender do not rescue the conversation automatically (spammers
+  routinely send innocuous openers) — only "Not spam" does.
+- A brand-new sender's first message: `ham` → `CLEAN`; `spam` → `SPAM`
+  directly (this classifier is strict binary ham/spam with no confidence
+  tiers, so there is no "weak spam" case to special-case), **except** when
+  the sender is a known contact, which can never auto-promote past `MIXED`.
+- Once a sender has ham history (`CLEAN`/`MIXED`), a spam message moves it to
+  `MIXED` (stays in the inbox, silenced per-message) rather than `SPAM`,
+  unless the spam ratio crosses a graduation threshold (≥3 messages, ≥80%
+  spam) — see TASKS.md Phase 8.1 for the full state table and required unit
+  tests.
+- Contacts and any sender the user has replied to (`hasOutbound`) can never
+  be auto-promoted to `SPAM` — at most `MIXED`. This is the single strongest
+  anti-false-positive signal available and must be checked before the
+  classifier's verdict is allowed to move a conversation to Spam.
+
+**UI contract:** `MIXED` conversations stay in the inbox; their spam messages
+are inserted `READ=1`, never trigger a notification (`NotificationDecision.
+SILENT`), and render a muted "Suspected spam" label with a per-message "Not
+spam"/"Report spam" action — nothing is hidden, it's just not interruptive.
+The conversation-list snippet for a `MIXED` thread should be the latest **ham**
+message, not the latest message, so a promo doesn't bury an OTP.
+
+**Retention:** 30-day pruning applies only to auto-classified `MessageVerdict`
+rows; `SenderState` and every user override are kept indefinitely — a
+sender that a user has already labelled should never silently reset.
+
+## 16. Intent & PendingIntent security rules
+
+Findings from an `android-intent-security` skill review of the exported
+`SMS_DELIVER` receiver, the `RESPOND_VIA_MESSAGE` service, and the
+notification reply `PendingIntent` (full list: TASKS.md Phase 7.7). Treat
+these as standing rules for any new component, not just a one-time fix:
+
+- **Never construct a mutable `PendingIntent` without an explicit target
+  component on its base `Intent`.** `RemoteInput`-based actions (notification
+  reply) require `FLAG_MUTABLE`, which makes this non-negotiable — set
+  `Intent.setClassName(context.packageName, "<fully.qualified.Receiver>")` (or
+  `setComponent`) rather than relying on `package =` alone. Every other
+  `PendingIntent` in the app should be `FLAG_IMMUTABLE` unless it demonstrably
+  needs mutation.
+- **Never build an `sms:`/`smsto:` `Uri` with `Uri.parse("sms:$address")`**
+  when `address` comes from an incoming message (sender strings, including
+  alphanumeric IDs, are attacker-controlled and can contain reserved
+  characters like `?`/`#`/`;`). Use `Uri.fromParts("sms", address, null)`.
+- **Validate every extra an exported component reads**, even when the
+  component is protected by a signature-level system permission
+  (`SEND_RESPOND_VIA_MESSAGE`, `BROADCAST_SMS`) — check `intent.action`
+  explicitly and treat missing/malformed extras as "ignore", never crash.
+- **`android:exported="true"` is only acceptable when paired with a
+  permission** that restricts the caller to the system or another trusted,
+  signature-matched app (as `AppSmsReceiver` and `HeadlessSmsSendService`
+  already do) — don't add a new exported component without the same pairing.
+- Prefer `androidx.core.content.IntentSanitizer` if this app ever needs to
+  forward/relay an incoming `Intent` to another component.

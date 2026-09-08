@@ -20,3 +20,5 @@ navigation.json
 core/common/bin/
 core/model/bin/
 core/testing/bin/
+
+.agents/
