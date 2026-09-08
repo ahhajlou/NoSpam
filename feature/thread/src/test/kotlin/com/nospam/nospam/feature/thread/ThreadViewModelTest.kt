@@ -46,11 +46,12 @@ class ThreadViewModelTest {
         }
         override suspend fun markAsUnread(threadId: ThreadId) {}
         override suspend fun deleteConversation(threadId: ThreadId) {}
-        override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? = 1L
+        override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean, subscriptionId: Int?): Long? = 1L
         override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? {
             store.add(Message(MessageId(2), ThreadId(9), address, body, date, MessageType.SENT, true))
             return 2L
         }
+        override suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean = false
         override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}

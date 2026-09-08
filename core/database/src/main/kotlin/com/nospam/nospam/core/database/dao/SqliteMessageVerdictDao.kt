@@ -60,6 +60,25 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
             ) else null
         }
     }
+    override suspend fun getByThread(threadId: Long): List<MessageVerdictEntity> = withContext(Dispatchers.IO){
+        val list = mutableListOf<MessageVerdictEntity>()
+        helper.readableDatabase.query("message_verdict", null, "threadId = ?", arrayOf(threadId.toString()), null, null, null).use { c ->
+            while (c.moveToNext()) {
+                list.add(
+                    MessageVerdictEntity(
+                        messageId = c.getLong(c.getColumnIndexOrThrow("messageId")),
+                        threadId = c.getLong(c.getColumnIndexOrThrow("threadId")),
+                        normalizedAddress = c.getString(c.getColumnIndexOrThrow("normalizedAddress")),
+                        isSpam = c.getInt(c.getColumnIndexOrThrow("isSpam")) == 1,
+                        score = c.getDouble(c.getColumnIndexOrThrow("score")),
+                        createdAt = c.getLong(c.getColumnIndexOrThrow("createdAt")),
+                        userLabel = if (c.isNull(c.getColumnIndexOrThrow("userLabel"))) null else c.getInt(c.getColumnIndexOrThrow("userLabel")) == 1
+                    )
+                )
+            }
+        }
+        list
+    }
     override suspend fun deleteByThread(threadId: Long) { withContext(Dispatchers.IO){ helper.writableDatabase.delete("message_verdict","threadId = ?", arrayOf(threadId.toString())); flow.value = readAllSync() } }
     override suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO){
         val r = helper.writableDatabase.delete("message_verdict","userLabel IS NULL AND createdAt < ?", arrayOf(cutoffMillis.toString()))

@@ -8,6 +8,7 @@ interface MessageVerdictDao {
     suspend fun insert(entity: MessageVerdictEntity)
     suspend fun getByMessageId(messageId: Long): MessageVerdictEntity?
     fun observeAll(): Flow<List<MessageVerdictEntity>>
+    suspend fun getByThread(threadId: Long): List<MessageVerdictEntity>
     suspend fun deleteByThread(threadId: Long)
     suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int
     suspend fun updateUserLabel(messageId: Long, userLabel: Boolean?)
@@ -20,6 +21,7 @@ class InMemoryMessageVerdictDao : MessageVerdictDao {
     override suspend fun insert(entity: MessageVerdictEntity) { data[entity.messageId] = entity; refresh() }
     override suspend fun getByMessageId(messageId: Long) = data[messageId]
     override fun observeAll(): Flow<List<MessageVerdictEntity>> = flow
+    override suspend fun getByThread(threadId: Long) = data.values.filter { it.threadId == threadId }
     override suspend fun deleteByThread(threadId: Long) { data.entries.removeIf { it.value.threadId == threadId }; refresh() }
     override suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int {
         var r = 0

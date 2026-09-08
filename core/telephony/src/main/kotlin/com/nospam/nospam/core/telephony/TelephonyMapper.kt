@@ -72,13 +72,14 @@ object TelephonyMapper {
         )
     }
 
-    fun buildMessageValues(address: String, body: String, date: Long, read: Int): android.content.ContentValues {
+    fun buildMessageValues(address: String, body: String, date: Long, read: Int, subscriptionId: Int? = null): android.content.ContentValues {
         return android.content.ContentValues().apply {
             put(Telephony.Sms.ADDRESS, address)
             put(Telephony.Sms.BODY, body)
             put(Telephony.Sms.DATE, date)
             put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_INBOX)
             put(Telephony.Sms.READ, read)
+            if (subscriptionId != null) put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
         }
     }
 

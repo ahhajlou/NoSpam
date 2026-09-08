@@ -56,21 +56,37 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
         ) {
             items(uiState.messages, key = { it.id.value }) { msg ->
                 val isMe = msg.type == MessageType.SENT
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(if (isMe) MessageBubbleShapeOutgoing else MessageBubbleShapeIncoming)
-                            .background(if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                    ) {
-                        Text(
-                            msg.body,
-                            color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                            style = MaterialTheme.typography.bodyLarge
+                val isSuspected = msg.id.value in uiState.spamMessageIds && !isMe
+                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
+                    if (isSuspected) {
+                        androidx.compose.material3.AssistChip(
+                            onClick = { },
+                            label = { Text("Suspected spam") },
+                            modifier = Modifier.padding(bottom = 2.dp)
                         )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(if (isMe) MessageBubbleShapeOutgoing else MessageBubbleShapeIncoming)
+                                .background(if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Text(
+                                msg.body,
+                                color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                    if (isSuspected) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                            androidx.compose.material3.TextButton(onClick = { uiState.onMarkNotSpam?.invoke(msg.id.value) }) { Text("Not spam") }
+                            androidx.compose.material3.TextButton(onClick = { uiState.onReportSpam?.invoke(msg.id.value) }) { Text("Report spam") }
+                        }
                     }
                 }
             }

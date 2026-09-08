@@ -54,8 +54,8 @@ class AppSmsReceiver : BroadcastReceiver() {
                         subscriptionId = subscriptionId,
                     )
                 )
-                Log.d(TAG, "Prediction: ${if (result.isSpam) "spam" else "ham"} (Score: ${result.score})")
-                if (!result.isSpam && result.messageId != null) {
+                Log.d(TAG, "Prediction: ${if (result.isSpam) "spam" else "ham"} (Score: ${result.score}) state=${result.senderState} notif=${result.notificationDecision}")
+                if (result.notificationDecision == com.nospam.nospam.core.model.NotificationDecision.NORMAL && result.messageId != null) {
                     postHamNotification(context.applicationContext, result, subscriptionId)
                 }
             } catch (e: Exception) {

@@ -17,7 +17,10 @@ import kotlinx.coroutines.launch
 data class ThreadUiState(
     val threadId: Long,
     val messages: List<Message> = emptyList(),
-    val draft: String = ""
+    val draft: String = "",
+    val spamMessageIds: Set<Long> = emptySet(),
+    val onMarkNotSpam: ((Long) -> Unit)? = null,
+    val onReportSpam: ((Long) -> Unit)? = null,
 )
 
 /**

@@ -33,11 +33,12 @@ class SmsIngressUseCaseTest {
         override suspend fun markAsRead(threadId: ThreadId) {}
         override suspend fun markAsUnread(threadId: ThreadId) {}
         override suspend fun deleteConversation(threadId: ThreadId) {}
-        override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? {
+        override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean, subscriptionId: Int?): Long? {
             inserted.add(Triple(address, body, read))
             return insertResult
         }
         override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? = 2L
+        override suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean = false
         override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) { updatedReads.add(messageId to read) }

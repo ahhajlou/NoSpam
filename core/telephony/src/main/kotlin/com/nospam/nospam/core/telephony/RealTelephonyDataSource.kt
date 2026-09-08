@@ -208,10 +208,10 @@ class RealTelephonyDataSource(
         Unit
     }
 
-    override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean): Long? =
+    override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean, subscriptionId: Int?): Long? =
         withContext(Dispatchers.IO) {
             try {
-                val values = TelephonyMapper.buildMessageValues(address, body, date, if (read) 1 else 0)
+                val values = TelephonyMapper.buildMessageValues(address, body, date, if (read) 1 else 0, subscriptionId)
                 val uri = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
                 uri?.lastPathSegment?.toLongOrNull()
             } catch (e: Exception) {
@@ -275,5 +275,17 @@ class RealTelephonyDataSource(
 
     override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = withContext(Dispatchers.IO) {
         contactLookup.lookup(address)
+    }
+
+    override suspend fun hasOutboundMessages(threadId: ThreadId): Boolean = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms._ID),
+                "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.TYPE} = ?",
+                arrayOf(threadId.value.toString(), Telephony.Sms.MESSAGE_TYPE_SENT.toString()),
+                null
+            )?.use { it.count > 0 } ?: false
+        } catch (_: Exception) { false }
     }
 }

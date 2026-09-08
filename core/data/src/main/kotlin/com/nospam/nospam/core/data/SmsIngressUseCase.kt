@@ -1,10 +1,16 @@
 package com.nospam.nospam.core.data
 
 import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.database.entity.MessageVerdictEntity
+import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
 import com.nospam.nospam.core.ml.SpamClassifier
+import com.nospam.nospam.core.model.NotificationDecision
+import com.nospam.nospam.core.model.PolicyInput
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.model.ThreadSpamPolicy
+import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 
 /**
@@ -30,15 +36,17 @@ class SmsIngressUseCase(
         val body: String,
         /** Null when the inbox insert itself failed. */
         val messageId: Long?,
+        val notificationDecision: NotificationDecision = if (isSpam) NotificationDecision.SILENT else NotificationDecision.NORMAL,
+        val senderState: ThreadSpamState? = null,
     )
 
     suspend fun handle(message: RawMessage): Result {
         val sender = message.sender ?: "Unknown"
+        val normalized = context?.let { com.nospam.nospam.core.telephony.PhoneNumberNormalizer.normalize(it, sender) }
+            ?: sender.trim().uppercase()
 
         // Check blocklist first (app DB + system)
         val isBlocked = runCatching {
-            val normalized = context?.let { com.nospam.nospam.core.telephony.PhoneNumberNormalizer.normalize(it, sender) }
-                ?: sender.trim()
             val inApp = db.blocklistDao.findByAddress(normalized) != null ||
                 (normalized != sender.trim() && db.blocklistDao.findByAddress(sender.trim()) != null)
             inApp || telephony.isSystemBlocked(sender)
@@ -50,15 +58,28 @@ class SmsIngressUseCase(
             body = message.body,
             date = message.timestamp,
             read = false,
+            subscriptionId = message.subscriptionId,
         )
 
         val threadId = ThreadId(telephony.getOrCreateThreadId(sender))
 
         if (isBlocked) {
             if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
-            // No spam verdict needed for blocked; still prune.
+            // Update sender state to BLOCKED
+            val prevBlocked = db.senderStateDao.getByAddress(normalized)
+            if (prevBlocked?.isUserOverride != true) {
+                db.senderStateDao.upsert(
+                    SenderStateEntity(normalized, ThreadSpamState.BLOCKED, isUserOverride = prevBlocked?.isUserOverride ?: false, spamCount = (prevBlocked?.spamCount ?: 0) + 1)
+                )
+            }
+            if (messageId != null) {
+                db.messageVerdictDao.insert(
+                    MessageVerdictEntity(messageId, threadId.value, normalized, isSpam = true, score = 1.0, createdAt = message.timestamp)
+                )
+            }
             runCatching { db.spamVerdictDao.deleteAutoSpamOlderThan(retentionCutoff()) }
-            return Result(threadId, isSpam = true, score = 1.0, sender = sender, body = message.body, messageId = messageId)
+            runCatching { db.messageVerdictDao.deleteAutoOlderThan(retentionCutoff()) }
+            return Result(threadId, isSpam = true, score = 1.0, sender = sender, body = message.body, messageId = messageId, notificationDecision = NotificationDecision.NONE, senderState = ThreadSpamState.BLOCKED)
         }
 
         // 2) Classify with timeout — failure degrades to "no verdict, leave unread".
@@ -66,33 +87,100 @@ class SmsIngressUseCase(
             kotlinx.coroutines.withTimeout(8000L) { classifier.classify(message) }
         }.getOrNull()
 
+        var notificationDecision = NotificationDecision.NORMAL
+        var newState: ThreadSpamState? = null
+        var isSpamForResult = verdict?.isSpam ?: false
+
         if (verdict != null) {
-            // Spam → mark the inserted row as read to suppress heads-up.
-            if (verdict.isSpam && messageId != null) {
-                runCatching { telephony.updateMessageRead(messageId, read = true) }
+            // Gather signals for policy
+            val isContact = runCatching { telephony.lookupContact(sender)?.displayName != null }.getOrDefault(false)
+            val hasOutbound = runCatching { telephony.hasOutboundMessages(threadId) }.getOrDefault(false)
+            val prevStateEntity = db.senderStateDao.getByAddress(normalized)
+            val prevSenderState = prevStateEntity?.let {
+                com.nospam.nospam.core.model.SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt)
             }
-            if (threadId.value >= 0) {
-                db.spamVerdictDao.upsert(
-                    SpamVerdictEntity(
-                        threadId = threadId.value,
-                        isSpam = verdict.isSpam,
-                        score = verdict.score,
-                        isUserOverride = false,
+
+            val policyInput = PolicyInput(
+                prevState = prevSenderState,
+                isSpam = verdict.isSpam,
+                isContact = isContact,
+                hasOutbound = hasOutbound,
+                isBlocked = false,
+            )
+            val policyOut = ThreadSpamPolicy.decideWithAddress(normalized, policyInput)
+            newState = policyOut.newState.state
+            notificationDecision = policyOut.notification
+            isSpamForResult = verdict.isSpam
+
+            // Upsert SenderState only when not user override (per spec)
+            if (prevStateEntity?.isUserOverride != true) {
+                db.senderStateDao.upsert(
+                    SenderStateEntity(
+                        normalizedAddress = normalized,
+                        state = policyOut.newState.state,
+                        spamCount = policyOut.newState.spamCount,
+                        hamCount = policyOut.newState.hamCount,
+                        isUserOverride = policyOut.newState.isUserOverride,
+                        updatedAt = System.currentTimeMillis(),
                     )
                 )
             }
+
+            // Store per-message verdict (immutable)
+            if (messageId != null) {
+                db.messageVerdictDao.insert(
+                    MessageVerdictEntity(
+                        messageId = messageId,
+                        threadId = threadId.value,
+                        normalizedAddress = normalized,
+                        isSpam = verdict.isSpam,
+                        score = verdict.score,
+                        createdAt = message.timestamp,
+                    )
+                )
+            }
+
+            // Legacy SpamVerdictEntity keep for UI that still reads it — map from new state
+            if (threadId.value >= 0) {
+                val legacyIsSpam = policyOut.newState.state == ThreadSpamState.SPAM || policyOut.newState.state == ThreadSpamState.BLOCKED
+                // Don't overwrite user override legacy entries with auto
+                val existingLegacy = db.spamVerdictDao.getByThread(threadId.value)
+                if (existingLegacy?.isUserOverride != true) {
+                    db.spamVerdictDao.upsert(
+                        SpamVerdictEntity(
+                            threadId = threadId.value,
+                            isSpam = legacyIsSpam,
+                            score = verdict.score,
+                            isUserOverride = false,
+                        )
+                    )
+                }
+            }
+
+            // Apply READ / notification per decision
+            when (notificationDecision) {
+                NotificationDecision.NONE, NotificationDecision.SILENT -> {
+                    // For SILENT, mark the inserted row as read to suppress heads-up but keep inbox? Actually spec says MIXED inserted READ=1
+                    // For NONE (spam/blocked) also READ=1
+                    if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
+                }
+                NotificationDecision.NORMAL -> { /* leave unread */ }
+            }
         }
 
-        // Opportunistic retention, no WorkManager needed for v1.
+        // Opportunistic retention
         runCatching { db.spamVerdictDao.deleteAutoSpamOlderThan(retentionCutoff()) }
+        runCatching { db.messageVerdictDao.deleteAutoOlderThan(retentionCutoff()) }
 
         return Result(
             threadId = threadId,
-            isSpam = verdict?.isSpam ?: false,
+            isSpam = isSpamForResult,
             score = verdict?.score ?: 0.0,
             sender = sender,
             body = message.body,
             messageId = messageId,
+            notificationDecision = notificationDecision,
+            senderState = newState,
         )
     }
 
