@@ -1,7 +1,9 @@
 package com.nospam.nospam.feature.thread
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,10 +46,12 @@ import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeIncoming
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.nospam.nospam.core.model.MessageType
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewModel = viewModel()) {
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(threadId, address) { viewModel.loadThread(threadId, address, context) }
+    var selected by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
     val uiState by viewModel.uiState.collectAsState()
     Column(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -73,6 +77,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                             modifier = Modifier
                                 .clip(if (isMe) MessageBubbleShapeOutgoing else MessageBubbleShapeIncoming)
                                 .background(if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .combinedClickable(onClick = {}, onLongClick = { selected = msg })
                                 .padding(horizontal = 16.dp, vertical = 12.dp)
                         ) {
                             Text(
@@ -90,6 +95,23 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                     }
                 }
             }
+        }
+        selected?.let { msg ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { selected = null },
+                title = { Text("Message") },
+                text = { Text(msg.body) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("sms", msg.body))
+                        selected = null
+                    }) { Text("Copy") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { selected = null }) { Text("Close") }
+                }
+            )
         }
         // Compose bar
         Row(

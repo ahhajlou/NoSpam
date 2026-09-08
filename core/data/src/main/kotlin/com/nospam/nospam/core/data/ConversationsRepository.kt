@@ -25,6 +25,9 @@ class ConversationsRepository(
         spamIds: Set<Long>,
         blockedAddresses: Set<String>,
         archivedIds: Set<Long>,
+        starredIds: Set<Long>,
+        pinnedIds: Set<Long>,
+        mutedIds: Set<Long>,
     ): List<Conversation> = conversations.map { conv ->
         val st = senderStateFor(conv, senderStates)
         val isSpamByState = st?.state == com.nospam.nospam.core.model.ThreadSpamState.SPAM || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED
@@ -35,6 +38,9 @@ class ConversationsRepository(
             isBlocked = conv.participants.any { it.address in blockedAddresses } || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED,
             isArchived = conv.threadId.value in archivedIds,
             spamState = st?.state,
+            isStarred = conv.threadId.value in starredIds,
+            isPinned = conv.threadId.value in pinnedIds,
+            isMuted = conv.threadId.value in mutedIds,
         )
     }
 
@@ -60,19 +66,32 @@ class ConversationsRepository(
             db.blocklistDao.observeAll(),
             db.archivedDao.observeAll(),
             db.senderStateDao.observeAll(),
-        ) { conversations, spamVerdicts, blocklist, archived, senderStates ->
+            db.starredDao.observeAll(),
+            db.pinnedDao.observeAll(),
+            db.mutedDao.observeAll(),
+        ) { args ->
+            val conversations = args[0] as List<Conversation>
+            val spamVerdicts = args[1] as List<com.nospam.nospam.core.database.entity.SpamVerdictEntity>
+            val blocklist = args[2] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
+            val archived = args[3] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
+            val senderStates = args[4] as List<com.nospam.nospam.core.database.entity.SenderStateEntity>
+            val starred = args[5] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
+            val pinned = args[6] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
+            val muted = args[7] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
             val stateMap = senderStates.associateBy { normalizeAddr(it.normalizedAddress) }
-            applyFilter(
-                withFlags(
-                    conversations,
-                    stateMap,
-                    spamVerdicts.map { it.threadId }.toSet(),
-                    blocklist.map { it.address }.toSet(),
-                    archived.map { it.threadId }.toSet(),
-                ),
+            val withFlags = withFlags(
+                conversations,
                 stateMap,
-                filter,
+                spamVerdicts.map { it.threadId }.toSet(),
+                blocklist.map { it.address }.toSet(),
+                archived.map { it.threadId }.toSet(),
+                starred.map { it.threadId }.toSet(),
+                pinned.map { it.threadId }.toSet(),
+                muted.map { it.threadId }.toSet(),
             )
+            // Pinned first
+            val sorted = withFlags.sortedWith(compareByDescending<Conversation>{ it.isPinned }.thenByDescending{ it.date })
+            applyFilter(sorted, stateMap, filter)
         }
     }
 
@@ -116,6 +135,19 @@ class ConversationsRepository(
     suspend fun archive(threadId: ThreadId) = db.archivedDao.archive(threadId.value)
 
     suspend fun unarchive(threadId: ThreadId) = db.archivedDao.unarchive(threadId.value)
+
+    suspend fun toggleStar(threadId: ThreadId) {
+        if (db.starredDao.isStarred(threadId.value)) db.starredDao.unstar(threadId.value) else db.starredDao.star(threadId.value)
+    }
+    suspend fun togglePin(threadId: ThreadId) {
+        if (db.pinnedDao.isPinned(threadId.value)) db.pinnedDao.unpin(threadId.value) else db.pinnedDao.pin(threadId.value)
+    }
+    suspend fun toggleMute(threadId: ThreadId) {
+        if (db.mutedDao.isMuted(threadId.value)) db.mutedDao.unmute(threadId.value) else db.mutedDao.mute(threadId.value)
+    }
+    suspend fun setStar(threadId: ThreadId, starred: Boolean) { if (starred) db.starredDao.star(threadId.value) else db.starredDao.unstar(threadId.value) }
+    suspend fun setPin(threadId: ThreadId, pinned: Boolean) { if (pinned) db.pinnedDao.pin(threadId.value) else db.pinnedDao.unpin(threadId.value) }
+    suspend fun setMute(threadId: ThreadId, muted: Boolean) { if (muted) db.mutedDao.mute(threadId.value) else db.mutedDao.unmute(threadId.value) }
 
     /**
      * Deletes the provider thread and drops app-owned rows (verdicts, archive

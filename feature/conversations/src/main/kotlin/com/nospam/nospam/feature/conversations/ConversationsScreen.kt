@@ -59,6 +59,9 @@ fun ConversationsScreen(
     onReportSpam: (Long) -> Unit = {},
     onBlock: (String) -> Unit = {},
     onDelete: (Long) -> Unit = {},
+    onToggleStar: (Long) -> Unit = viewModel::toggleStar,
+    onTogglePin: (Long) -> Unit = viewModel::togglePin,
+    onToggleMute: (Long) -> Unit = viewModel::toggleMute,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
@@ -179,7 +182,25 @@ fun ConversationsScreen(
                     onReportSpam = { onReportSpam(conv.threadId.value) },
                     onBlock = { address?.let(onBlock) },
                     onDelete = { onDelete(conv.threadId.value) },
-                ),
+                    onToggleStar = { onToggleStar(conv.threadId.value) },
+                    onTogglePin = { onTogglePin(conv.threadId.value) },
+                    onToggleMute = { onToggleMute(conv.threadId.value) },
+                ) + buildList {
+                    if (address != null) {
+                        add(ConversationAction(label = "Add to contacts", onClick = {
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_INSERT).apply {
+                                    type = android.provider.ContactsContract.Contacts.CONTENT_TYPE
+                                    putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, address)
+                                }
+                                context.startActivity(intent)
+                            } catch (_: Exception) {}
+                        }))
+                        add(ConversationAction(label = "Call", onClick = {
+                            try { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.fromParts("tel", address, null))) } catch (_: Exception) {}
+                        }))
+                    }
+                },
                 onDismiss = { menuFor = null },
             )
         }
@@ -195,6 +216,9 @@ private fun inboxActions(
     onReportSpam: () -> Unit,
     onBlock: () -> Unit,
     onDelete: () -> Unit,
+    onToggleStar: () -> Unit,
+    onTogglePin: () -> Unit,
+    onToggleMute: () -> Unit,
 ): List<ConversationAction> = buildList {
     add(
         ConversationAction(
@@ -204,6 +228,9 @@ private fun inboxActions(
             onClick = onToggleRead,
         )
     )
+    add(ConversationAction(label = if (conv.isStarred) "Unstar" else "Star", onClick = onToggleStar))
+    add(ConversationAction(label = if (conv.isPinned) "Unpin" else "Pin", onClick = onTogglePin))
+    add(ConversationAction(label = if (conv.isMuted) "Unmute" else "Mute", onClick = onToggleMute))
     add(
         ConversationAction(
             label = stringResource(R.string.menu_archive),
@@ -263,6 +290,9 @@ private fun ConversationRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(conv.participants.firstOrNull()?.displayName ?: conv.participants.firstOrNull()?.address ?: stringResource(R.string.unknown_sender), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (conv.isPinned) { Text("📌", style = MaterialTheme.typography.labelSmall); Spacer(Modifier.width(4.dp)) }
+                if (conv.isStarred) { Text("★", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(4.dp)) }
+                if (conv.isMuted) { Text("🔇", style = MaterialTheme.typography.labelSmall); Spacer(Modifier.width(4.dp)) }
                 if (conv.spamState == com.nospam.nospam.core.model.ThreadSpamState.MIXED) {
                     Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 6.dp, vertical = 2.dp)) {
                         Text("Mixed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)

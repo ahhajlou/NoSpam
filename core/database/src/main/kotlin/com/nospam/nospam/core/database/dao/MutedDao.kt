@@ -1,0 +1,22 @@
+package com.nospam.nospam.core.database.dao
+
+import com.nospam.nospam.core.database.entity.MutedThreadEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+
+interface MutedDao {
+    fun observeAll(): Flow<List<MutedThreadEntity>>
+    suspend fun mute(threadId: Long)
+    suspend fun unmute(threadId: Long)
+    suspend fun isMuted(threadId: Long): Boolean
+}
+
+class InMemoryMutedDao : MutedDao {
+    private val data = mutableSetOf<Long>()
+    private val flow = MutableStateFlow<List<MutedThreadEntity>>(emptyList())
+    private fun refresh() { flow.value = data.map { MutedThreadEntity(it) } }
+    override fun observeAll(): Flow<List<MutedThreadEntity>> = flow
+    override suspend fun mute(threadId: Long) { data.add(threadId); refresh() }
+    override suspend fun unmute(threadId: Long) { data.remove(threadId); refresh() }
+    override suspend fun isMuted(threadId: Long) = threadId in data
+}

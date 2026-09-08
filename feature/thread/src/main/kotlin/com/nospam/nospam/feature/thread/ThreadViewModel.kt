@@ -38,6 +38,7 @@ class ThreadViewModel(
     // no messages yet. Mutable because one VM instance can serve successive
     // ThreadRoutes (same navigation scope).
     private var pendingAddress: String? = initialAddress
+    private var lastContext: android.content.Context? = null
 
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
@@ -53,9 +54,17 @@ class ThreadViewModel(
 
     fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null) {
         if (address != null) pendingAddress = address
+        if (context != null) lastContext = context.applicationContext
         // Cancel notification for this thread when user opens it (no core:notifications dep)
         context?.let { ctx ->
             runCatching { androidx.core.app.NotificationManagerCompat.from(ctx).cancel(id.toInt()) }
+        }
+        // Load draft (DataStore) — best effort
+        if (context != null) {
+            viewModelScope.launch {
+                val draft = runCatching { DraftStore.load(context, id) }.getOrNull()
+                if (draft != null) _uiState.value = _uiState.value.copy(draft = draft)
+            }
         }
         val dataSource = this.dataSource
         if (dataSource == null) {
@@ -90,6 +99,10 @@ class ThreadViewModel(
 
     fun onDraftChanged(text: String) {
         _uiState.value = _uiState.value.copy(draft = text)
+        lastContext?.let { ctx ->
+            val id = _uiState.value.threadId
+            viewModelScope.launch { runCatching { DraftStore.save(ctx, id, text) } }
+        }
     }
 
     fun onSend() {

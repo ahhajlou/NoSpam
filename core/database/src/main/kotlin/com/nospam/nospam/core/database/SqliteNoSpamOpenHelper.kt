@@ -5,7 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 class SqliteNoSpamOpenHelper(context: Context) :
-    SQLiteOpenHelper(context, "nospam.db", null, 2) {
+    SQLiteOpenHelper(context, "nospam.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -59,6 +59,9 @@ class SqliteNoSpamOpenHelper(context: Context) :
                 updatedAt INTEGER NOT NULL
             )"""
         )
+        db.execSQL("""CREATE TABLE starred_threads (threadId INTEGER PRIMARY KEY)""")
+        db.execSQL("""CREATE TABLE pinned_threads (threadId INTEGER PRIMARY KEY)""")
+        db.execSQL("""CREATE TABLE muted_threads (threadId INTEGER PRIMARY KEY)""")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -84,6 +87,11 @@ class SqliteNoSpamOpenHelper(context: Context) :
                     updatedAt INTEGER NOT NULL
                 )"""
             )
+        }
+        if (oldVersion < 3) {
+            db.execSQL("""CREATE TABLE IF NOT EXISTS starred_threads (threadId INTEGER PRIMARY KEY)""")
+            db.execSQL("""CREATE TABLE IF NOT EXISTS pinned_threads (threadId INTEGER PRIMARY KEY)""")
+            db.execSQL("""CREATE TABLE IF NOT EXISTS muted_threads (threadId INTEGER PRIMARY KEY)""")
         }
     }
 }

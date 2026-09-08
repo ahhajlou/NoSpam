@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class ConversationsUiState(
     val conversations: List<Conversation> = emptyList(),
@@ -30,7 +31,7 @@ data class ConversationsUiState(
  * through [ConversationsRepository], filtered client-side by chip + search.
  */
 class ConversationsViewModel(
-    repository: ConversationsRepository? = null,
+    private val repository: ConversationsRepository? = null,
 ) : ViewModel() {
     private val _filter = MutableStateFlow(ConversationFilter.ALL)
     private val _searchQuery = MutableStateFlow("")
@@ -83,6 +84,31 @@ class ConversationsViewModel(
     fun onSearchFocusChanged(focused: Boolean) {
         _isSearchFocused.value = focused
         _fakeState.value = _fakeState.value.copy(isSearchFocused = focused)
+    }
+
+    fun toggleStar(threadId: Long) {
+        val repo = repository ?: return
+        viewModelScope.launch { repo.toggleStar(ThreadId(threadId)) }
+        // Optimistic fake update
+        _fakeState.value = _fakeState.value.let { s ->
+            s.copy(
+                conversations = s.conversations.map { if (it.threadId.value == threadId) it.copy(isStarred = !it.isStarred) else it },
+                pinned = s.pinned.map { if (it.threadId.value == threadId) it.copy(isStarred = !it.isStarred) else it }
+            )
+        }
+    }
+    fun togglePin(threadId: Long) {
+        val repo = repository ?: return
+        viewModelScope.launch { repo.togglePin(ThreadId(threadId)) }
+        _fakeState.value = _fakeState.value.let { s ->
+            val all = (s.pinned + s.conversations)
+            val updated = all.map { if (it.threadId.value == threadId) it.copy(isPinned = !it.isPinned) else it }
+            s.copy(pinned = updated.filter { it.isPinned }, conversations = updated.filterNot { it.isPinned })
+        }
+    }
+    fun toggleMute(threadId: Long) {
+        val repo = repository ?: return
+        viewModelScope.launch { repo.toggleMute(ThreadId(threadId)) }
     }
 
     private fun matchesQuery(conversation: Conversation, query: String): Boolean {

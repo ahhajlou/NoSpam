@@ -51,6 +51,7 @@ data class Conversation(
     val isBlocked: Boolean = false,
     val isStarred: Boolean = false,
     val isPinned: Boolean = false,
+    val isMuted: Boolean = false,
     val hasDraft: Boolean = false,
     val photoUri: String? = null,
     val spamState: ThreadSpamState? = null,
