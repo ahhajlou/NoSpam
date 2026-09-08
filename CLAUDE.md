@@ -31,9 +31,10 @@ A full replacement SMS/MMS messenger for Android:
 | Navigation | Navigation-Compose, type-safe routes (`@Serializable` route objects) | Compile-time-checked args, no string routes |
 | DI | Hilt | Standard for multi-module Android, integrates with WorkManager/ViewModel. Trade-off: KSP adds real build-time cost per module — another reason to keep the module count down (§4). Koin or manual constructor injection are legitimate lighter alternatives if build time becomes a pain point. |
 | Async | Kotlin Coroutines + Flow | `StateFlow<UiState>` per screen, unidirectional data flow |
-| Local storage | Room (NOT the SMS store itself — see §5) | App-owned data: blocklist, spam labels, model metadata |
-| Build | Gradle Kotlin DSL + version catalog (`libs.versions.toml`, already in place) | Keep using it; add one entry per new module dependency |
+| Local storage | Room **+ SQLiteOpenHelper interim** (NOT the SMS store — see §5) | App-owned: blocklist, `MessageVerdict`/`SenderState`, starred/pinned/muted, model metadata — now **persistent** via `SqliteNoSpamOpenHelper` (Room still blocked §13) |
+| Build | Gradle Kotlin DSL + version catalog (`libs.versions.toml`) | Keep using it; DataStore `1.1.1` + `material-icons-extended` added |
 | Background work | WorkManager | Periodic re-classification / model updates, if needed |
+| Settings | DataStore Preferences (`settings` + `drafts`) | Spam protection toggle, per-thread drafts — single `preferencesDataStore("settings")` via `SpamPreferences`/`SettingsDataStore` |
 
 ## 3. Architectural principles (read this before adding a module or a dependency)
 
