@@ -51,6 +51,7 @@ class ThreadViewModelTest {
             store.add(Message(MessageId(2), ThreadId(9), address, body, date, MessageType.SENT, true))
             return 2L
         }
+        override suspend fun getContacts(limit: Int, query: String?): List<com.nospam.nospam.core.model.ContactEntry> = emptyList()
         override suspend fun searchBodyMatch(query: String): Set<Long> = emptySet()
         override suspend fun getActiveSubscriptions(): List<com.nospam.nospam.core.telephony.TelephonyDataSource.SimInfo> = emptyList()
         override suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean = false

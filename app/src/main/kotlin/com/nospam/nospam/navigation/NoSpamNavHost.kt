@@ -156,15 +156,15 @@ fun NoSpamNavHost(
         }
         composable<NewConversationRoute> {
             val scope = rememberCoroutineScope()
-            NewConversationScreen(onAddressEntered = { address ->
-                scope.launch {
-                    // Resolve (or create) the provider thread, then open it with
-                    // the address attached so sending works before any message
-                    // exists. Without a container there is no provider access.
-                    val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L
-                    navController.navigate(ThreadRoute(threadId, address))
-                }
-            })
+            NewConversationScreen(
+                onAddressEntered = { address ->
+                    scope.launch {
+                        val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L
+                        navController.navigate(ThreadRoute(threadId, address))
+                    }
+                },
+                dataSource = container?.telephony
+            )
         }
         composable<ThreadRoute> { backStackEntry ->
             val args = backStackEntry.toRoute<ThreadRoute>()

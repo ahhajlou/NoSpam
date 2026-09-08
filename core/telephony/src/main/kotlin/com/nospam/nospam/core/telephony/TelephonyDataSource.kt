@@ -27,5 +27,6 @@ interface TelephonyDataSource {
     suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean
     suspend fun getActiveSubscriptions(): List<SimInfo>
     suspend fun searchBodyMatch(query: String): Set<Long>
+    suspend fun getContacts(limit: Int = 50, query: String? = null): List<com.nospam.nospam.core.model.ContactEntry>
     data class SimInfo(val subscriptionId: Int, val displayName: String, val number: String? = null)
 }

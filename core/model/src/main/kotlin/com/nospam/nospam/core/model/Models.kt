@@ -93,3 +93,14 @@ data class ModelMetadata(
 enum class ConversationFilter {
     ALL, UNREAD, KNOWN, UNKNOWN, STARRED
 }
+
+data class ContactEntry(
+    val contactId: Long,
+    val displayName: String,
+    val phone: String,
+    val normalizedPhone: String = phone,
+    val label: String? = null, // Mobile, Work, Home
+    val photoUri: String? = null,
+    val starred: Boolean = false,
+    val timesContacted: Int = 0,
+)

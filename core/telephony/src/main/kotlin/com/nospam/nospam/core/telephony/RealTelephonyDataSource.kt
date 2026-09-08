@@ -314,6 +314,7 @@ class RealTelephonyDataSource(
         } catch (_: Exception) { false }
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> = withContext(Dispatchers.IO) {
         try {
             val sm = context.getSystemService(android.telephony.SubscriptionManager::class.java) ?: return@withContext emptyList()
@@ -337,5 +338,74 @@ class RealTelephonyDataSource(
             }
             set
         } catch (_: Exception) { emptySet() }
+    }
+
+    override suspend fun getContacts(limit: Int, query: String?): List<com.nospam.nospam.core.model.ContactEntry> = withContext(Dispatchers.IO) {
+        try {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return@withContext emptyList()
+            val projection = arrayOf(
+                android.provider.ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+                android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER,
+                android.provider.ContactsContract.CommonDataKinds.Phone.PHOTO_URI,
+                android.provider.ContactsContract.CommonDataKinds.Phone.STARRED,
+                android.provider.ContactsContract.CommonDataKinds.Phone.TIMES_CONTACTED,
+                android.provider.ContactsContract.CommonDataKinds.Phone.TYPE,
+                android.provider.ContactsContract.CommonDataKinds.Phone.LABEL,
+            )
+            val selection: String?
+            val args: Array<String>?
+            if (query.isNullOrBlank()) {
+                selection = "${android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} NOT NULL AND ${android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER} NOT NULL"
+                args = null
+            } else {
+                val like = "%${query.replace("%", "\\%").replace("_", "\\_")}%"
+                selection = "(${android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ? ESCAPE '\\' OR ${android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER} LIKE ? ESCAPE '\\') AND ${android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER} NOT NULL"
+                args = arrayOf(like, like)
+            }
+            val sort = "${android.provider.ContactsContract.CommonDataKinds.Phone.STARRED} DESC, ${android.provider.ContactsContract.CommonDataKinds.Phone.TIMES_CONTACTED} DESC, ${android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC LIMIT $limit"
+            val list = mutableListOf<com.nospam.nospam.core.model.ContactEntry>()
+            val seen = mutableSetOf<String>() // dedup by phone
+            context.contentResolver.query(
+                android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                projection, selection, args, sort
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val phone = c.getString(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)) ?: continue
+                    if (phone.isBlank()) continue
+                    val normalized = PhoneNumberNormalizer.normalize(context, phone)
+                    // dedup: same normalized number
+                    if (!seen.add(normalized)) continue
+                    val name = c.getString(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)) ?: phone
+                    val photo = c.getString(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.PHOTO_URI))
+                    val starred = c.getInt(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.STARRED)) == 1
+                    val times = c.getInt(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.TIMES_CONTACTED))
+                    val type = c.getInt(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.TYPE))
+                    val label = c.getString(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.LABEL))
+                    val typeLabel = when (type) {
+                        android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE -> "Mobile"
+                        android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_HOME -> "Home"
+                        android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_WORK -> "Work"
+                        android.provider.ContactsContract.CommonDataKinds.Phone.TYPE_OTHER -> "Other"
+                        else -> label ?: "Mobile"
+                    }
+                    list.add(com.nospam.nospam.core.model.ContactEntry(
+                        contactId = c.getLong(c.getColumnIndexOrThrow(android.provider.ContactsContract.CommonDataKinds.Phone.CONTACT_ID)),
+                        displayName = name,
+                        phone = phone,
+                        normalizedPhone = normalized,
+                        label = typeLabel,
+                        photoUri = photo,
+                        starred = starred,
+                        timesContacted = times
+                    ))
+                    if (list.size >= limit) break
+                }
+            }
+            list
+        } catch (e: Exception) {
+            Log.w(TAG, "getContacts failed", e)
+            emptyList()
+        }
     }
 }

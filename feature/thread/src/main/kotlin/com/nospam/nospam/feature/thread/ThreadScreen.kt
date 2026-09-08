@@ -149,8 +149,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
 
 internal data class Contact(val name: String, val detail: String, val phone: String)
 
-// Placeholder until the Contacts provider is wired (needs READ_CONTACTS
-// query in core:telephony + a repository). Mirrors the Stitch mock.
+// Fallback seed for previews/tests when no provider is available.
 internal fun fakeContacts() = listOf(
     Contact("Alice Freeman", "Mobile • 555-0102", "5550102"),
     Contact("Amanda Jones", "Work • 555-0193", "5550193"),
@@ -158,6 +157,12 @@ internal fun fakeContacts() = listOf(
     Contact("Brian Smith", "Mobile • 555-0188", "5550188"),
     Contact("Catherine O'Neil", "Mobile • 555-0167", "5550167"),
     Contact("David Kim", "Work • 555-0112", "5550112"),
+)
+
+private fun contactEntryToUi(e: com.nospam.nospam.core.model.ContactEntry) = Contact(
+    name = e.displayName,
+    detail = "${e.label ?: "Mobile"} • ${e.phone}",
+    phone = e.phone
 )
 
 /**
@@ -174,14 +179,46 @@ internal fun resolveRecipientAddress(query: String, contacts: List<Contact> = fa
 }
 
 @Composable
-fun NewConversationScreen(onAddressEntered: (String) -> Unit = {}) {
-    // Hoisted + saveable: the field previously used value = "" with a no-op
-    // onValueChange, so every keystroke was discarded and the IME ended up
-    // writing to an inactive InputConnection.
+fun NewConversationScreen(
+    onAddressEntered: (String) -> Unit = {},
+    dataSource: com.nospam.nospam.core.telephony.TelephonyDataSource? = null,
+) {
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
-    val contacts = androidx.compose.runtime.remember { fakeContacts() }
-    val filtered = remember(query) {
-        if (query.isBlank()) contacts
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var hasContactPerm by remember {
+        mutableStateOf(
+            dataSource == null || androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.READ_CONTACTS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val permLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> hasContactPerm = granted }
+    var realContacts by remember { mutableStateOf<List<Contact>?>(null) }
+    // Load real contacts when provider is available and permission granted
+    androidx.compose.runtime.LaunchedEffect(dataSource, query, hasContactPerm) {
+        if (dataSource == null || !hasContactPerm) {
+            realContacts = null
+            return@LaunchedEffect
+        }
+        val limit = 50
+        val q = query.takeIf { it.isNotBlank() }
+        realContacts = try {
+            dataSource.getContacts(limit, q).map { contactEntryToUi(it) }
+        } catch (_: Exception) { null }
+    }
+    val isPreview = dataSource == null
+    val rc = realContacts
+    val contacts: List<Contact> = when {
+        isPreview -> remember { fakeContacts() }
+        !hasContactPerm -> emptyList()
+        rc != null -> rc
+        else -> emptyList()
+    }
+    val filtered: List<Contact> = remember(query, contacts, rc, isPreview) {
+        if (!isPreview && rc != null) contacts
+        else if (query.isBlank()) contacts
         else contacts.filter {
             it.name.contains(query, ignoreCase = true) || it.detail.contains(query, ignoreCase = true)
         }
@@ -205,6 +242,12 @@ fun NewConversationScreen(onAddressEntered: (String) -> Unit = {}) {
                 onDone = { submit() },
             ),
         )
+        if (!hasContactPerm && dataSource != null) {
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Contacts permission needed to show your contacts", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                androidx.compose.material3.TextButton(onClick = { permLauncher.launch(android.Manifest.permission.READ_CONTACTS) }) { Text("Allow") }
+            }
+        }
         Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
         Row(
             modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
