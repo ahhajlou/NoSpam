@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+tasks.withType<Test> { jvmArgs("-XX:+EnableDynamicAgentLoading") }
+
 android {
     namespace = "com.nospam.nospam.feature.export"
     compileSdk = 36
