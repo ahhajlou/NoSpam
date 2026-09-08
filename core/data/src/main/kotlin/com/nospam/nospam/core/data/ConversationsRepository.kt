@@ -34,6 +34,7 @@ class ConversationsRepository(
             isSpam = isSpam,
             isBlocked = conv.participants.any { it.address in blockedAddresses } || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED,
             isArchived = conv.threadId.value in archivedIds,
+            spamState = st?.state,
         )
     }
 

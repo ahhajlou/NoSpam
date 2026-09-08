@@ -1,5 +1,8 @@
 package com.nospam.nospam.core.data
 
+import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.nospam.nospam.core.database.NoSpamDatabase
 import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
@@ -12,6 +15,10 @@ import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamPolicy
 import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.TelephonyDataSource
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+
+private val Context.settingsDataStore by preferencesDataStore("settings")
 
 /**
  * Orchestrates one incoming SMS: classify → resolve thread → insert into the
@@ -107,7 +114,19 @@ class SmsIngressUseCase(
                 hasOutbound = hasOutbound,
                 isBlocked = false,
             )
-            val policyOut = ThreadSpamPolicy.decideWithAddress(normalized, policyInput)
+            var policyOut = ThreadSpamPolicy.decideWithAddress(normalized, policyInput)
+            // Spam protection off: short-circuit to CLEAN/NORMAL but still store verdict
+            val spamEnabled = runCatching {
+                if (context != null) {
+                    context.settingsDataStore.data.map { it[booleanPreferencesKey("spam_protection_enabled")] ?: true }.first()
+                } else true
+            }.getOrDefault(true)
+            if (!spamEnabled) {
+                policyOut = policyOut.copy(
+                    newState = policyOut.newState.copy(state = ThreadSpamState.CLEAN),
+                    notification = NotificationDecision.NORMAL
+                )
+            }
             newState = policyOut.newState.state
             notificationDecision = policyOut.notification
             isSpamForResult = verdict.isSpam

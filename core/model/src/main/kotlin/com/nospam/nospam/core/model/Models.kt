@@ -53,6 +53,7 @@ data class Conversation(
     val isPinned: Boolean = false,
     val hasDraft: Boolean = false,
     val photoUri: String? = null,
+    val spamState: ThreadSpamState? = null,
 )
 
 data class RawMessage(

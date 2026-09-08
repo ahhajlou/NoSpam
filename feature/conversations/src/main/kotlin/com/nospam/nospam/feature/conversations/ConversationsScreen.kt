@@ -62,6 +62,8 @@ fun ConversationsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isDefault = remember { isDefaultSmsApp(context) }
     NoSpamTheme {
         Scaffold(
             floatingActionButton = {
@@ -74,6 +76,18 @@ fun ConversationsScreen(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
+                if (!isDefault) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Not default SMS app — some features disabled", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
+                }
                 item {
                     // Search bar
                     OutlinedTextField(
@@ -247,8 +261,14 @@ private fun ConversationRow(
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(conv.participants.firstOrNull()?.displayName ?: conv.participants.firstOrNull()?.address ?: stringResource(R.string.unknown_sender), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (conv.spamState == com.nospam.nospam.core.model.ThreadSpamState.MIXED) {
+                    Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text("Mixed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(formatTime(conv.date), style = MaterialTheme.typography.labelLarge, color = if (!conv.read) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(conv.snippet, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -276,6 +296,15 @@ private fun formatTime(millis: Long): String {
         diff < 86400000 -> "${diff / 3600000}h"
         diff < 172800000 -> yesterday
         else -> java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(millis))
+    }
+}
+
+private fun isDefaultSmsApp(context: android.content.Context): Boolean {
+    return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        val rm = context.getSystemService(android.app.role.RoleManager::class.java) ?: return false
+        rm.isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
+    } else {
+        android.provider.Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
     }
 }
 
@@ -430,14 +459,21 @@ fun SpamScreen(
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.spam_banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
         }
-        // Bulk delete touches the system provider — offered only for the fake
-        // seed. Live spam is cleared thread-by-thread via "Not spam".
-        if (!isLive) {
+        if (spamList.isNotEmpty()) {
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
-                androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
-                    Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.empty_spam))
+                androidx.compose.material3.TextButton(onClick = {
+                    spamList.forEach { c -> c.participants.firstOrNull()?.address?.let(onBlock) }
+                }) { Text("Block all") }
+                androidx.compose.material3.TextButton(onClick = {
+                    spamList.forEach { c -> onDelete(c.threadId.value) }
+                    if (!isLive) fakeSpamList = emptyList()
+                }) { Text("Delete all") }
+                if (!isLive) {
+                    androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
+                        Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.empty_spam))
+                    }
                 }
             }
         }

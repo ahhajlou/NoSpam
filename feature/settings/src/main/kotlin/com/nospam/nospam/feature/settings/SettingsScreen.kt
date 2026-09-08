@@ -29,9 +29,11 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.nospam.nospam.core.i18n.LocaleHelper
+import kotlinx.coroutines.launch
 
 private data class LanguageOption(val tag: String, val title: String, val subtitle: String)
 
@@ -71,7 +74,10 @@ fun SettingsScreen() {
     var showTermsDialog by remember { mutableStateOf(false) }
     var showGroupDialog by remember { mutableStateOf(false) }
 
-    var spamProtectionEnabled by rememberSaveable { mutableStateOf(true) }
+    val spamFlow = remember { SpamPreferences.flow(context) }
+    val spamEnabledState by spamFlow.collectAsState(initial = true)
+    val spamProtectionEnabled = spamEnabledState
+    val scope = rememberCoroutineScope()
     var autoDownloadMms by rememberSaveable { mutableStateOf(true) }
     var groupMode by rememberSaveable { mutableStateOf("mass") }
 
@@ -137,7 +143,7 @@ fun SettingsScreen() {
                 title = stringResource(R.string.spam_title),
                 subtitle = stringResource(R.string.spam_sub),
                 checked = spamProtectionEnabled,
-                onCheckedChange = { spamProtectionEnabled = it }
+                onCheckedChange = { scope.launch { SpamPreferences.setEnabled(context, it) } }
             )
         }
         item {

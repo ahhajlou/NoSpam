@@ -62,6 +62,11 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".sms.DefaultSmsChangedReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.ACTION_DEFAULT_SMS_PACKAGE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <!-- Per-app language persistence for API <33 -->
         <service
             android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
