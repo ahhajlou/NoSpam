@@ -23,7 +23,8 @@ data class ConversationsUiState(
     val pinned: List<Conversation> = emptyList(),
     val filter: ConversationFilter = ConversationFilter.ALL,
     val searchQuery: String = "",
-    val isSearchFocused: Boolean = false
+    val isSearchFocused: Boolean = false,
+    val isLoading: Boolean = true
 )
 
 /**
@@ -43,7 +44,8 @@ class ConversationsViewModel(
     private val _fakeState = MutableStateFlow(
         ConversationsUiState(
             conversations = all.drop(1),
-            pinned = all.take(1)
+            pinned = all.take(1),
+            isLoading = false
         )
     )
 
@@ -69,6 +71,7 @@ class ConversationsViewModel(
                 filter = filter,
                 searchQuery = query,
                 isSearchFocused = focused,
+                isLoading = false
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationsUiState())
     }

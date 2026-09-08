@@ -104,17 +104,29 @@ fun NoSpamNavHost(
         return
     }
 
+    // Hoisted ViewModel survives navigation (Inbox -> Settings -> Inbox).
+    // Without this, each navigate() created a new NavBackStackEntry and a fresh
+    // ViewModel whose init re-queried telephony (3.6s on SM-A730F). The repository
+    // SharedFlow cache (30s replay) is the primary fix; hoisting is the safety net
+    // so the composable reuses the same StateFlow and replays instantly.
+    val conversationsVm: ConversationsViewModel = viewModel(
+        factory = vmFactory {
+            container?.let { ConversationsViewModel(it.conversationsRepository) }
+                ?: ConversationsViewModel()
+        }
+    )
+    val archivedVm: ArchivedViewModel? = container?.let {
+        viewModel(factory = vmFactory { ArchivedViewModel(it.conversationsRepository) })
+    }
+    val spamVm: SpamViewModel? = container?.let {
+        viewModel(factory = vmFactory { SpamViewModel(it.conversationsRepository) })
+    }
+
     NavHost(navController = navController, startDestination = start) {
         composable<ConversationsRoute> {
             val scope = rememberCoroutineScope()
-            val vm: ConversationsViewModel = viewModel(
-                factory = vmFactory {
-                    container?.let { ConversationsViewModel(it.conversationsRepository) }
-                        ?: ConversationsViewModel()
-                }
-            )
             ConversationsScreen(
-                viewModel = vm,
+                viewModel = conversationsVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNewMessage = { navController.navigate(NewConversationRoute) },
                 onToggleRead = { id, read ->
@@ -136,11 +148,8 @@ fun NoSpamNavHost(
         }
         composable<ArchivedRoute> {
             val scope = rememberCoroutineScope()
-            val vm: ArchivedViewModel? = container?.let {
-                viewModel(factory = vmFactory { ArchivedViewModel(it.conversationsRepository) })
-            }
             ArchivedScreen(
-                viewModel = vm,
+                viewModel = archivedVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onUnarchive = { id ->
                     scope.launch { container?.conversationsRepository?.unarchive(ThreadId(id)) }
@@ -152,11 +161,8 @@ fun NoSpamNavHost(
         }
         composable<SpamRoute> {
             val scope = rememberCoroutineScope()
-            val vm: SpamViewModel? = container?.let {
-                viewModel(factory = vmFactory { SpamViewModel(it.conversationsRepository) })
-            }
             SpamScreen(
-                viewModel = vm,
+                viewModel = spamVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNotSpam = { id ->
                     scope.launch {

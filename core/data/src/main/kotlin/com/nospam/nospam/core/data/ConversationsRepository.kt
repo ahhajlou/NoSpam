@@ -5,15 +5,67 @@ import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.telephony.TelephonyDataSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.shareIn
 
 class ConversationsRepository(
     private val telephony: TelephonyDataSource,
-    private val db: NoSpamDatabase
+    private val db: NoSpamDatabase,
+    // Injected for tests – production uses IO, tests can pass TestScope.
+    private val externalScope: CoroutineScope? = null
 ) {
+    // Shared repository scope keeps hot flows alive across ViewModel recreation
+    // (e.g. navigating Inbox -> Settings -> Inbox). Without this, each new
+    // ViewModel collector triggered a fresh telephony query (3.6s on SM-A730F).
+    // Unconfined as default makes unit tests synchronous (runTest's
+    // TestDispatcher controls emissions); heavy work still on IO via flowOn.
+    private val repositoryScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+
+    // Heavy telephony + adjustMixedSnippet shared with replay=1 so revisiting
+    // the inbox replays the last list instantly instead of re-querying.
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val sharedTelephony = telephony.observeConversations()
+        .distinctUntilChanged()
+        .mapLatest { adjustMixedSnippet(it) }
+        .shareIn(repositoryScope, SharingStarted.Eagerly, replay = 1)
+
+    // Flags combine also shared – avoids recombining 7 DB flows on each collector.
+    @Suppress("UNCHECKED_CAST")
+    private val sharedFlags = combine(
+        db.spamVerdictDao.observeSpam(),
+        db.blocklistDao.observeAll(),
+        db.archivedDao.observeAll(),
+        db.senderStateDao.observeAll(),
+        db.starredDao.observeAll(),
+        db.pinnedDao.observeAll(),
+        db.mutedDao.observeAll(),
+    ) { args ->
+        val spamVerdicts = args[0] as List<com.nospam.nospam.core.database.entity.SpamVerdictEntity>
+        val blocklist = args[1] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
+        val archived = args[2] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
+        val senderStates = args[3] as List<com.nospam.nospam.core.database.entity.SenderStateEntity>
+        val starred = args[4] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
+        val pinned = args[5] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
+        val muted = args[6] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
+        Flags(
+            spamIds = spamVerdicts.map { it.threadId }.toSet(),
+            blockedAddresses = blocklist.map { it.address }.toSet(),
+            archivedIds = archived.map { it.threadId }.toSet(),
+            senderStates = senderStates.associateBy { normalizeAddr(it.normalizedAddress) },
+            starredIds = starred.map { it.threadId }.toSet(),
+            pinnedIds = pinned.map { it.threadId }.toSet(),
+            mutedIds = muted.map { it.threadId }.toSet(),
+        )
+    }.shareIn(repositoryScope, SharingStarted.Eagerly, replay = 1)
+
     private fun normalizeAddr(raw: String) = raw.trim().uppercase()
 
     private fun senderStateFor(conv: Conversation, states: Map<String, com.nospam.nospam.core.database.entity.SenderStateEntity>): com.nospam.nospam.core.database.entity.SenderStateEntity? {
@@ -61,43 +113,9 @@ class ConversationsRepository(
             }
         }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun observeConversations(filter: ConversationFilter = ConversationFilter.ALL): Flow<List<Conversation>> {
-        // Split per required fix: telephonyFlow (heavy, with adjust) vs flagsFlow (light)
-        val telephonyFlow: Flow<List<Conversation>> = telephony.observeConversations()
-            .distinctUntilChanged()
-            .mapLatest { adjustMixedSnippet(it) }
-
-        // Flags: 7 DB flows combined into one lightweight stream (vararg Array version, no typed 7 overload)
-        @Suppress("UNCHECKED_CAST")
-        val flagsFlow: Flow<Flags> = combine(
-            db.spamVerdictDao.observeSpam(),
-            db.blocklistDao.observeAll(),
-            db.archivedDao.observeAll(),
-            db.senderStateDao.observeAll(),
-            db.starredDao.observeAll(),
-            db.pinnedDao.observeAll(),
-            db.mutedDao.observeAll(),
-        ) { args ->
-            val spamVerdicts = args[0] as List<com.nospam.nospam.core.database.entity.SpamVerdictEntity>
-            val blocklist = args[1] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
-            val archived = args[2] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
-            val senderStates = args[3] as List<com.nospam.nospam.core.database.entity.SenderStateEntity>
-            val starred = args[4] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
-            val pinned = args[5] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
-            val muted = args[6] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
-            Flags(
-                spamIds = spamVerdicts.map { it.threadId }.toSet(),
-                blockedAddresses = blocklist.map { it.address }.toSet(),
-                archivedIds = archived.map { it.threadId }.toSet(),
-                senderStates = senderStates.associateBy { normalizeAddr(it.normalizedAddress) },
-                starredIds = starred.map { it.threadId }.toSet(),
-                pinnedIds = pinned.map { it.threadId }.toSet(),
-                mutedIds = muted.map { it.threadId }.toSet(),
-            )
-        }
-
-        return combine(telephonyFlow, flagsFlow) { conversations, flags ->
+        // Cold per-collector – cheap filter/sort, but reuses hot sharedTelephony/flags.
+        return combine(sharedTelephony, sharedFlags) { conversations, flags ->
             val withFlags = withFlags(
                 conversations,
                 flags.senderStates,
@@ -108,7 +126,7 @@ class ConversationsRepository(
                 flags.pinnedIds,
                 flags.mutedIds,
             )
-            val sorted = withFlags.sortedWith(compareByDescending<Conversation>{ it.isPinned }.thenByDescending{ it.date })
+            val sorted = withFlags.sortedWith(compareByDescending<Conversation> { it.isPinned }.thenByDescending { it.date })
             applyFilter(sorted, flags.senderStates, filter)
         }
     }
@@ -135,9 +153,11 @@ class ConversationsRepository(
         }
     }
 
+    // Spam/Archived also share the hot telephony upstream so navigating
+    // to those tabs doesn't re-trigger the 3.6s query.
     fun observeSpam(): Flow<List<Conversation>> {
         return combine(
-            telephony.observeConversations(),
+            sharedTelephony,
             db.spamVerdictDao.observeSpam(),
             db.blocklistDao.observeAll(),
             db.senderStateDao.observeAll(),
@@ -153,19 +173,19 @@ class ConversationsRepository(
                 .map { conv ->
                     conv.copy(isBlocked = conv.participants.any { it.address in blockedAddresses })
                 }
-        }
+        }.flowOn(Dispatchers.IO)
     }
 
     fun observeArchived(): Flow<List<Conversation>> {
         return combine(
-            telephony.observeConversations(),
+            sharedTelephony,
             db.archivedDao.observeAll()
         ) { conversations, archived ->
             val archivedIds = archived.map { it.threadId }.toSet()
             conversations
                 .filter { it.threadId.value in archivedIds }
                 .map { it.copy(isArchived = true) }
-        }
+        }.flowOn(Dispatchers.IO)
     }
 
     suspend fun setRead(threadId: ThreadId, read: Boolean) {

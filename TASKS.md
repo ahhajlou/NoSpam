@@ -372,6 +372,19 @@ the system default SMS app on the same seed data.
 
 ---
 
+## Phase 11 — Inbox Jank Remediation (SM-A730F ~2000ms Davey)
+
+> Follow-up to Phase 10. Device evidence after 1.3s DB block fix (e6c0c60): `Davey! ~1930-2074ms`, `Skipped 112 frames`, `inbox loaded: 269 in 3685ms` on Galaxy A7 SM-A730F (Exynos 7885). DB/NPE already fixed – remaining jank is Main-Thread N+1 queries + Compose allocations + single-frame 269-row layout. Concurrent `ContactLookup` already parallel (`RealTelephonyDataSource:198 async/awaitAll`) – do not rework.
+
+**Gate:** `NoSpamPerf: inbox loaded <500ms`, `Davey <200ms`, zero `Skipped 100+` on SM-A730F; `./gradlew build` green.
+
+- [x] **11.1 Force repository flows to IO (P0)** — `ConversationsRepository.observeConversations:65` `combine` + `mapLatest { adjustMixedSnippet }` runs on `viewModelScope` (Main) → N+1 Room/Telephony queries block UI. Initially added `.flowOn(Dispatchers.IO)` terminal (now hot-shared, so final `combine` is cheap; heavy telephony offloaded via inner `withContext(IO)`). *Key files:* `core/data/ConversationsRepository.kt`. *Verify:* trace shows `adjustMixedSnippet` off Main; logcat no `DiskReadViolation` in repository. Done 2026-09-08.
+- [x] **11.2 Eliminate date-formatting allocations in Compose (P0)** — `ConversationsScreen.kt:322` `formatTime` creates `SimpleDateFormat` + `Instant.atZone` per row per recomposition (269×). Replaced with `DateUtils.formatDateTime` (framework-optimized) wrapped in `remember(date)` per visible row (`~10` allocations, not 269) + `Calendar` year check. Do NOT use `companion object` `SimpleDateFormat` (not thread-safe). *Key files:* `feature/conversations/ConversationsScreen.kt`. *Verify:* profiler allocations down; no per-frame `SimpleDateFormat` creation. Done 2026-09-08.
+- [x] **11.3 Skeleton loading state (P1)** — `ConversationsUiState` shows empty text then 269-row layout in one frame → 2s freeze. Added `isLoading: Boolean = true` to state, set `false` in `ViewModel` combine, render `LazyColumn` with 8 grey `Box` placeholders (`SkeletonRow`) when `isLoading && empty`, else real list. Splits layout work per Google Messages pattern. *Key files:* `feature/conversations/ConversationsViewModel.kt`, `ConversationsScreen.kt`. *Verify:* first frame shows shimmer <16ms, `Skipped frames` gone. Done 2026-09-08.
+- [x] **11.4 Navigation re-query cache (P0 – follow-up 2026-09-08 21:41 logcat)** — Every `Inbox -> Settings -> Inbox` recreated `ConversationsViewModel` (NavBackStackEntry scope) and re-ran `getConversations()` → `inbox loaded: 269 in 3573ms` on every navigation, identical to cold start. Fixed via two layers: (1) `ConversationsRepository` hot cache: `sharedTelephony` (`telephony.observeConversations().distinctUntilChanged().mapLatest{adjust}`) + `sharedFlags` (7 DB flows) via `shareIn(CoroutineScope(Unconfined), Eagerly, replay=1)` so second collector replays instantly; `observeConversations` now `combine(sharedTelephony, sharedFlags)` cold but reuses hot upstream (no per-filter `shareIn` – keeps archive visibility synchronous). (2) `NoSpamNavHost` hoisted `ConversationsViewModel`/`ArchivedViewModel`/`SpamViewModel` to NavHost scope (`viewModel()` outside `composable<>`) so `StateFlow` with `WhileSubscribed(5s)` survives navigation; repository's 30s replay is fallback for >5s gaps. Added `externalScope` param for tests (`Unconfined` default). *Key files:* `ConversationsRepository.kt:22`, `NoSpamNavHost.kt:108`, `ConversationsViewModel.kt`. *Verify:* `core:data:testDebugUnitTest` green (11 tests); `adb logcat` on revisit: `inbox loaded` <50ms (replay), `Davey <200ms`, `Skipped 0`. Done 2026-09-08.
+
+---
+
 ## Deferred (Not in v1)
 - `build-logic` convention plugins (add at 8+ modules when duplication justifies).
 - Baseline profiles / macrobenchmark.

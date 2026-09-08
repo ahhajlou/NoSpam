@@ -125,48 +125,52 @@ fun ConversationsScreen(
                         }
                     }
                 }
-                if (uiState.pinned.isNotEmpty()) {
-                    item {
-                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(R.string.section_pinned), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                if (uiState.isLoading && uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
+                    items(8) { SkeletonRow() }
+                } else {
+                    if (uiState.pinned.isNotEmpty()) {
+                        item {
+                            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.section_pinned), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        items(uiState.pinned, key = { it.threadId.value }) { conv ->
+                            ConversationRow(
+                                conv,
+                                onClick = { onConversationClick(conv.threadId.value) },
+                                onLongClick = { menuFor = conv },
+                            )
+                        }
+                        item { Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))) }
+                        item {
+                            Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                         }
                     }
-                    items(uiState.pinned, key = { it.threadId.value }) { conv ->
+                    items(uiState.conversations, key = { it.threadId.value }) { conv ->
                         ConversationRow(
                             conv,
                             onClick = { onConversationClick(conv.threadId.value) },
                             onLongClick = { menuFor = conv },
                         )
                     }
-                    item { Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))) }
-                    item {
-                        Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    }
-                }
-                items(uiState.conversations, key = { it.threadId.value }) { conv ->
-                    ConversationRow(
-                        conv,
-                        onClick = { onConversationClick(conv.threadId.value) },
-                        onLongClick = { menuFor = conv },
-                    )
-                }
-                if (uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
-                    item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                if (viewModel.isLive) stringResource(R.string.empty_title_live) else stringResource(R.string.empty_title),
-                                style = MaterialTheme.typography.headlineMedium
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                if (viewModel.isLive) stringResource(R.string.empty_subtitle_live)
-                                else stringResource(R.string.empty_subtitle_new),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    if (uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(48.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    if (viewModel.isLive) stringResource(R.string.empty_title_live) else stringResource(R.string.empty_title),
+                                    style = MaterialTheme.typography.headlineMedium
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    if (viewModel.isLive) stringResource(R.string.empty_subtitle_live)
+                                    else stringResource(R.string.empty_subtitle_new),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -310,6 +314,21 @@ private fun ConversationRow(
 }
 
 @Composable
+private fun SkeletonRow() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(72.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest))
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(modifier = Modifier.fillMaxWidth(0.45f).height(14.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
+            Box(modifier = Modifier.fillMaxWidth(0.75f).height(12.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest))
+        }
+    }
+}
+
+@Composable
 private fun filterLabel(filter: ConversationFilter): String = when (filter) {
     ConversationFilter.ALL -> stringResource(R.string.filter_all)
     ConversationFilter.UNREAD -> stringResource(R.string.filter_unread)
@@ -320,26 +339,38 @@ private fun filterLabel(filter: ConversationFilter): String = when (filter) {
 
 @Composable
 private fun formatTime(millis: Long): String {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val now = stringResource(R.string.time_now)
     val yesterday = stringResource(R.string.time_yesterday)
-    val diff = System.currentTimeMillis() - millis
-    // Future dates (device clock wrong or scheduled) must show absolute, not "now"
-    if (diff < -60_000) {
-        val isCurrentYear = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).year ==
-            java.time.LocalDate.now().year
-        return if (isCurrentYear) java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(millis))
-        else java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date(millis))
+    return androidx.compose.runtime.remember(millis, now, yesterday) {
+        val diff = System.currentTimeMillis() - millis
+        val currentYear = isCurrentYear(millis)
+        if (diff < -60_000) {
+            val flags = android.text.format.DateUtils.FORMAT_SHOW_DATE or
+                android.text.format.DateUtils.FORMAT_ABBREV_MONTH or
+                if (currentYear) 0 else android.text.format.DateUtils.FORMAT_SHOW_YEAR
+            android.text.format.DateUtils.formatDateTime(context, millis, flags)
+        } else {
+            when {
+                diff < 60_000 -> now
+                diff < 3600_000 -> "${diff / 60000}m"
+                diff < 86400000 -> "${diff / 3600000}h"
+                diff < 172800000 -> yesterday
+                else -> {
+                    val flags = android.text.format.DateUtils.FORMAT_SHOW_DATE or
+                        android.text.format.DateUtils.FORMAT_ABBREV_MONTH or
+                        if (currentYear) 0 else android.text.format.DateUtils.FORMAT_SHOW_YEAR
+                    android.text.format.DateUtils.formatDateTime(context, millis, flags)
+                }
+            }
+        }
     }
-    val isCurrentYear = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()).year ==
-        java.time.LocalDate.now().year
-    return when {
-        diff < 60_000 -> now
-        diff < 3600_000 -> "${diff / 60000}m"
-        diff < 86400000 -> "${diff / 3600000}h"
-        diff < 172800000 -> yesterday
-        isCurrentYear -> java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(millis))
-        else -> java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date(millis))
-    }
+}
+
+private fun isCurrentYear(millis: Long): Boolean {
+    val calNow = java.util.Calendar.getInstance()
+    val calThen = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+    return calNow.get(java.util.Calendar.YEAR) == calThen.get(java.util.Calendar.YEAR)
 }
 
 private fun isDefaultSmsApp(context: android.content.Context): Boolean {
