@@ -308,7 +308,8 @@ Phases 7–8:
 1k messages scrolls at 60fps; device manual check: dates/order/grouping match
 the system default SMS app on the same seed data.
 
-- [ ] **10.1 Deep Threads address enrichment + true GROUP BY** — Replace the
+- [x] **10.1 Deep Threads address enrichment + true GROUP BY** — `7c4b8b8` implements `tryThreadsQuery` batch `Sms IN (threadIds)` + `canonical-addresses` + `Threads` fast path, fallback `LIMIT 3000`, cache + parallel `ContactLookup`. Done 2026-09-08 `7c4b8b8`.
+  Replace the
   `Sms.CONTENT_URI LIMIT 3000` client group in
   `core/telephony/RealTelephonyDataSource.queryConversations:75` with a
   provider-side `GROUP BY thread_id` (prefer `Telephony.Threads.CONTENT_URI`
@@ -321,7 +322,7 @@ the system default SMS app on the same seed data.
   *Verify:* `TelephonyInstrumentedTest` seeded 5k SMS — `getConversations()`
   count equals `Threads` count; `android-profiler` trace cold-start <1s.
 
-- [ ] **10.2 Optimization for listing messages (paging & flag isolation)** —
+- [x] **10.2 Optimization for listing messages (paging & flag isolation)** — `7c4b8b8` Fix 2+3: split `ConversationsRepository` 8-way `combine` into `telephonyFlow.distinctUntilChanged().mapLatest(adjust)` + `flagsFlow` (7 DB), and `RealTelephonyDataSource` `debounce(200)`, `Mutex` cache (`cachedMetas/latestMap`), parallel `ContactLookup` via `async`. Paging `LIMIT 200` already in `queryMessages`. Done 2026-09-08 `7c4b8b8`.
   Current `getMessages` loads `LIMIT 200` but `ConversationsRepository` 8-way
   `combine` (`observeConversations:62`) still re-scans SMS on every
   `star/pin/mute` write. Split into `conversationFlow` vs `flagFlows` with
@@ -356,7 +357,8 @@ the system default SMS app on the same seed data.
   *Verify:* unit test with same-date messages; device rapid 3-sms order matches
   default app.
 
-- [ ] **10.5 Message date grouping like Google Messages** — `ThreadScreen.kt:57`
+- [x] **10.5 Message date grouping like Google Messages** — Implemented `ThreadScreen.kt:57` `groupBy LocalDate` + `stickyHeader` `Today/Yesterday/MMM d, yyyy` via `formatDateHeader`, `reverseLayout` already in place from `a014481`. Done 2026-09-08 `a014481`/`8fdfd18`.
+  `ThreadScreen.kt:57`
   currently flat `LazyColumn` of bubbles with no separators. Introduce
   `sealed ConversationItem { DateHeader(LocalDate), MessageRow }`, group by
   `LocalDate` (device zone, Jalali-aware via `core/i18n/DateFormatter`), add
@@ -365,6 +367,8 @@ the system default SMS app on the same seed data.
   `ThreadScreen.kt`, `DateFormatter.kt`, `core/designsystem` atoms.
   *Verify:* screenshot tests light/dark/RTL + manual 3-day conversation shows
   3 sticky headers; `time_now`/`time_yesterday` strings reused.
+
+- [x] **10.6 Thread reverseLayout + jump-to-latest FAB (7c4b8b8 Fix 4)** — `ThreadScreen.kt:57` `LazyColumn(reverseLayout=true)` with `lazyState`, `atBottom derivedState`, `hasScrolledInitially` + `scrollToItem(0)` on first non-empty, `FAB KeyboardArrowDown` when `!atBottom`. Done 2026-09-08 `7c4b8b8`/`a014481`.
 
 ---
 
