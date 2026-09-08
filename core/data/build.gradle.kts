@@ -33,7 +33,6 @@ dependencies {
     implementation(project(":core:ml"))
     implementation(project(":core:common"))
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.androidx.datastore.preferences)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     testImplementation(project(":core:testing"))

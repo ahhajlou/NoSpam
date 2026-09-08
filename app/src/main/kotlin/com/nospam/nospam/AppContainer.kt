@@ -39,6 +39,9 @@ class AppContainer(private val context: Context) {
     }
 
     val smsIngress: SmsIngressUseCase by lazy {
-        SmsIngressUseCase(telephony, classifier, database, appContext)
+        SmsIngressUseCase(
+            telephony, classifier, database, appContext,
+            isSpamProtectionEnabled = { com.nospam.nospam.feature.settings.SpamPreferences.isEnabled(appContext) }
+        )
     }
 }
