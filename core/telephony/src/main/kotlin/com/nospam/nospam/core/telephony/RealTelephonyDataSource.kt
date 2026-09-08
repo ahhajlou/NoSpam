@@ -126,36 +126,39 @@ class RealTelephonyDataSource(
                 }
             }
             if (metas.isEmpty()) return null
-            // Batch address lookup via single Sms query for all threadIds
+            // Batch lookup of latest Sms row per thread (address + body + date) — single query per chunk
             val threadIds = metas.map { it.id }
-            val addressMap = mutableMapOf<Long, String>()
-            // Chunk to avoid SQLite IN limit (999)
+            data class SmsLatest(val address: String, val body: String, val date: Long)
+            val latestMap = mutableMapOf<Long, SmsLatest>()
             threadIds.chunked(400).forEach { chunk ->
                 val sel = "${Telephony.Sms.THREAD_ID} IN (${chunk.joinToString(",") { "?" }})"
                 val args = chunk.map { it.toString() }.toTypedArray()
                 context.contentResolver.query(
                     Telephony.Sms.CONTENT_URI,
-                    arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.DATE),
+                    arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE),
                     sel, args, "${Telephony.Sms.DATE} DESC"
                 )?.use { c ->
                     while (c.moveToNext()) {
                         val tid = c.getLong(0)
-                        if (!addressMap.containsKey(tid)) {
+                        if (!latestMap.containsKey(tid)) {
                             val addr = c.getString(1) ?: "Unknown"
-                            addressMap[tid] = addr
+                            val body = c.getString(2) ?: ""
+                            val rawDate = c.getLong(3)
+                            val date = if (rawDate in 1 until 1_000_000_0000L) rawDate * 1000 else rawDate
+                            latestMap[tid] = SmsLatest(addr, body, date)
                         }
                     }
                 }
             }
-            // Build conversations from metas + addressMap
+            // Build conversations — use Sms latest body/date for consistency with thread screen (fixes inbox wrong date)
             val conversations = metas.mapNotNull { meta ->
-                val addr = addressMap[meta.id] ?: return@mapNotNull null // no Sms row (MMS-only thread) — skip for now
-                val participant = runCatching { contactLookup.lookup(addr) }.getOrNull() ?: com.nospam.nospam.core.model.Participant(address = addr)
+                val latest = latestMap[meta.id] ?: return@mapNotNull null
+                val participant = runCatching { contactLookup.lookup(latest.address) }.getOrNull() ?: com.nospam.nospam.core.model.Participant(address = latest.address)
                 Conversation(
                     threadId = ThreadId(meta.id),
                     participants = listOf(participant),
-                    snippet = meta.snippet,
-                    date = meta.date,
+                    snippet = latest.body.ifBlank { meta.snippet },
+                    date = latest.date,
                     messageCount = meta.count,
                     read = meta.read,
                     photoUri = participant.photoUri
