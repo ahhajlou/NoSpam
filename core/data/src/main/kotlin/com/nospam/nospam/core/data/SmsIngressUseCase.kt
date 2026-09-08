@@ -20,6 +20,7 @@ class SmsIngressUseCase(
     private val telephony: TelephonyDataSource,
     private val classifier: SpamClassifier,
     private val db: NoSpamDatabase,
+    private val context: android.content.Context? = null,
 ) {
     data class Result(
         val threadId: ThreadId,
@@ -33,26 +34,53 @@ class SmsIngressUseCase(
 
     suspend fun handle(message: RawMessage): Result {
         val sender = message.sender ?: "Unknown"
-        val verdict = classifier.classify(message)
 
-        val threadId = ThreadId(telephony.getOrCreateThreadId(sender))
+        // Check blocklist first (app DB + system)
+        val isBlocked = runCatching {
+            val normalized = context?.let { com.nospam.nospam.core.telephony.PhoneNumberNormalizer.normalize(it, sender) }
+                ?: sender.trim()
+            val inApp = db.blocklistDao.findByAddress(normalized) != null ||
+                (normalized != sender.trim() && db.blocklistDao.findByAddress(sender.trim()) != null)
+            inApp || telephony.isSystemBlocked(sender)
+        }.getOrDefault(false)
 
+        // 1) Persist first with READ=0 so the message is never lost if classification fails.
         val messageId = telephony.insertInboxMessage(
             address = sender,
             body = message.body,
             date = message.timestamp,
-            read = verdict.isSpam,
+            read = false,
         )
 
-        if (threadId.value >= 0) {
-            db.spamVerdictDao.upsert(
-                SpamVerdictEntity(
-                    threadId = threadId.value,
-                    isSpam = verdict.isSpam,
-                    score = verdict.score,
-                    isUserOverride = false,
+        val threadId = ThreadId(telephony.getOrCreateThreadId(sender))
+
+        if (isBlocked) {
+            if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
+            // No spam verdict needed for blocked; still prune.
+            runCatching { db.spamVerdictDao.deleteAutoSpamOlderThan(retentionCutoff()) }
+            return Result(threadId, isSpam = true, score = 1.0, sender = sender, body = message.body, messageId = messageId)
+        }
+
+        // 2) Classify with timeout — failure degrades to "no verdict, leave unread".
+        val verdict = runCatching {
+            kotlinx.coroutines.withTimeout(8000L) { classifier.classify(message) }
+        }.getOrNull()
+
+        if (verdict != null) {
+            // Spam → mark the inserted row as read to suppress heads-up.
+            if (verdict.isSpam && messageId != null) {
+                runCatching { telephony.updateMessageRead(messageId, read = true) }
+            }
+            if (threadId.value >= 0) {
+                db.spamVerdictDao.upsert(
+                    SpamVerdictEntity(
+                        threadId = threadId.value,
+                        isSpam = verdict.isSpam,
+                        score = verdict.score,
+                        isUserOverride = false,
+                    )
                 )
-            )
+            }
         }
 
         // Opportunistic retention, no WorkManager needed for v1.
@@ -60,8 +88,8 @@ class SmsIngressUseCase(
 
         return Result(
             threadId = threadId,
-            isSpam = verdict.isSpam,
-            score = verdict.score,
+            isSpam = verdict?.isSpam ?: false,
+            score = verdict?.score ?: 0.0,
             sender = sender,
             body = message.body,
             messageId = messageId,

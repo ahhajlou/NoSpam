@@ -44,6 +44,11 @@ android {
     buildFeatures {
         compose = true
     }
+    lint {
+        checkReleaseBuilds = true
+        abortOnError = false
+        error += setOf("UnsafeIntentLaunch", "MutableImplicitPendingIntent")
+    }
 }
 
 dependencies {

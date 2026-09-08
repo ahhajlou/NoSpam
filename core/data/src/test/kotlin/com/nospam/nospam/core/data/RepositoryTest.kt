@@ -43,6 +43,9 @@ class RepositoryTest {
             return 1L
         }
         override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? = 2L
+        override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
+        override suspend fun isSystemBlocked(address: String): Boolean = false
+        override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}
         override suspend fun getOrCreateThreadId(address: String): Long = nextThreadId
     }
 

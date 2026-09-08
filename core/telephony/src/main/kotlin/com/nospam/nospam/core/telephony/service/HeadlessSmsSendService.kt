@@ -23,9 +23,18 @@ class HeadlessSmsSendService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent == null) return START_NOT_STICKY
-        val (address, text, subscriptionId) = extractReply(intent)
+        if (intent.action != TelephonyConstants.ACTION_RESPOND_VIA_MESSAGE) {
+            Log.w(TAG, "Ignoring unexpected action: ${intent.action}")
+            return START_NOT_STICKY
+        }
+        val (address, text, rawSubscriptionId) = extractReply(intent)
         if (address.isNullOrBlank() || text.isNullOrBlank()) {
             Log.w(TAG, "Ignoring reply with missing address/text")
+            return START_NOT_STICKY
+        }
+        val subscriptionId = validateSubscriptionId(rawSubscriptionId)
+        if (rawSubscriptionId != null && subscriptionId == null) {
+            Log.w(TAG, "Ignoring reply with invalid subscription_id: $rawSubscriptionId")
             return START_NOT_STICKY
         }
         try {
@@ -51,6 +60,19 @@ class HeadlessSmsSendService : Service() {
         runCatching {
             val threadId = Telephony.Threads.getOrCreateThreadId(this, address)
             manager.cancel(threadId.toInt())
+        }
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun validateSubscriptionId(subId: Int?): Int? {
+        if (subId == null) return null
+        return try {
+            val sm = getSystemService(SubscriptionManager::class.java) ?: return null
+            val active = sm.activeSubscriptionInfoList ?: return null
+            if (active.any { it.subscriptionId == subId }) subId else null
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Cannot validate subscription_id without permission", e)
+            null
         }
     }
 

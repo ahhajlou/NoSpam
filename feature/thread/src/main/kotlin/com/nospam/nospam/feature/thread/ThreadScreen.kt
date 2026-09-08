@@ -46,7 +46,8 @@ import com.nospam.nospam.core.model.MessageType
 
 @Composable
 fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewModel = viewModel()) {
-    LaunchedEffect(threadId, address) { viewModel.loadThread(threadId, address) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(threadId, address) { viewModel.loadThread(threadId, address, context) }
     val uiState by viewModel.uiState.collectAsState()
     Column(modifier = Modifier.fillMaxSize()) {
         LazyColumn(

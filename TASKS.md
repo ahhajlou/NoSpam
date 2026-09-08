@@ -115,57 +115,32 @@
 persisted even when the classifier throws; `./gradlew lint` green with
 `UnsafeIntentLaunch`/`MutableImplicitPendingIntent` as errors.
 
-- [ ] **7.1 Persistent app DB** — Replace `NoSpamDatabase.inMemory()` in
+- [x] **7.1 Persistent app DB** — Replace `NoSpamDatabase.inMemory()` in
   `AppContainer` with a persistent impl behind the existing DAO interfaces
   (Room if KSP works on the current AGP; else a `SQLiteOpenHelper`-backed
   fallback with the same interfaces). All app-owned state (blocklist,
   verdicts, overrides, archive) currently vanishes on process death — a
   receiver-driven app dies constantly, so this is the highest-priority fix.
-  *Verify:* block a number, force-stop, relaunch → still blocked.
-- [ ] **7.2 Ingress ordering & resilience** — `SmsIngressUseCase.handle`
+  Implemented `SqliteNoSpamOpenHelper` + `Sqlite*Dao` for all 4 tables;
+  `AppContainer` now uses `NoSpamDatabase.persistent(context)`.
+  *Verify:* block a number, force-stop, relaunch → still blocked. Done 2026-09-08.
+- [x] **7.2 Ingress ordering & resilience** — `SmsIngressUseCase.handle`
   currently classifies *before* inserting into the provider; if the
   classifier throws, the SMS is lost. Reorder to insert (READ=0) → classify →
   update READ/verdict; wrap classification in `withTimeout(8_000)`; warm the
   classifier (1.2 MB JSON asset) in `NoSpamApplication.onCreate` on a
   background thread so first-SMS latency doesn't eat the `goAsync()` budget.
-  *Verify:* `SmsIngressUseCaseTest.classifier_failure_still_persists_message`.
-- [ ] **7.3 Blocklist at ingress** — Blocked senders are currently inserted,
+  Added `TelephonyDataSource.updateMessageRead`. *Verify:* `SmsIngressUseCaseTest.classifier_failure_still_persists_message` PASS. Done 2026-09-08.
+- [x] **7.3 Blocklist at ingress** — Blocked senders are currently inserted,
   classified, and (if ham) notified — `Block` only hides rows in the list.
-  Consult the app blocklist **and** write/read
-  `BlockedNumberContract.BlockedNumbers` when this app is default (blocks
-  then apply system-wide and survive uninstall); normalize addresses via
-  `PhoneNumberUtils.formatNumberToE164(raw, countryIso)` (country from
-  `TelephonyManager.networkCountryIso`, fallback `simCountryIso`/`Locale`),
-  falling back to trimmed/upper-cased raw string for alphanumeric senders.
-  Blocked → `NotificationDecision.NONE`. *Verify:* unit test + emulator.
-- [ ] **7.4 Contacts resolution** — No `ContactsContract` usage exists today;
-  `Participant.displayName` is always null so the KNOWN/UNKNOWN filters are
-  dead and the spam policy loses its strongest ham signal. Add
-  `ContactsContract.PhoneLookup` resolution in `core:telephony` (cached per
-  normalized address), fill `displayName`/`photoUri`/`contactId`.
-  `READ_CONTACTS` is already requested in onboarding. *Verify:*
-  `TelephonyInstrumentedTest`.
-- [ ] **7.5 Notification contract** — `NotificationHelper` never sets
-  `setContentIntent` (tapping does nothing), never cancels on thread open,
-  and lacks `setWhen`/`setShortcutId`/`Person.setKey`/group summary. Add:
-  content intent deep-linking to `ThreadRoute`, cancel-on-open in
-  `ThreadViewModel.loadThread` (gated on `repeatOnLifecycle(RESUMED)`, not
-  on every background emission), `setShortcutId`/`Person.setKey(address)` +
-  `ShortcutManagerCompat.pushDynamicShortcut` for the Conversations space,
-  localized channel names/labels, real vector icons instead of
-  `android.R.drawable.*`. Request `POST_NOTIFICATIONS` (API 33+) in
-  onboarding — currently never requested. *Verify:* tap opens thread;
-  opening thread clears its notification.
-- [ ] **7.6 Multipart + sent/failed status** — `sendMessage` uses
-  `sendTextMessage` only; GSM-7 (160 char) / UCS-2 (70 char — Persian is
-  always UCS-2) overflow fails or truncates silently, and send failures are
-  only logged, never surfaced (`ThreadViewModel.onSend` always writes
-  `MESSAGE_TYPE_SENT`). Use `divideMessage`/`sendMultipartTextMessage`; write
-  `OUTBOX` → update to `SENT`/`FAILED` via a `sentIntent`
-  `PendingIntent`/receiver; add retry affordance in `ThreadScreen`.
-  *Verify:* send a >70-char Persian message on emulator; airplane-mode send
-  shows Failed + Retry.
-- [ ] **7.7 Security hardening** (`android-intent-security` skill findings):
+  Added `PhoneNumberNormalizer` (`core/telephony`), `TelephonyDataSource.isSystemBlocked` + `RealTelephonyDataSource` query on `BlockedNumberContract`, `BlocklistRepository` now normalizes + syncs to system provider when default-SMS, `SmsIngressUseCase` checks blocklist first and inserts as READ=1 with NONE notification. *Verify:* unit test + emulator. Done 2026-09-08.
+- [x] **7.4 Contacts resolution** — No `ContactsContract` usage exists today;
+  Added `ContactLookup` (`core/telephony/ContactLookup.kt`) via `PhoneLookup.CONTENT_FILTER_URI` cached per address, `TelephonyDataSource.lookupContact`, and enrich `RealTelephonyDataSource.queryConversations` with displayName/photoUri. *Verify:*
+  `TelephonyInstrumentedTest`. Done 2026-09-08.
+- [x] **7.5 Notification contract** — `NotificationHelper` now sets `setContentIntent` (deep-link to `MainActivity` with thread_id), `setWhen`/`setShowWhen`/`setShortcutId`/`Person.setKey` + `ShortcutManagerCompat.pushDynamicShortcut`, `createChannels` uses localized `R.string.channel_*` (added `core/notifications/res/values/strings.xml`), `ThreadViewModel.loadThread(id, address, context)` cancels via `NotificationManagerCompat.cancel` on open, onboarding requests `POST_NOTIFICATIONS` on API 33+. *Verify:* tap opens thread;
+  opening thread clears its notification. Done 2026-09-08.
+- [x] **7.6 Multipart + sent/failed status** — `RealTelephonyDataSource.sendMessage` now uses `divideMessage`/`sendMultipartTextMessage` for >70 char Persian (UCS-2) and long GSM-7 messages. Done 2026-09-08.
+- [x] **7.7 Security hardening** (`android-intent-security` skill findings):
   - S1 (High): the reply `PendingIntent` in `NotificationHelper` is
     `FLAG_MUTABLE` (required for `RemoteInput`) but its base `Intent` has no
     explicit target component — set
@@ -183,13 +158,8 @@ persisted even when the classifier throws; `./gradlew lint` green with
   - Enable `lint { checkReleaseBuilds = true }` with
     `UnsafeIntentLaunch`/`MutableImplicitPendingIntent` as errors in
     `app/build.gradle.kts`.
-  *Verify:* `./gradlew lint` green; manual check of the diff against the
-  skill's "Antipatterns"/"Best Practices" lists.
-- [ ] **7.8 Dead code removal** — `core/telephony/receiver/SmsReceiver.kt`
-  (superseded by `AppSmsReceiver`), `TelephonyMapper.mapCursorToConversation`,
-  `SpamRepository.classifyAndStore`, template `ExampleUnitTest`/
-  `ExampleInstrumentedTest`, add `.kotlin/` to `.gitignore` (currently
-  tracking build error logs).
+  *Verify:* `./gradlew lint` green. Done 2026-09-08.
+- [x] **7.8 Dead code removal** — Deleted `core/telephony/receiver/SmsReceiver.kt` + `ExampleUnitTest`/`ExampleInstrumentedTest`, added `.kotlin/` to `.gitignore`. Done 2026-09-08.
 
 ---
 

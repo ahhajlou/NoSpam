@@ -48,8 +48,12 @@ class ThreadViewModel(
         private const val TAG = "ThreadViewModel"
     }
 
-    fun loadThread(id: Long, address: String? = null) {
+    fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null) {
         if (address != null) pendingAddress = address
+        // Cancel notification for this thread when user opens it (no core:notifications dep)
+        context?.let { ctx ->
+            runCatching { androidx.core.app.NotificationManagerCompat.from(ctx).cancel(id.toInt()) }
+        }
         val dataSource = this.dataSource
         if (dataSource == null) {
             _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages())

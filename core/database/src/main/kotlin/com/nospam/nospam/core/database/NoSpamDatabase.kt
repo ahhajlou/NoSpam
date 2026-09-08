@@ -17,5 +17,15 @@ class NoSpamDatabase(
 ) {
     companion object {
         fun inMemory(): NoSpamDatabase = NoSpamDatabase()
+
+        fun persistent(context: android.content.Context): NoSpamDatabase {
+            val helper = SqliteNoSpamOpenHelper(context.applicationContext)
+            return NoSpamDatabase(
+                blocklistDao = com.nospam.nospam.core.database.dao.SqliteBlocklistDao(helper),
+                spamVerdictDao = com.nospam.nospam.core.database.dao.SqliteSpamVerdictDao(helper),
+                modelMetadataDao = com.nospam.nospam.core.database.dao.SqliteModelMetadataDao(helper),
+                archivedDao = com.nospam.nospam.core.database.dao.SqliteArchivedDao(helper),
+            )
+        }
     }
 }

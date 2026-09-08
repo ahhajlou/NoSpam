@@ -25,6 +25,8 @@ class RealTelephonyDataSource(
     companion object {
         private const val TAG = "RealTelephony"
     }
+
+    private val contactLookup by lazy { ContactLookup(context) }
     /**
      * Emits the inbox on subscribe and re-emits on every provider change
      * (incoming SMS, sent message, read-state update). The ContentObserver
@@ -92,7 +94,11 @@ class RealTelephonyDataSource(
             }
         }
         return messages.groupBy { it.threadId }
-            .map { (threadId, threadMessages) -> TelephonyMapper.toConversation(threadId, threadMessages) }
+            .map { (threadId, threadMessages) ->
+                val base = TelephonyMapper.toConversation(threadId, threadMessages)
+                val contact = runCatching { contactLookup.lookup(base.participants.first().address) }.getOrNull()
+                if (contact != null) base.copy(participants = listOf(contact), photoUri = contact.photoUri) else base
+            }
             .sortedByDescending { it.date }
     }
 
@@ -131,7 +137,13 @@ class RealTelephonyDataSource(
 
     override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            context.resolveSmsManager(subscriptionId).sendTextMessage(address, null, body, null, null)
+            val mgr = context.resolveSmsManager(subscriptionId)
+            val parts = mgr.divideMessage(body)
+            if (parts.size <= 1) {
+                mgr.sendTextMessage(address, null, body, null, null)
+            } else {
+                mgr.sendMultipartTextMessage(address, null, parts, null, null)
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -231,5 +243,37 @@ class RealTelephonyDataSource(
             Log.w(TAG, "getOrCreateThreadId failed", e)
             -1L
         }
+    }
+
+    override suspend fun updateMessageRead(messageId: Long, read: Boolean) = withContext(Dispatchers.IO) {
+        try {
+            val values = android.content.ContentValues().apply { put(Telephony.Sms.READ, if (read) 1 else 0) }
+            context.contentResolver.update(
+                Telephony.Sms.CONTENT_URI,
+                values,
+                "${Telephony.Sms._ID} = ?",
+                arrayOf(messageId.toString())
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "updateMessageRead failed", e)
+        }
+        Unit
+    }
+
+    override suspend fun isSystemBlocked(address: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val variants = PhoneNumberNormalizer.normalizedVariants(context, address)
+            for (v in variants) {
+                if (android.provider.BlockedNumberContract.isBlocked(context, v)) return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            Log.w(TAG, "isSystemBlocked check failed", e)
+            false
+        }
+    }
+
+    override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = withContext(Dispatchers.IO) {
+        contactLookup.lookup(address)
     }
 }

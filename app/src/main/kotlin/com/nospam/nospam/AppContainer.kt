@@ -20,7 +20,7 @@ import com.nospam.nospam.core.telephony.TelephonyDataSource
 class AppContainer(private val context: Context) {
     private val appContext: Context = context.applicationContext
 
-    val database: NoSpamDatabase by lazy { NoSpamDatabase.inMemory() }
+    val database: NoSpamDatabase by lazy { NoSpamDatabase.persistent(appContext) }
 
     val telephony: TelephonyDataSource by lazy { RealTelephonyDataSource(appContext) }
 
@@ -33,12 +33,12 @@ class AppContainer(private val context: Context) {
     }
 
     val spamRepository: SpamRepository by lazy { SpamRepository(database, classifier) }
-    val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database) }
+    val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database, appContext) }
     val conversationsRepository: ConversationsRepository by lazy {
         ConversationsRepository(telephony, database)
     }
 
     val smsIngress: SmsIngressUseCase by lazy {
-        SmsIngressUseCase(telephony, classifier, database)
+        SmsIngressUseCase(telephony, classifier, database, appContext)
     }
 }

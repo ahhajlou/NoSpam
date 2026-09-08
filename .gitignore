@@ -22,3 +22,4 @@ core/model/bin/
 core/testing/bin/
 
 .agents/
+.kotlin/

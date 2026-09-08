@@ -59,14 +59,14 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
         Spacer(Modifier.height(32.dp))
         if (!hasPermissions) {
             Button(onClick = {
-                permissionLauncher.launch(
-                    arrayOf(
-                        android.Manifest.permission.READ_SMS,
-                        android.Manifest.permission.SEND_SMS,
-                        android.Manifest.permission.RECEIVE_SMS,
-                        android.Manifest.permission.READ_CONTACTS
-                    )
+                val perms = mutableListOf(
+                    android.Manifest.permission.READ_SMS,
+                    android.Manifest.permission.SEND_SMS,
+                    android.Manifest.permission.RECEIVE_SMS,
+                    android.Manifest.permission.READ_CONTACTS
                 )
+                if (Build.VERSION.SDK_INT >= 33) perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
+                permissionLauncher.launch(perms.toTypedArray())
             }) { Text(stringResource(R.string.grant)) }
             Spacer(Modifier.height(12.dp))
         } else {
@@ -88,12 +88,13 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
 }
 
 private fun hasRequiredPermissions(context: Context): Boolean {
-    val perms = listOf(
+    val perms = mutableListOf(
         android.Manifest.permission.READ_SMS,
         android.Manifest.permission.SEND_SMS,
         android.Manifest.permission.RECEIVE_SMS,
         android.Manifest.permission.READ_CONTACTS
     )
+    if (Build.VERSION.SDK_INT >= 33) perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
     return perms.all {
         ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }

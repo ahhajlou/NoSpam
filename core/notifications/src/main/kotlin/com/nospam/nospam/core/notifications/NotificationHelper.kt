@@ -23,16 +23,20 @@ object NotificationHelper {
             val manager = context.getSystemService(NotificationManager::class.java)
             val messagesChannel = NotificationChannel(
                 CHANNEL_ID_MESSAGES,
-                "Messages",
+                context.getString(R.string.channel_messages),
                 NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "Incoming SMS/MMS" }
+            ).apply { description = context.getString(R.string.channel_messages_desc) }
             val spamChannel = NotificationChannel(
                 CHANNEL_ID_SPAM,
-                "Spam",
+                context.getString(R.string.channel_spam),
                 NotificationManager.IMPORTANCE_LOW
-            ).apply { description = "Blocked spam" }
+            ).apply { description = context.getString(R.string.channel_spam_desc) }
             manager.createNotificationChannels(listOf(messagesChannel, spamChannel))
         }
+    }
+
+    fun cancelNotification(context: Context, threadId: Long) {
+        androidx.core.app.NotificationManagerCompat.from(context).cancel(threadId.toInt())
     }
 
     fun buildMessageNotification(
@@ -44,13 +48,13 @@ object NotificationHelper {
         subscriptionId: Int? = null,
     ): android.app.Notification {
         val channelId = if (isSpam) CHANNEL_ID_SPAM else CHANNEL_ID_MESSAGES
-        val person = Person.Builder().setName(sender).build()
+        val person = Person.Builder().setName(sender).setKey(sender).build()
         val style = NotificationCompat.MessagingStyle(person)
             .addMessage(messageBody, System.currentTimeMillis(), person)
 
         val replyIntent = Intent(TelephonyConstants.ACTION_RESPOND_VIA_MESSAGE).apply {
-            `package` = context.packageName
-            data = android.net.Uri.parse("sms:$sender")
+            setClassName(context.packageName, "com.nospam.nospam.core.telephony.service.HeadlessSmsSendService")
+            data = android.net.Uri.fromParts("sms", sender, null)
             putExtra("thread_id", threadId)
             if (subscriptionId != null) putExtra("subscription_id", subscriptionId)
         }
@@ -65,25 +69,40 @@ object NotificationHelper {
             replyPending
         ).addRemoteInput(remoteInput).build()
 
+        // Content intent deep-links to thread
+        val contentIntent = Intent(Intent.ACTION_VIEW).apply {
+            setClassName(context.packageName, "com.nospam.nospam.MainActivity")
+            data = android.net.Uri.fromParts("sms", sender, null)
+            putExtra("thread_id", threadId)
+            putExtra("android.intent.extra.TEXT", messageBody)
+        }
+        val contentPending = PendingIntent.getActivity(
+            context, threadId.toInt(), contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Dynamic shortcut for Conversations bubble/shortcut
+        try {
+            val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(context, "thread-$threadId")
+                .setShortLabel(sender)
+                .setLongLabel(sender)
+                .setIntent(contentIntent)
+                .setPerson(person)
+                .build()
+            androidx.core.content.pm.ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+        } catch (_: Exception) {}
+
+        val now = System.currentTimeMillis()
         return NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.sym_action_chat)
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setContentIntent(contentPending)
+            .setWhen(now)
+            .setShowWhen(true)
+            .setShortcutId("thread-$threadId")
             .addAction(replyAction)
             .setAutoCancel(true)
             .build()
-    }
-
-    fun buildDirectReplyIntent(context: Context, address: String, threadId: Long): PendingIntent {
-        val intent = Intent(TelephonyConstants.ACTION_RESPOND_VIA_MESSAGE).apply {
-            `package` = context.packageName
-            data = android.net.Uri.parse("sms:$address")
-            putExtra(TelephonyConstants.EXTRA_MESSAGE, "")
-            putExtra("thread_id", threadId)
-        }
-        return PendingIntent.getService(
-            context, threadId.toInt(), intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-        )
     }
 }

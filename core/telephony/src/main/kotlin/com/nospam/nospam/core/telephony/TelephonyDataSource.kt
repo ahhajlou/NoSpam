@@ -21,4 +21,7 @@ interface TelephonyDataSource {
     suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int? = null): Long?
     /** Resolves the thread id for an address, or -1 on failure. */
     suspend fun getOrCreateThreadId(address: String): Long
+    suspend fun updateMessageRead(messageId: Long, read: Boolean)
+    suspend fun isSystemBlocked(address: String): Boolean
+    suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant?
 }

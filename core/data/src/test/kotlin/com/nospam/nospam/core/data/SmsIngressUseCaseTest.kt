@@ -22,6 +22,7 @@ class SmsIngressUseCaseTest {
         var insertResult: Long? = 99L,
     ) : TelephonyDataSource {
         val inserted = mutableListOf<Triple<String, String, Boolean>>()
+        val updatedReads = mutableListOf<Pair<Long, Boolean>>()
         private val flow = MutableStateFlow<List<Conversation>>(emptyList())
         override fun observeMessages(threadId: ThreadId): Flow<List<Message>> = MutableStateFlow(emptyList())
         override fun observeConversations(): Flow<List<Conversation>> = flow
@@ -37,6 +38,9 @@ class SmsIngressUseCaseTest {
             return insertResult
         }
         override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? = 2L
+        override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
+        override suspend fun isSystemBlocked(address: String): Boolean = false
+        override suspend fun updateMessageRead(messageId: Long, read: Boolean) { updatedReads.add(messageId to read) }
         override suspend fun getOrCreateThreadId(address: String): Long = threadId
     }
 
@@ -57,11 +61,29 @@ class SmsIngressUseCaseTest {
         assertTrue(result.isSpam)
         assertEquals(ThreadId(7L), result.threadId)
         assertEquals(99L, result.messageId)
-        // READ=1 suppresses heads-up for spam.
-        assertEquals(listOf(Triple("+98912", "win prize now", true)), telephony.inserted)
+        // Inserted unread first, then marked read for spam.
+        assertEquals(listOf(Triple("+98912", "win prize now", false)), telephony.inserted)
+        assertEquals(listOf(99L to true), telephony.updatedReads)
         val verdict = db.spamVerdictDao.getByThread(7L)!!
         assertTrue(verdict.isSpam)
         assertFalse(verdict.isUserOverride)
+    }
+
+    @Test fun `classifier failure still persists message`() = runTest {
+        val telephony = FakeTelephony()
+        val db = NoSpamDatabase.inMemory()
+        val failingClassifier = object : SpamClassifier {
+            override suspend fun classify(message: RawMessage): SpamVerdict = throw RuntimeException("model fail")
+            override suspend fun classifyText(text: String): SpamVerdict = throw RuntimeException("model fail")
+        }
+        val useCase = SmsIngressUseCase(telephony, failingClassifier, db)
+        val result = useCase.handle(RawMessage("+98912", "hello", 12345L))
+        // Message persisted despite classifier failure
+        assertEquals(1, telephony.inserted.size)
+        assertEquals(99L, result.messageId)
+        assertFalse(result.isSpam)
+        assertNull(db.spamVerdictDao.getByThread(7L))
+        assertTrue(telephony.updatedReads.isEmpty())
     }
 
     @Test fun `ham is inserted as unread`() = runTest {

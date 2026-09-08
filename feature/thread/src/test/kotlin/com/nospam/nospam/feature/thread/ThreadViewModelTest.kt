@@ -51,6 +51,9 @@ class ThreadViewModelTest {
             store.add(Message(MessageId(2), ThreadId(9), address, body, date, MessageType.SENT, true))
             return 2L
         }
+        override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
+        override suspend fun isSystemBlocked(address: String): Boolean = false
+        override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}
         override suspend fun getOrCreateThreadId(address: String): Long = 9L
     }
 
