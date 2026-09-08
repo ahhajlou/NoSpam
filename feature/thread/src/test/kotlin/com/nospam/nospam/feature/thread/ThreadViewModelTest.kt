@@ -59,6 +59,7 @@ class ThreadViewModelTest {
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}
         override suspend fun getOrCreateThreadId(address: String): Long = 9L
+        override suspend fun getAllMessages(): List<Message> = store.toList()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

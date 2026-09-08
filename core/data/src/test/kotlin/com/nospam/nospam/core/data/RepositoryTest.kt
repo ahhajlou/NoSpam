@@ -52,6 +52,7 @@ class RepositoryTest {
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}
         override suspend fun getOrCreateThreadId(address: String): Long = nextThreadId
+        override suspend fun getAllMessages(): List<Message> = emptyList()
     }
 
     class FakeClassifier(private val isSpam: Boolean = false) : SpamClassifier {

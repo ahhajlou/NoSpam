@@ -46,6 +46,7 @@ class SmsIngressUseCaseTest {
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) { updatedReads.add(messageId to read) }
         override suspend fun getOrCreateThreadId(address: String): Long = threadId
+        override suspend fun getAllMessages(): List<Message> = emptyList()
     }
 
     private class FakeClassifier(private val isSpam: Boolean) : SpamClassifier {

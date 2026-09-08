@@ -44,6 +44,7 @@ class ConversationsViewModelTest {
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}
         override suspend fun getOrCreateThreadId(address: String): Long = 1L
+        override suspend fun getAllMessages(): List<Message> = emptyList()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
