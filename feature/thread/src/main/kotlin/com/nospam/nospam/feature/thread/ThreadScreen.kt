@@ -280,7 +280,7 @@ fun NewConversationScreen(
         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
         Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(modifier = Modifier.weight(1f)) {
-            items(filtered, key = { it.name }) { contact ->
+            items(filtered, key = { it.phone }) { contact ->
                 Row(
                     modifier = Modifier.fillMaxWidth()
                         .clickable { onAddressEntered(contact.phone) }
