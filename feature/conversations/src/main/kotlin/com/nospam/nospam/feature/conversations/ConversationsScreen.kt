@@ -36,6 +36,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,9 +68,12 @@ fun ConversationsScreen(
     onToggleMute: (Long) -> Unit = viewModel::toggleMute,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isDefault by viewModel.isDefaultSmsApp.collectAsState()
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
-    val isDefault = remember { isDefaultSmsApp(context) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.checkDefaultSmsApp(context.applicationContext)
+    }
     NoSpamTheme {
         Scaffold(
             floatingActionButton = {

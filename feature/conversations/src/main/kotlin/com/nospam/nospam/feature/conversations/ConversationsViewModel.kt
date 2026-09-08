@@ -7,6 +7,8 @@ import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
 import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.ThreadId
+import android.content.Context
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,6 +40,24 @@ class ConversationsViewModel(
     private val _filter = MutableStateFlow(ConversationFilter.ALL)
     private val _searchQuery = MutableStateFlow("")
     private val _isSearchFocused = MutableStateFlow(false)
+    private val _isDefaultSmsApp = MutableStateFlow(true)
+    val isDefaultSmsApp: StateFlow<Boolean> = _isDefaultSmsApp.asStateFlow()
+
+    fun checkDefaultSmsApp(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = isDefaultSmsAppSync(context.applicationContext)
+            _isDefaultSmsApp.value = result
+        }
+    }
+
+    private fun isDefaultSmsAppSync(context: Context): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val rm = context.getSystemService(android.app.role.RoleManager::class.java) ?: return false
+            rm.isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
+        } else {
+            android.provider.Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+        }
+    }
 
     // Fake fallback: plain StateFlow, no Main dispatcher needed (tests/previews).
     private val all = fakeConversations()
