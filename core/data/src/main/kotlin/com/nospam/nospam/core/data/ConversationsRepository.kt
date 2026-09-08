@@ -25,9 +25,7 @@ class ConversationsRepository(
     // Shared repository scope keeps hot flows alive across ViewModel recreation
     // (e.g. navigating Inbox -> Settings -> Inbox). Without this, each new
     // ViewModel collector triggered a fresh telephony query (3.6s on SM-A730F).
-    // Unconfined as default makes unit tests synchronous (runTest's
-    // TestDispatcher controls emissions); heavy work still on IO via flowOn.
-    private val repositoryScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    private val repositoryScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Heavy telephony + adjustMixedSnippet shared with replay=1 so revisiting
     // the inbox replays the last list instantly instead of re-querying.

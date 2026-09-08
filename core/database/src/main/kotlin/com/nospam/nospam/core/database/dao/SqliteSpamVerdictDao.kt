@@ -2,23 +2,18 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
-import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 
 class SqliteSpamVerdictDao(
     private val helper: SqliteNoSpamOpenHelper
 ) : SpamVerdictDao {
     private val flow = MutableStateFlow<List<SpamVerdictEntity>>(emptyList())
-
-    init {
-        CoroutineScope(Dispatchers.IO).launch {
-            flow.value = readSpamSync()
-        }
-    }
+    private val initialized = AtomicBoolean(false)
 
     private fun readSpamSync(): List<SpamVerdictEntity> {
         val list = mutableListOf<SpamVerdictEntity>()
@@ -47,7 +42,11 @@ class SqliteSpamVerdictDao(
         }
     }
 
-    override fun observeSpam(): Flow<List<SpamVerdictEntity>> = flow
+    override fun observeSpam(): Flow<List<SpamVerdictEntity>> = flow.onStart {
+        if (initialized.compareAndSet(false, true)) {
+            flow.value = withContext(Dispatchers.IO) { readSpamSync() }
+        }
+    }
 
     override suspend fun upsert(entity: SpamVerdictEntity) = withContext(Dispatchers.IO) {
         val values = android.content.ContentValues().apply {
@@ -61,6 +60,7 @@ class SqliteSpamVerdictDao(
             "spam_verdict", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE
         )
         flow.value = readSpamSync()
+        initialized.set(true)
         Unit
     }
 

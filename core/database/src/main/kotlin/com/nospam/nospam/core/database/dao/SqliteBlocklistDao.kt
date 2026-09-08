@@ -2,23 +2,18 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.BlocklistEntity
-import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 
 class SqliteBlocklistDao(
     private val helper: SqliteNoSpamOpenHelper
 ) : BlocklistDao {
     private val flow = MutableStateFlow<List<BlocklistEntity>>(emptyList())
-
-    init {
-        CoroutineScope(Dispatchers.IO).launch {
-            flow.value = readAllSync()
-        }
-    }
+    private val initialized = AtomicBoolean(false)
 
     private fun readAllSync(): List<BlocklistEntity> {
         val db = helper.readableDatabase
@@ -38,11 +33,11 @@ class SqliteBlocklistDao(
         return list
     }
 
-    private suspend fun refresh() = withContext(Dispatchers.IO) {
-        flow.value = readAllSync()
+    override fun observeAll(): Flow<List<BlocklistEntity>> = flow.onStart {
+        if (initialized.compareAndSet(false, true)) {
+            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+        }
     }
-
-    override fun observeAll(): Flow<List<BlocklistEntity>> = flow
 
     override suspend fun findByAddress(address: String): BlocklistEntity? = withContext(Dispatchers.IO) {
         helper.readableDatabase.query(
@@ -69,6 +64,7 @@ class SqliteBlocklistDao(
         // REPLACE on conflict to mimic in-memory behaviour (unique address)
         val id = db.insertWithOnConflict("blocklist", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
         flow.value = readAllSync()
+        initialized.set(true)
         id
     }
 

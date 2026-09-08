@@ -10,6 +10,7 @@ import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import com.nospam.nospam.core.model.Message
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,7 +77,8 @@ class RepositoryTest {
         val first = Conversation(ThreadId(1), listOf(Participant("+98912")), "one", 1L, 1, true)
         val second = Conversation(ThreadId(2), listOf(Participant("+98913")), "two", 2L, 1, true)
         val tele = FakeTelephony(listOf(first))
-        val repo = ConversationsRepository(tele, NoSpamDatabase.inMemory())
+        val testScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repo = ConversationsRepository(tele, NoSpamDatabase.inMemory(), testScope)
         val emissions = mutableListOf<List<Conversation>>()
         val job = launch(UnconfinedTestDispatcher(testScheduler)) {
             repo.observeConversations().collect { emissions.add(it) }
@@ -90,11 +92,13 @@ class RepositoryTest {
         assertEquals(2, emissions[1].size)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test fun `archive hides from inbox and shows in archived`() = runTest {
         val conv = Conversation(ThreadId(1), listOf(Participant("+98912")), "hello", 1L, 1, true)
         val tele = FakeTelephony(listOf(conv))
         val db = NoSpamDatabase.inMemory()
-        val repo = ConversationsRepository(tele, db)
+        val testScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repo = ConversationsRepository(tele, db, testScope)
         assertEquals(1, repo.observeConversations().take(1).toList().first().size)
 
         repo.archive(ThreadId(1))

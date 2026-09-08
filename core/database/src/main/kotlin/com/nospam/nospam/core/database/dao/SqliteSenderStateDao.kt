@@ -3,20 +3,16 @@ package com.nospam.nospam.core.database.dao
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.model.ThreadSpamState
-import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 
 class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderStateDao {
     private val flow = MutableStateFlow<List<SenderStateEntity>>(emptyList())
-    init {
-        CoroutineScope(Dispatchers.IO).launch {
-            flow.value = readAllSync()
-        }
-    }
+    private val initialized = AtomicBoolean(false)
     private fun readAllSync(): List<SenderStateEntity> {
         val list = mutableListOf<SenderStateEntity>()
         helper.readableDatabase.query("sender_state", null, null, null, null, null, null).use { c ->
@@ -35,7 +31,11 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
         }
         return list
     }
-    override fun observeAll(): Flow<List<SenderStateEntity>> = flow
+    override fun observeAll(): Flow<List<SenderStateEntity>> = flow.onStart {
+        if (initialized.compareAndSet(false, true)) {
+            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+        }
+    }
     override suspend fun getByAddress(normalizedAddress: String): SenderStateEntity? = withContext(Dispatchers.IO){
         helper.readableDatabase.query("sender_state", null, "normalizedAddress = ?", arrayOf(normalizedAddress), null, null, null).use { c ->
             if (c.moveToFirst()) SenderStateEntity(
@@ -59,6 +59,7 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
         }
         helper.writableDatabase.insertWithOnConflict("sender_state", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
         flow.value = readAllSync()
+        initialized.set(true)
     }}
     override suspend fun deleteByAddress(normalizedAddress: String) { withContext(Dispatchers.IO){ helper.writableDatabase.delete("sender_state","normalizedAddress = ?", arrayOf(normalizedAddress)); flow.value = readAllSync() } }
 }

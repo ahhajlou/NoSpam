@@ -2,23 +2,18 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.ArchivedThreadEntity
-import kotlinx.coroutines.CoroutineScope
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 
 class SqliteArchivedDao(
     private val helper: SqliteNoSpamOpenHelper
 ) : ArchivedDao {
     private val flow = MutableStateFlow<List<ArchivedThreadEntity>>(emptyList())
-
-    init {
-        CoroutineScope(Dispatchers.IO).launch {
-            flow.value = readAllSync()
-        }
-    }
+    private val initialized = AtomicBoolean(false)
 
     private fun readAllSync(): List<ArchivedThreadEntity> {
         val list = mutableListOf<ArchivedThreadEntity>()
@@ -30,7 +25,11 @@ class SqliteArchivedDao(
         return list
     }
 
-    override fun observeAll(): Flow<List<ArchivedThreadEntity>> = flow
+    override fun observeAll(): Flow<List<ArchivedThreadEntity>> = flow.onStart {
+        if (initialized.compareAndSet(false, true)) {
+            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+        }
+    }
 
     override suspend fun archive(threadId: Long) {
         withContext(Dispatchers.IO) {
@@ -39,6 +38,7 @@ class SqliteArchivedDao(
                 "archived_threads", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE
             )
             flow.value = readAllSync()
+            initialized.set(true)
         }
     }
 
