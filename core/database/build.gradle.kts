@@ -27,6 +27,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:model"))
     implementation(libs.kotlinx.coroutines.core)
     // compose runtime required for kotlin.compose plugin even if not using compose
     implementation(platform(libs.androidx.compose.bom))
