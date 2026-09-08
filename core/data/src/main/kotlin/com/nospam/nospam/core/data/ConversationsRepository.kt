@@ -59,6 +59,7 @@ class ConversationsRepository(
             }
         }
 
+    @Suppress("UNCHECKED_CAST")
     fun observeConversations(filter: ConversationFilter = ConversationFilter.ALL): Flow<List<Conversation>> {
         return combine(
             telephony.observeConversations(),
