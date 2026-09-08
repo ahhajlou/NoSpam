@@ -12,6 +12,7 @@ class NoSpamApplication : Application() {
         private set
 
     override fun onCreate() {
+        Log.i("NoSpamPerf", "app started at ${android.os.SystemClock.elapsedRealtime()}ms")
         if ((applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             StrictMode.setThreadPolicy(
                 StrictMode.ThreadPolicy.Builder()

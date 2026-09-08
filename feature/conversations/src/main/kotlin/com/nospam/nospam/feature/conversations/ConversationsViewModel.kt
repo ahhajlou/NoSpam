@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -123,6 +124,19 @@ class ConversationsViewModel(
         return conversation.participants.any {
             it.address.contains(query, ignoreCase = true) ||
                 (it.displayName?.contains(query, ignoreCase = true) == true)
+        }
+    }
+
+    init {
+        // Simple log for inbox load time (easy peasy)
+        viewModelScope.launch {
+            try {
+                val start = android.os.SystemClock.elapsedRealtime()
+                val flowToObserve: kotlinx.coroutines.flow.Flow<ConversationsUiState> = _realState ?: _fakeState
+                val result = flowToObserve.first { it.conversations.isNotEmpty() || it.pinned.isNotEmpty() }
+                val dur = android.os.SystemClock.elapsedRealtime() - start
+                android.util.Log.i("NoSpamPerf", "inbox loaded: ${result.conversations.size + result.pinned.size} in ${dur}ms")
+            } catch (_: Exception) {}
         }
     }
 
