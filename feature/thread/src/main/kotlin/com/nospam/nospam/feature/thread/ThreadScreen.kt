@@ -54,11 +54,24 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
     var selected by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
     val uiState by viewModel.uiState.collectAsState()
     Column(modifier = Modifier.fillMaxSize()) {
+        val grouped = remember(uiState.messages) {
+            uiState.messages.groupBy {
+                java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+            }.toSortedMap()
+        }
         LazyColumn(
             modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(uiState.messages, key = { it.id.value }) { msg ->
+            grouped.forEach { (date, msgs) ->
+                stickyHeader(key = date.toString()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                        Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            Text(formatDateHeader(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                items(msgs, key = { it.id.value }) { msg ->
                 val isMe = msg.type == MessageType.SENT
                 val isSuspected = msg.id.value in uiState.spamMessageIds && !isMe
                 Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
@@ -94,6 +107,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                         }
                     }
                 }
+            }
             }
         }
         selected?.let { msg ->
@@ -144,6 +158,16 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                 Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_message_desc), tint = MaterialTheme.colorScheme.primary)
             }
         }
+    }
+}
+
+private fun formatDateHeader(date: java.time.LocalDate): String {
+    val today = java.time.LocalDate.now()
+    val yesterday = today.minusDays(1)
+    return when (date) {
+        today -> "Today"
+        yesterday -> "Yesterday"
+        else -> date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
     }
 }
 

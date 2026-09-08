@@ -101,7 +101,7 @@ class ThreadViewModel(
             .map { it.body to it.address }
             .toSet()
         optimistic = optimistic.filterNot { (it.body to it.address) in confirmed }
-        return (lastRemote + optimistic).sortedBy { it.date }
+        return (lastRemote + optimistic).sortedWith(compareBy({ it.date }, { it.id.value }))
     }
 
     fun onDraftChanged(text: String) {

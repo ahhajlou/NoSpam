@@ -112,17 +112,56 @@ class RealTelephonyDataSource(
                 Telephony.Threads.SNIPPET,
                 Telephony.Threads.READ,
             )
-            val list = mutableListOf<Conversation>()
+            data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
+            val metas = mutableListOf<ThreadMeta>()
             context.contentResolver.query(Telephony.Threads.CONTENT_URI, proj, null, null, "${Telephony.Threads.DATE} DESC")?.use { c ->
                 while (c.moveToNext()) {
-                    list.add(TelephonyMapper.mapCursorToConversation(c))
+                    val id = c.getLong(c.getColumnIndexOrThrow(Telephony.Threads._ID))
+                    val rawDate = try { c.getLong(c.getColumnIndexOrThrow(Telephony.Threads.DATE)) } catch (_: Exception) { 0L }
+                    val date = if (rawDate in 1 until 1_000_000_0000L) rawDate * 1000 else rawDate
+                    val count = try { c.getInt(c.getColumnIndexOrThrow(Telephony.Threads.MESSAGE_COUNT)) } catch (_: Exception) { 0 }
+                    val snippet = try { c.getString(c.getColumnIndexOrThrow(Telephony.Threads.SNIPPET)) ?: "" } catch (_: Exception) { "" }
+                    val read = try { c.getInt(c.getColumnIndexOrThrow(Telephony.Threads.READ)) == 1 } catch (_: Exception) { true }
+                    metas.add(ThreadMeta(id, date, count, snippet, read))
                 }
             }
-            if (list.isEmpty()) return null
-            // Threads rows lack participant address; enrich via Sms lookup per thread (1 query per thread would be N+1, so return null to fallback)
-            // For now, if Threads succeeds but lacks address, we still need Sms grouping — keep fallback for address correctness.
-            // Return null to use Sms path which already resolves contacts; this keeps correctness while still trying.
-            null
+            if (metas.isEmpty()) return null
+            // Batch address lookup via single Sms query for all threadIds
+            val threadIds = metas.map { it.id }
+            val addressMap = mutableMapOf<Long, String>()
+            // Chunk to avoid SQLite IN limit (999)
+            threadIds.chunked(400).forEach { chunk ->
+                val sel = "${Telephony.Sms.THREAD_ID} IN (${chunk.joinToString(",") { "?" }})"
+                val args = chunk.map { it.toString() }.toTypedArray()
+                context.contentResolver.query(
+                    Telephony.Sms.CONTENT_URI,
+                    arrayOf(Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.DATE),
+                    sel, args, "${Telephony.Sms.DATE} DESC"
+                )?.use { c ->
+                    while (c.moveToNext()) {
+                        val tid = c.getLong(0)
+                        if (!addressMap.containsKey(tid)) {
+                            val addr = c.getString(1) ?: "Unknown"
+                            addressMap[tid] = addr
+                        }
+                    }
+                }
+            }
+            // Build conversations from metas + addressMap
+            val conversations = metas.mapNotNull { meta ->
+                val addr = addressMap[meta.id] ?: return@mapNotNull null // no Sms row (MMS-only thread) — skip for now
+                val participant = runCatching { contactLookup.lookup(addr) }.getOrNull() ?: com.nospam.nospam.core.model.Participant(address = addr)
+                Conversation(
+                    threadId = ThreadId(meta.id),
+                    participants = listOf(participant),
+                    snippet = meta.snippet,
+                    date = meta.date,
+                    messageCount = meta.count,
+                    read = meta.read,
+                    photoUri = participant.photoUri
+                )
+            }
+            if (conversations.isEmpty()) null else conversations
         } catch (_: Exception) { null }
     }
 
@@ -151,13 +190,13 @@ class RealTelephonyDataSource(
         )
         val sel = "${Telephony.Sms.THREAD_ID} = ?"
         val args = arrayOf(threadId.value.toString())
-        // Paged: last 200 messages per thread (covers typical threads, avoids 1000+ row load)
-        context.contentResolver.query(uri, projection, sel, args, "${Telephony.Sms.DATE} DESC LIMIT 200")?.use { cursor ->
+        // Paged: last 200 messages per thread (covers typical threads, avoids 1000+ row load) — secondary _ID for stable order on same DATE
+        context.contentResolver.query(uri, projection, sel, args, "${Telephony.Sms.DATE} DESC, ${Telephony.Sms._ID} DESC LIMIT 200")?.use { cursor ->
             while (cursor.moveToNext()) {
                 list.add(TelephonyMapper.mapCursorToMessage(cursor))
             }
         }
-        return list.sortedBy { it.date }
+        return list.sortedWith(compareBy({ it.date }, { it.id.value }))
     }
 
     override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = withContext(Dispatchers.IO) {

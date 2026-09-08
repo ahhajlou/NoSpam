@@ -10,12 +10,16 @@ import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.ThreadId
 
 object TelephonyMapper {
+    private fun normalizeDate(millisOrSeconds: Long): Long =
+        if (millisOrSeconds in 1 until 1_000_000_0000L) millisOrSeconds * 1000 else millisOrSeconds
+
     fun mapCursorToMessage(cursor: Cursor): Message {
         val id = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms._ID))
         val threadId = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.THREAD_ID))
         val address = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)) ?: "Unknown"
         val body = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)) ?: ""
-        val date = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.DATE))
+        val rawDate = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Sms.DATE))
+        val date = normalizeDate(rawDate)
         val typeInt = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE))
         val read = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Sms.READ)) == 1
         val type = when (typeInt) {
@@ -59,7 +63,8 @@ object TelephonyMapper {
     fun mapCursorToConversation(cursor: Cursor): Conversation {
         val threadId = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Threads._ID))
         val snippet = cursor.getString(cursor.getColumnIndexOrThrow(Telephony.Threads.SNIPPET)) ?: ""
-        val date = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Threads.DATE))
+        val rawDate = cursor.getLong(cursor.getColumnIndexOrThrow(Telephony.Threads.DATE))
+        val date = normalizeDate(rawDate)
         val messageCount = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Threads.MESSAGE_COUNT))
         val read = cursor.getInt(cursor.getColumnIndexOrThrow(Telephony.Threads.READ)) == 1
         return Conversation(

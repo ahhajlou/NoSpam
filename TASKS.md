@@ -295,6 +295,79 @@ Phases 7–8:
 
 ---
 
+## Phase 10 — Listing & Date correctness (new)
+
+> Origin: user-requested 2026-09-08 — (a) remaining deferred from Phase 9 perf
+> note “deep Threads address enrichment + true GROUP BY provider query and
+> thread paging LIMIT/OFFSET”, (b) optimization for listing messages,
+> (c) incorrect message date, (d) check message order in conversation,
+> (e) message dates not shown / should be grouped as dates like Google
+> Messages. Owner confirms each `[ ]` → `[x]` as before — do not auto-commit.
+
+**Gate:** Inbox cold-start on a 10k-message device <1s (trace), thread with
+1k messages scrolls at 60fps; device manual check: dates/order/grouping match
+the system default SMS app on the same seed data.
+
+- [ ] **10.1 Deep Threads address enrichment + true GROUP BY** — Replace the
+  `Sms.CONTENT_URI LIMIT 3000` client group in
+  `core/telephony/RealTelephonyDataSource.queryConversations:75` with a
+  provider-side `GROUP BY thread_id` (prefer `Telephony.Threads.CONTENT_URI`
+  guarded read — `SNIPPET/DATE/MESSAGE_COUNT/READ` — with
+  `canonical_addresses` join for `address`; fallback to `Sms` raw
+  `GROUP BY` via `query()` with `GROUP BY thread_id` or `SELECT thread_id,
+  MAX(date)` subquery). Keep `ContactLookup` batching (current per-thread IPC
+  is the second hot spot) and preserve `SenderState` address-keying. *Key
+  files:* `RealTelephonyDataSource.kt`, `TelephonyMapper.kt`, `ContactLookup.kt`.
+  *Verify:* `TelephonyInstrumentedTest` seeded 5k SMS — `getConversations()`
+  count equals `Threads` count; `android-profiler` trace cold-start <1s.
+
+- [ ] **10.2 Optimization for listing messages (paging & flag isolation)** —
+  Current `getMessages` loads `LIMIT 200` but `ConversationsRepository` 8-way
+  `combine` (`observeConversations:62`) still re-scans SMS on every
+  `star/pin/mute` write. Split into `conversationFlow` vs `flagFlows` with
+  `distinctUntilChanged`, add `Paging 3` (`paging-compose`) to
+  `feature/thread/ThreadViewModel.observeMessages` with `LIMIT/OFFSET` and
+  `flowOn(Dispatchers.IO)`, and debounce `ContentObserver` bursts. *Key
+  files:* `ConversationsRepository.kt`, `RealTelephonyDataSource.kt:116`,
+  `ThreadViewModel.kt:78`, `app/build.gradle.kts` (paging dep).
+  *Verify:* star toggle on device causes no `Sms` query (profiler); thread
+  with 1k messages pages 50 at a time.
+
+- [ ] **10.3 Incorrect message date** — `Telephony.Sms.DATE` vs
+  `DATE_SENT`/`date_sent` and seconds-vs-millis confusion on dual-SIM
+  providers. `TelephonyMapper.mapCursorToMessage:18` currently reads `DATE`
+  only; some builds store seconds. `Conversation.date` from
+  `TelephonyMapper.toConversation:48` (`latest.date`) must be `MAX(date)`
+  from provider, not client max of a limited query. Fix projection to read
+  both `DATE` and `DATE_SENT`, normalize to millis (detect `< 1e12` → `*1000`),
+  and use `DateFormatter` (`core/i18n`) for Jalali/Gregorian toggle. *Key
+  files:* `TelephonyMapper.kt`, `RealTelephonyDataSource.kt:80`, `DateFormatter.kt`.
+  *Verify:* instrumented test inserts known `date`, asserts
+  `getConversations()[0].date == inserted`; manual vs default SMS app timestamp
+  equal.
+
+- [ ] **10.4 Check message order in conversation** — `queryMessages` sorts
+  `DATE DESC LIMIT 200` then resorts `sortedBy { date }` in Kotlin; ties on
+  same `date` (same second, rapid `adb emu sms send`) are non-deterministic.
+  Add secondary sort `_ID ASC` (provider order) both in SQL `DATE ASC, _ID ASC`
+  and in `ThreadViewModel.merged:91` tie-breaker, and ensure `observeMessages`
+  emits in stable order after reconciliation with optimistic rows. *Key files:*
+  `RealTelephonyDataSource.kt:130`, `ThreadViewModel.kt:91`, `TelephonyMapperTest`.
+  *Verify:* unit test with same-date messages; device rapid 3-sms order matches
+  default app.
+
+- [ ] **10.5 Message date grouping like Google Messages** — `ThreadScreen.kt:57`
+  currently flat `LazyColumn` of bubbles with no separators. Introduce
+  `sealed ConversationItem { DateHeader(LocalDate), MessageRow }`, group by
+  `LocalDate` (device zone, Jalali-aware via `core/i18n/DateFormatter`), add
+  `stickyHeader` per date (`Today`/`Yesterday`/`MMM d` via `formatTime`), and
+  ensure TalkBack reads header then messages. *Key files:*
+  `ThreadScreen.kt`, `DateFormatter.kt`, `core/designsystem` atoms.
+  *Verify:* screenshot tests light/dark/RTL + manual 3-day conversation shows
+  3 sticky headers; `time_now`/`time_yesterday` strings reused.
+
+---
+
 ## Deferred (Not in v1)
 - `build-logic` convention plugins (add at 8+ modules when duplication justifies).
 - Baseline profiles / macrobenchmark.
