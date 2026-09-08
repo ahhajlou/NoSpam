@@ -29,9 +29,9 @@ A full replacement SMS/MMS messenger for Android:
 |---|---|---|
 | UI | Jetpack Compose, Material 3 | Matches the Stitch design tokens directly (M3 roles) |
 | Navigation | Navigation-Compose, type-safe routes (`@Serializable` route objects) | Compile-time-checked args, no string routes |
-| DI | Hilt | Standard for multi-module Android, integrates with WorkManager/ViewModel. Trade-off: KSP adds real build-time cost per module — another reason to keep the module count down (§4). Koin or manual constructor injection are legitimate lighter alternatives if build time becomes a pain point. |
-| Async | Kotlin Coroutines + Flow | `StateFlow<UiState>` per screen, unidirectional data flow |
-| Local storage | Room **+ SQLiteOpenHelper interim** (NOT the SMS store — see §5) | App-owned: blocklist, `MessageVerdict`/`SenderState`, starred/pinned/muted, model metadata — now **persistent** via `SqliteNoSpamOpenHelper` (Room still blocked §13) |
+| DI | Manual `AppContainer` (no Hilt/Koin) | 4 singletons + `BroadcastReceiver` can't use constructor injection; repositories take collaborators as ctor params so fakes still injectable. Hilt would add KSP cost per module (§4) with no benefit at 15 modules. |
+| Async | Kotlin Coroutines + Flow | `StateFlow<UiState>` per screen, unidirectional data flow; hot `SharedFlow` replay cache for inbox (see §5) |
+| Local storage | `SQLiteOpenHelper` (`SqliteNoSpamOpenHelper`, NOT Room — see §5) | App-owned: blocklist, `MessageVerdict`/`SenderState`/`SpamVerdict`, starred/pinned/muted/archived, model metadata — **persistent** 9-table `nospam.db` via `Sqlite*Dao` (Room blocked §13). DAOs expose `Flow` via `MutableStateFlow` + `onStart { withContext(IO){read} }` lazy init – **zero DB in `<init>`** (was 1325ms `DiskReadViolation` on Main). |
 | Build | Gradle Kotlin DSL + version catalog (`libs.versions.toml`) | Keep using it; DataStore `1.1.1` + `material-icons-extended` added |
 | Background work | WorkManager | Periodic re-classification / model updates, if needed |
 | Settings | DataStore Preferences (`settings` + `drafts`) | Spam protection toggle, per-thread drafts — single `preferencesDataStore("settings")` via `SpamPreferences`/`SettingsDataStore` |
@@ -132,23 +132,14 @@ recording why — the reasoning matters more than the diagram:**
   SMS app can write to it. `core:telephony` is the **only** module allowed to touch
   `ContentResolver` for these URIs, `SmsManager`, and `SubscriptionManager` (multi-SIM).
   Do not mirror the message store into Room — you'll create a second source of truth.
-- **Room (`core:database`)** holds app-owned data that the Telephony provider has no
+- **`core:database` holds app-owned data** that the Telephony provider has no
   concept of: manual blocklist entries, per-message spam verdicts and per-sender
   spam state/overrides ("not spam" corrections — see §15 for why sender state is
-  keyed by normalized address, not `threadId`), spam-model metadata/version, and
-  any app-specific cache (e.g. resolved contact photo cache). Deferred until
-  Room's KSP incompatibility with the current AGP/Kotlin combo is resolved (§13)
-  — until then, `NoSpamDatabase.inMemory()` is a placeholder and **must not ship**:
-  it loses the blocklist, all spam corrections, and archive state on every
-  process death, which happens routinely for a receiver-driven app (TASKS.md
-  Phase 7.1).
-- **Ingress ordering matters.** `SmsIngressUseCase` must insert the incoming
+  keyed by normalized address, not `threadId`), `SpamVerdict` legacy, starred/pinned/muted/archived, model metadata. **Persistent** `nospam.db` (v3, 9 tables) via `SqliteNoSpamOpenHelper` + `Sqlite*Dao` behind `*Dao` interfaces. Room remains blocked by `AGP 9.0.0 + Kotlin 2.2.10` KSP incompat (`builtInKotlin` cast, §13); `NoSpamDatabase.persistent(context)` is the shipped impl, `inMemory()` is test-only. DAOs never query in `<init>` – they expose `flow.onStart { withContext(IO){readAllSync()} }` with `AtomicBoolean` guard so `AppContainer` lazy init does not block Main (was 1325ms `DiskReadViolation` at `SqliteBlocklistDao.<init>`).
+- **Ingress ordering matters.** `SmsIngressUseCase` inserts the incoming
   message into the provider (`READ=0`) *before* invoking the classifier, then
-  update `READ`/verdict after. Classifying first (the current v1 shape) means a
-  classifier exception drops the SMS entirely — never acceptable for a
-  replacement default SMS app. Wrap classification in a timeout so a slow/failed
-  model degrades to "leave unread, no verdict yet" rather than losing the
-  message or blowing the `goAsync()` budget.
+  updates `READ`/verdict after. Classification wrapped in `withTimeout(8_000)`; classifier (1.2 MB JSON) pre-warmed off Main in `NoSpamApplication.onCreate` (`Dispatchers.IO` `container.classifier`). DB also pre-warmed (`container.database`) so first `NavHost` composition does not trigger lazy open on Main.
+- **Inbox hot cache (Phase 11.4).** `ConversationsRepository` keeps `sharedTelephony` (`telephony.observeConversations().distinctUntilChanged().mapLatest{adjustMixedSnippet}`) + `sharedFlags` (7 DB flows combined) as `shareIn(CoroutineScope(IO), Eagerly, replay=1)`. `observeConversations(filter)` `combine(sharedTelephony, sharedFlags)` reuses hot upstream – revisiting `Inbox -> Settings -> Inbox` replays instantly (<50ms) instead of re-querying `Threads` + 269 `ContactLookup` IPCs (was 3573ms on SM-A730F). `externalScope` param injects `UnconfinedTestDispatcher` for `RepositoryTest` sync. `NoSpamNavHost` also hoists `ConversationsViewModel`/`ArchivedViewModel`/`SpamViewModel` to NavHost scope (`viewModel()` outside `composable<>`) so `StateFlow(WhileSubscribed(5s))` survives navigation; repository 30s replay covers longer gaps.
 - **Blocklist writes should target `BlockedNumberContract.BlockedNumbers`**
   when this app holds the default-SMS role (blocks then apply system-wide, to
   calls too, and survive uninstall); keep the app's own blocklist table as a
@@ -159,6 +150,7 @@ recording why — the reasoning matters more than the diagram:**
 - **DataStore** (add to `core:common` or a thin `core:preferences` if it grows) for
   user settings: selected app language, notification prefs, default-app onboarding
   state.
+- **Compose inbox perf (P11.2-11.3).** `ConversationsScreen` does **not** format dates per-frame with `SimpleDateFormat`/`Instant.atZone` (was 269 allocations → `Davey! 1936ms`). Now `formatTime` is `remember(millis){ DateUtils.formatDateTime }` + `Calendar` year check (framework thread-safe, ~10 visible rows only). `ConversationsUiState(isLoading=true)` + `SkeletonRow` (8 grey boxes) shown while `sharedTelephony` loads, so first frame never measures 269 rows at once.
 - **Testing gap worth naming honestly:** `ContentResolver` queries against
   `Telephony.Sms`/`Telephony.Mms` don't have great off-device fakes — Robolectric's
   shadow support for the Telephony provider specifically is thin, so
@@ -368,10 +360,10 @@ NoSpam/
 │   ├── build.gradle.kts
 │   └── src/main/
 │       ├── AndroidManifest.xml
-│       ├── kotlin/com/example/nospam/
-│       │   ├── NoSpamApplication.kt        # @HiltAndroidApp
-│       │   ├── MainActivity.kt
-│       │   ├── navigation/NoSpamNavHost.kt # composes each feature's nav graph
+│       ├── kotlin/com/nospam/nospam/
+│       │   ├── NoSpamApplication.kt        # pre-warms DB + classifier on IO; StrictMode allowDiskReads for Samsung OEM
+│       │   ├── MainActivity.kt             # AppCompatActivity, allowDiskReads for Typeface/AppLocales
+│       │   ├── navigation/NoSpamNavHost.kt # hoists Conversations/Archived/Spam VMs to NavHost scope (no re-query on nav)
 │       │   └── ui/NoSpamAppShell.kt        # top bar + drawer ("navigation_drawer")
 │       └── res/...
 │
@@ -463,20 +455,19 @@ Before publishing: `com.nospam.nospam` is the Android Studio template
 - **Dynamic feature modules** — no on-demand delivery use case here.
 - **Room** — not actually deferred by choice; it's *blocked* by `AGP 9.0.0 +
   Kotlin 2.2.10` KSP incompatibility (`builtInKotlin` cast error) documented in
-  TASKS.md 2.1. `core:database` currently ships in-memory DAOs behind Room-shaped
-  interfaces as a placeholder. This is fine for local dev but **must not ship**:
-  see §5's ingress/persistence note and TASKS.md Phase 7.1 for the required
-  interim fix (Room once unblocked, else a `SQLiteOpenHelper`-backed
-  implementation of the same DAO interfaces).
+  TASKS.md 2.1. `core:database` shipped `SQLiteOpenHelper` persistent impl via `SqliteNoSpamOpenHelper` + `Sqlite*Dao` (Phase 7.1, 11) – still `SQLiteOpenHelper`-backed, not Room, until KSP unblocked.
 
 ## 14. Useful commands
 
 ```bash
 ./gradlew :app:assembleDebug
 ./gradlew :feature:conversations:testDebugUnitTest
+./gradlew :core:data:testDebugUnitTest   # 11 tests, includes archive/observe re-emit
 ./gradlew :core:telephony:testDebugUnitTest
 ./gradlew build   # full project, all modules
 ```
+
+**Performance gates (SM-A730F, 269 threads):** `adb logcat -s NoSpamPerf` → `inbox loaded <500ms` cold, `<50ms` on `Inbox->Settings->Inbox` replay (was 3573ms); `Davey! <200ms`, `Skipped 0` (was 1936ms/109 frames). No `DiskReadViolation` at `Sqlite*Dao.<init>`.
 
 ## 15. Spam/ham state model (v2 — see TASKS.md Phase 8)
 
