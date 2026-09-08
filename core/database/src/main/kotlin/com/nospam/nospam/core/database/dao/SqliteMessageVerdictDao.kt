@@ -2,14 +2,20 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.MessageVerdictEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : MessageVerdictDao {
     private val flow = MutableStateFlow<List<MessageVerdictEntity>>(emptyList())
-    init { flow.value = readAllSync() }
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readAllSync()
+        }
+    }
     private fun readAllSync(): List<MessageVerdictEntity> {
         val list = mutableListOf<MessageVerdictEntity>()
         helper.readableDatabase.query("message_verdict", null, null, null, null, null, "createdAt DESC").use { c ->

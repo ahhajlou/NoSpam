@@ -2,9 +2,11 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqliteSpamVerdictDao(
@@ -13,7 +15,9 @@ class SqliteSpamVerdictDao(
     private val flow = MutableStateFlow<List<SpamVerdictEntity>>(emptyList())
 
     init {
-        flow.value = readSpamSync()
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readSpamSync()
+        }
     }
 
     private fun readSpamSync(): List<SpamVerdictEntity> {

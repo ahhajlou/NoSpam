@@ -2,14 +2,20 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.StarredThreadEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqliteStarredDao(private val helper: SqliteNoSpamOpenHelper) : StarredDao {
     private val flow = MutableStateFlow<List<StarredThreadEntity>>(emptyList())
-    init { flow.value = readAllSync() }
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readAllSync()
+        }
+    }
     private fun readAllSync(): List<StarredThreadEntity> {
         val list = mutableListOf<StarredThreadEntity>()
         helper.readableDatabase.query("starred_threads", null, null, null, null, null, null).use { c ->

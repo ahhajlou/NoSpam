@@ -2,9 +2,10 @@ package com.nospam.nospam
 
 import android.app.Application
 import android.os.StrictMode
-import android.provider.Telephony
 import android.util.Log
 import com.nospam.nospam.core.notifications.NotificationHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class NoSpamApplication : Application() {
@@ -31,22 +32,24 @@ class NoSpamApplication : Application() {
             )
             Log.i("NoSpamPerf", "StrictMode enabled for debug")
         }
-        super.onCreate()
+        // Samsung Typeface.SetFlipFonts / SetAppTypeFace does disk I/O inside
+        // Application.onCreate -> wrap the super call to suppress harmless OEM
+        // StrictMode violations (Fix 4). Ignore if not needed.
+        val oldPolicy = StrictMode.allowThreadDiskReads()
+        try {
+            super.onCreate()
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy)
+        }
         container = AppContainer(this)
         NotificationHelper.createChannels(this)
         // Warm classifier off main thread so first SMS doesn't pay 1.2 MB JSON load.
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             runCatching { container.classifier }
         }
-        // Row count + thread count for reviewer evidence (IO, not main)
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            try {
-                val smsCount = contentResolver.query(Telephony.Sms.CONTENT_URI, arrayOf(Telephony.Sms._ID), null, null, null)?.use { it.count } ?: -1
-                val threadCount = contentResolver.query(Telephony.Threads.CONTENT_URI, arrayOf(Telephony.Threads._ID), null, null, null)?.use { it.count } ?: -1
-                Log.i("NoSpamPerf", "ROW_COUNT Sms=$smsCount Threads=$threadCount")
-            } catch (e: Exception) {
-                Log.w("NoSpamPerf", "ROW_COUNT query failed", e)
-            }
+        // Pre-warm database off main thread so lazy init does not block NavHost composition (Fix 2).
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { container.database }
         }
     }
 }

@@ -2,9 +2,11 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.BlocklistEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqliteBlocklistDao(
@@ -13,9 +15,9 @@ class SqliteBlocklistDao(
     private val flow = MutableStateFlow<List<BlocklistEntity>>(emptyList())
 
     init {
-        // Load synchronously on creation (on IO thread would be ideal, but
-        // we do a blocking read here since helper is cheap and DB is small).
-        flow.value = readAllSync()
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readAllSync()
+        }
     }
 
     private fun readAllSync(): List<BlocklistEntity> {

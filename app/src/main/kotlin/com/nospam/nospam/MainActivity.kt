@@ -11,7 +11,13 @@ import com.nospam.nospam.ui.NoSpamAppShell
 // activities running through its delegate. Required for fa/RTL switching.
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        // Suppress Samsung Typeface / AppLocalesStorageHelper disk read violations (Fix 4).
+        val oldPolicy = android.os.StrictMode.allowThreadDiskReads()
+        try {
+            super.onCreate(savedInstanceState)
+        } finally {
+            android.os.StrictMode.setThreadPolicy(oldPolicy)
+        }
         enableEdgeToEdge()
         handleSendToIntent(intent)
         setContent {

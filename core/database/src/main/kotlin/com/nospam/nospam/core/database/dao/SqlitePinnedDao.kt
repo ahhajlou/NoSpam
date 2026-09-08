@@ -2,14 +2,20 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.PinnedThreadEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqlitePinnedDao(private val helper: SqliteNoSpamOpenHelper) : PinnedDao {
     private val flow = MutableStateFlow<List<PinnedThreadEntity>>(emptyList())
-    init { flow.value = readAllSync() }
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readAllSync()
+        }
+    }
     private fun readAllSync(): List<PinnedThreadEntity> {
         val list = mutableListOf<PinnedThreadEntity>()
         helper.readableDatabase.query("pinned_threads", null, null, null, null, null, null).use { c ->

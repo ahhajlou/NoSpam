@@ -3,14 +3,20 @@ package com.nospam.nospam.core.database.dao
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.model.ThreadSpamState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderStateDao {
     private val flow = MutableStateFlow<List<SenderStateEntity>>(emptyList())
-    init { flow.value = readAllSync() }
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readAllSync()
+        }
+    }
     private fun readAllSync(): List<SenderStateEntity> {
         val list = mutableListOf<SenderStateEntity>()
         helper.readableDatabase.query("sender_state", null, null, null, null, null, null).use { c ->

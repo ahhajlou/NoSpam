@@ -2,14 +2,20 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.MutedThreadEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqliteMutedDao(private val helper: SqliteNoSpamOpenHelper) : MutedDao {
     private val flow = MutableStateFlow<List<MutedThreadEntity>>(emptyList())
-    init { flow.value = readAllSync() }
+    init {
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readAllSync()
+        }
+    }
     private fun readAllSync(): List<MutedThreadEntity> {
         val list = mutableListOf<MutedThreadEntity>()
         helper.readableDatabase.query("muted_threads", null, null, null, null, null, null).use { c ->

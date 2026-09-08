@@ -2,9 +2,11 @@ package com.nospam.nospam.core.database.dao
 
 import com.nospam.nospam.core.database.SqliteNoSpamOpenHelper
 import com.nospam.nospam.core.database.entity.ArchivedThreadEntity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class SqliteArchivedDao(
@@ -13,7 +15,9 @@ class SqliteArchivedDao(
     private val flow = MutableStateFlow<List<ArchivedThreadEntity>>(emptyList())
 
     init {
-        flow.value = readAllSync()
+        CoroutineScope(Dispatchers.IO).launch {
+            flow.value = readAllSync()
+        }
     }
 
     private fun readAllSync(): List<ArchivedThreadEntity> {
