@@ -20,7 +20,11 @@ class ConversationsRepository(
     private val telephony: TelephonyDataSource,
     private val db: NoSpamDatabase,
     // Injected for tests – production uses IO, tests can pass TestScope.
-    private val externalScope: CoroutineScope? = null
+    private val externalScope: CoroutineScope? = null,
+    // Normalizes a raw provider address to the key used by sender_state/blocklist.
+    // Default is a harmless identity-ish fallback; AppContainer injects E.164
+    // normalization so lookups match what SmsIngressUseCase stored.
+    private val normalizer: (String) -> String = { it.trim().uppercase() },
 ) {
     // Shared repository scope keeps hot flows alive across ViewModel recreation
     // (e.g. navigating Inbox -> Settings -> Inbox). Without this, each new
@@ -35,10 +39,12 @@ class ConversationsRepository(
         .mapLatest { adjustMixedSnippet(it) }
         .shareIn(repositoryScope, SharingStarted.Eagerly, replay = 1)
 
-    // Flags combine also shared – avoids recombining 7 DB flows on each collector.
+    // Flags combine also shared – avoids recombining 6 DB flows on each collector.
+    // NOTE: legacy spam_verdict (threadId-keyed) is intentionally NOT part of these
+    // list queries — spam membership comes from sender_state (normalized-address-keyed)
+    // only, so inbox and spam section can never disagree (§15 / v2 state model).
     @Suppress("UNCHECKED_CAST")
     private val sharedFlags = combine(
-        db.spamVerdictDao.observeSpam(),
         db.blocklistDao.observeAll(),
         db.archivedDao.observeAll(),
         db.senderStateDao.observeAll(),
@@ -46,15 +52,13 @@ class ConversationsRepository(
         db.pinnedDao.observeAll(),
         db.mutedDao.observeAll(),
     ) { args ->
-        val spamVerdicts = args[0] as List<com.nospam.nospam.core.database.entity.SpamVerdictEntity>
-        val blocklist = args[1] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
-        val archived = args[2] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
-        val senderStates = args[3] as List<com.nospam.nospam.core.database.entity.SenderStateEntity>
-        val starred = args[4] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
-        val pinned = args[5] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
-        val muted = args[6] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
+        val blocklist = args[0] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
+        val archived = args[1] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
+        val senderStates = args[2] as List<com.nospam.nospam.core.database.entity.SenderStateEntity>
+        val starred = args[3] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
+        val pinned = args[4] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
+        val muted = args[5] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
         Flags(
-            spamIds = spamVerdicts.map { it.threadId }.toSet(),
             blockedAddresses = blocklist.map { it.address }.toSet(),
             archivedIds = archived.map { it.threadId }.toSet(),
             senderStates = senderStates.associateBy { normalizeAddr(it.normalizedAddress) },
@@ -68,13 +72,23 @@ class ConversationsRepository(
 
     private fun senderStateFor(conv: Conversation, states: Map<String, com.nospam.nospam.core.database.entity.SenderStateEntity>): com.nospam.nospam.core.database.entity.SenderStateEntity? {
         val addr = conv.participants.firstOrNull()?.address ?: return null
-        return states[normalizeAddr(addr)] ?: states[addr]
+        // Look up under the normalized form (matches how ingress stored the key),
+        // falling back to the exact raw address.
+        return states[normalizeAddr(normalizer(addr))] ?: states[addr]
+    }
+
+    private fun isBlockedAddress(conv: Conversation, blockedRaw: Set<String>): Boolean {
+        if (blockedRaw.isEmpty()) return false
+        val blockedNorm = blockedRaw.map { normalizeAddr(normalizer(it)) }.toSet()
+        return conv.participants.any {
+            val p = it.address.trim()
+            p in blockedRaw || normalizeAddr(normalizer(p)) in blockedNorm
+        }
     }
 
     private fun withFlags(
         conversations: List<Conversation>,
         senderStates: Map<String, com.nospam.nospam.core.database.entity.SenderStateEntity>,
-        spamIds: Set<Long>,
         blockedAddresses: Set<String>,
         archivedIds: Set<Long>,
         starredIds: Set<Long>,
@@ -82,12 +96,10 @@ class ConversationsRepository(
         mutedIds: Set<Long>,
     ): List<Conversation> = conversations.map { conv ->
         val st = senderStateFor(conv, senderStates)
-        val isSpamByState = st?.state == com.nospam.nospam.core.model.ThreadSpamState.SPAM || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED
-        // Fallback to legacy SpamVerdict if no sender state yet
-        val isSpam = isSpamByState || conv.threadId.value in spamIds
+        val isSpam = st?.state == com.nospam.nospam.core.model.ThreadSpamState.SPAM || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED
         conv.copy(
             isSpam = isSpam,
-            isBlocked = conv.participants.any { it.address in blockedAddresses } || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED,
+            isBlocked = isBlockedAddress(conv, blockedAddresses) || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED,
             isArchived = conv.threadId.value in archivedIds,
             spamState = st?.state,
             isStarred = conv.threadId.value in starredIds,
@@ -117,7 +129,6 @@ class ConversationsRepository(
             val withFlags = withFlags(
                 conversations,
                 flags.senderStates,
-                flags.spamIds,
                 flags.blockedAddresses,
                 flags.archivedIds,
                 flags.starredIds,
@@ -130,7 +141,6 @@ class ConversationsRepository(
     }
 
     private data class Flags(
-        val spamIds: Set<Long>,
         val blockedAddresses: Set<String>,
         val archivedIds: Set<Long>,
         val senderStates: Map<String, com.nospam.nospam.core.database.entity.SenderStateEntity>,
@@ -153,23 +163,24 @@ class ConversationsRepository(
 
     // Spam/Archived also share the hot telephony upstream so navigating
     // to those tabs doesn't re-trigger the 3.6s query.
+    // Single source of truth: sender_state (SPAM/BLOCKED) + app blocklist.
+    // Legacy spam_verdict (threadId-keyed) is deliberately not consulted here —
+    // including it was what let a conversation appear in both lists (see CLAUDE.md §15).
     fun observeSpam(): Flow<List<Conversation>> {
         return combine(
             sharedTelephony,
-            db.spamVerdictDao.observeSpam(),
             db.blocklistDao.observeAll(),
             db.senderStateDao.observeAll(),
-        ) { conversations, spamVerdicts, blocklist, senderStates ->
-            val spamIds = spamVerdicts.map { it.threadId }.toSet()
-            val blockedAddresses = blocklist.map { it.address }.toSet()
+        ) { conversations, blocklist, senderStates ->
+            val blockedRaw = blocklist.map { it.address }.toSet()
             val stateMap = senderStates.associateBy { normalizeAddr(it.normalizedAddress) }
             conversations
                 .filter { conv ->
                     val st = senderStateFor(conv, stateMap)
-                    st?.state == com.nospam.nospam.core.model.ThreadSpamState.SPAM || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED || conv.threadId.value in spamIds
+                    st?.state == com.nospam.nospam.core.model.ThreadSpamState.SPAM || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED || isBlockedAddress(conv, blockedRaw)
                 }
                 .map { conv ->
-                    conv.copy(isBlocked = conv.participants.any { it.address in blockedAddresses })
+                    conv.copy(isBlocked = isBlockedAddress(conv, blockedRaw))
                 }
         }.flowOn(Dispatchers.IO)
     }

@@ -1,14 +1,17 @@
 package com.nospam.nospam.core.data
 
+import android.content.Context
 import com.nospam.nospam.core.database.NoSpamDatabase
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 
 class SpamRepository(
     private val db: NoSpamDatabase,
-    private val classifier: SpamClassifier
+    private val classifier: SpamClassifier,
+    private val context: Context? = null,
 ) {
     suspend fun classifyAndStore(threadId: ThreadId, message: RawMessage) {
         val verdict = classifier.classify(message)
@@ -22,28 +25,31 @@ class SpamRepository(
         )
     }
 
-    suspend fun markNotSpam(threadId: ThreadId) = markSenderNotSpam(threadId)
+    suspend fun markNotSpam(threadId: ThreadId, address: String) = markSenderNotSpam(threadId, address)
 
-    suspend fun markSpam(threadId: ThreadId) = markSenderSpam(threadId)
+    suspend fun markSpam(threadId: ThreadId, address: String) = markSenderSpam(threadId, address)
 
     suspend fun getVerdict(threadId: ThreadId) = db.spamVerdictDao.getByThread(threadId.value)
 
-    // New sender-level overrides (TRUSTED / SPAM) keyed by normalized address
-    suspend fun markSenderNotSpam(threadId: ThreadId) {
-        // Legacy path
+    /**
+     * User "Not spam" override. Keyed by NORMALIZED address (matches what
+     * [SmsIngressUseCase] stores) — never by threadId, which is recycled and
+     * caused the inbox/spam-section split (CLAUDE.md §15).
+     */
+    suspend fun markSenderNotSpam(threadId: ThreadId, address: String) {
+        // Legacy per-thread row — kept for export/prune paths, no longer drives lists.
         val existing = db.spamVerdictDao.getByThread(threadId.value)
         if (existing != null) db.spamVerdictDao.upsert(existing.copy(isSpam = false, isUserOverride = true))
         else db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = false, score = 0.0, isUserOverride = true))
-        // New state: find normalized address via message verdict or fallback to threadId string
-        val addr = resolveAddressForThread(threadId) ?: threadId.value.toString()
+        val addr = normalizedAddress(address)
         db.senderStateDao.upsert(
             com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.TRUSTED, isUserOverride = true)
         )
     }
 
-    suspend fun markSenderSpam(threadId: ThreadId) {
+    suspend fun markSenderSpam(threadId: ThreadId, address: String) {
         db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = true, score = 1.0, isUserOverride = true))
-        val addr = resolveAddressForThread(threadId) ?: threadId.value.toString()
+        val addr = normalizedAddress(address)
         db.senderStateDao.upsert(
             com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.SPAM, isUserOverride = true, spamCount = 1)
         )
@@ -68,9 +74,8 @@ class SpamRepository(
         db.senderStateDao.upsert(state.copy(spamCount = state.spamCount + 1, updatedAt = System.currentTimeMillis()))
     }
 
-    private suspend fun resolveAddressForThread(threadId: ThreadId): String? {
-        return db.messageVerdictDao.getByThread(threadId.value).firstOrNull()?.normalizedAddress
-    }
+    private fun normalizedAddress(address: String): String =
+        if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim().uppercase()
 
     /**
      * Retention: drops auto-classified spam verdicts older than [maxAgeDays].

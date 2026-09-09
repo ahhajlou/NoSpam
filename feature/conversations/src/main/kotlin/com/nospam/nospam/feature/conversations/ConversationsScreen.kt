@@ -60,7 +60,7 @@ fun ConversationsScreen(
     onNewMessage: () -> Unit = {},
     onToggleRead: (Long, Boolean) -> Unit = { _, _ -> },
     onArchive: (Long) -> Unit = {},
-    onReportSpam: (Long) -> Unit = {},
+    onReportSpam: (Long, String) -> Unit = { _, _ -> },
     onBlock: (String) -> Unit = {},
     onDelete: (Long) -> Unit = {},
     onToggleStar: (Long) -> Unit = viewModel::toggleStar,
@@ -190,7 +190,7 @@ fun ConversationsScreen(
                     address = address,
                     onToggleRead = { onToggleRead(conv.threadId.value, !conv.read) },
                     onArchive = { onArchive(conv.threadId.value) },
-                    onReportSpam = { onReportSpam(conv.threadId.value) },
+                    onReportSpam = { onReportSpam(conv.threadId.value, address ?: "") },
                     onBlock = { address?.let(onBlock) },
                     onDelete = { onDelete(conv.threadId.value) },
                     onToggleStar = { onToggleStar(conv.threadId.value) },
@@ -498,7 +498,7 @@ fun ArchivedScreen(
 fun SpamScreen(
     viewModel: SpamViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
-    onNotSpam: (Long) -> Unit = {},
+    onNotSpam: (Long, String) -> Unit = { _, _ -> },
     onBlock: (String) -> Unit = {},
     onDelete: (Long) -> Unit = {},
 ) {
@@ -523,7 +523,7 @@ fun SpamScreen(
         if (isLive) dismissed = dismissed + conv.threadId.value
         else fakeSpamList = fakeSpamList.filterNot { it.threadId == conv.threadId }
         showNotSpamSnack = message
-        onNotSpam(conv.threadId.value)
+        onNotSpam(conv.threadId.value, conv.participants.firstOrNull()?.address.orEmpty())
     }
     val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }

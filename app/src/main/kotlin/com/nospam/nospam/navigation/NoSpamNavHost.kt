@@ -138,8 +138,8 @@ fun NoSpamNavHost(
                 onArchive = { id ->
                     scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }
                 },
-                onReportSpam = { id ->
-                    scope.launch { container?.spamRepository?.markSpam(ThreadId(id)) }
+                onReportSpam = { id, address ->
+                    scope.launch { container?.spamRepository?.markSpam(ThreadId(id), address) }
                 },
                 onBlock = { address ->
                     scope.launch { container?.blocklistRepository?.block(address) }
@@ -167,9 +167,9 @@ fun NoSpamNavHost(
             SpamScreen(
                 viewModel = spamVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
-                onNotSpam = { id ->
+                onNotSpam = { id, address ->
                     scope.launch {
-                        container?.spamRepository?.markNotSpam(ThreadId(id))
+                        container?.spamRepository?.markNotSpam(ThreadId(id), address)
                     }
                 },
                 onBlock = { address ->

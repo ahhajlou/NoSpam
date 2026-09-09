@@ -8,6 +8,7 @@ import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.database.NoSpamDatabase
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.ml.TfidfSpamClassifier
+import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import com.nospam.nospam.core.telephony.RealTelephonyDataSource
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 
@@ -32,10 +33,16 @@ class AppContainer(private val context: Context) {
         TfidfSpamClassifier.fromAsset(appContext)
     }
 
-    val spamRepository: SpamRepository by lazy { SpamRepository(database, classifier) }
+    val spamRepository: SpamRepository by lazy { SpamRepository(database, classifier, appContext) }
     val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database, appContext) }
     val conversationsRepository: ConversationsRepository by lazy {
-        ConversationsRepository(telephony, database)
+        // Normalize in the same way SmsIngressUseCase/BlocklistRepository key
+        // their rows, so inbox/spam-section lookups agree (§15 single key).
+        ConversationsRepository(
+            telephony,
+            database,
+            normalizer = { PhoneNumberNormalizer.normalize(appContext, it) }
+        )
     }
 
     val smsIngress: SmsIngressUseCase by lazy {
