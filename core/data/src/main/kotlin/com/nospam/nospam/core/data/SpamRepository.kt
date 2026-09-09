@@ -12,6 +12,7 @@ class SpamRepository(
     private val db: NoSpamDatabase,
     private val classifier: SpamClassifier,
     private val context: Context? = null,
+    private val spamStateWriter: SpamStateWriter = SpamStateWriter(db.senderStateDao),
 ) {
     suspend fun classifyAndStore(threadId: ThreadId, message: RawMessage) {
         val verdict = classifier.classify(message)
@@ -42,36 +43,44 @@ class SpamRepository(
         if (existing != null) db.spamVerdictDao.upsert(existing.copy(isSpam = false, isUserOverride = true))
         else db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = false, score = 0.0, isUserOverride = true))
         val addr = normalizedAddress(address)
-        db.senderStateDao.upsert(
-            com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.TRUSTED, isUserOverride = true)
-        )
+        spamStateWriter.withSpamStateLock {
+            db.senderStateDao.upsert(
+                com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.TRUSTED, isUserOverride = true)
+            )
+        }
     }
 
     suspend fun markSenderSpam(threadId: ThreadId, address: String) {
         db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = true, score = 1.0, isUserOverride = true))
         val addr = normalizedAddress(address)
-        db.senderStateDao.upsert(
-            com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.SPAM, isUserOverride = true, spamCount = 1)
-        )
+        spamStateWriter.withSpamStateLock {
+            db.senderStateDao.upsert(
+                com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.SPAM, isUserOverride = true, spamCount = 1)
+            )
+        }
     }
 
     // Per-message actions inside MIXED — do not touch sender override
     suspend fun markMessageNotSpam(messageId: Long) {
-        db.messageVerdictDao.updateUserLabel(messageId, false)
-        // Recompute counts for that sender (simple: increment ham, recompute state if not override)
-        val v = db.messageVerdictDao.getByMessageId(messageId) ?: return
-        val state = db.senderStateDao.getByAddress(v.normalizedAddress) ?: return
-        if (state.isUserOverride) return
-        // increment hamCount, keep state as is unless graduation logic says otherwise (keep MIXED)
-        db.senderStateDao.upsert(state.copy(hamCount = state.hamCount + 1, updatedAt = System.currentTimeMillis()))
+        spamStateWriter.withSpamStateLock {
+            db.messageVerdictDao.updateUserLabel(messageId, false)
+            // Recompute counts for that sender (simple: increment ham, recompute state if not override)
+            val v = db.messageVerdictDao.getByMessageId(messageId) ?: return@withSpamStateLock
+            val state = db.senderStateDao.getByAddress(v.normalizedAddress) ?: return@withSpamStateLock
+            if (state.isUserOverride) return@withSpamStateLock
+            // increment hamCount, keep state as is unless graduation logic says otherwise (keep MIXED)
+            db.senderStateDao.upsert(state.copy(hamCount = state.hamCount + 1, updatedAt = System.currentTimeMillis()))
+        }
     }
 
     suspend fun markMessageSpam(messageId: Long) {
-        db.messageVerdictDao.updateUserLabel(messageId, true)
-        val v = db.messageVerdictDao.getByMessageId(messageId) ?: return
-        val state = db.senderStateDao.getByAddress(v.normalizedAddress) ?: return
-        if (state.isUserOverride) return
-        db.senderStateDao.upsert(state.copy(spamCount = state.spamCount + 1, updatedAt = System.currentTimeMillis()))
+        spamStateWriter.withSpamStateLock {
+            db.messageVerdictDao.updateUserLabel(messageId, true)
+            val v = db.messageVerdictDao.getByMessageId(messageId) ?: return@withSpamStateLock
+            val state = db.senderStateDao.getByAddress(v.normalizedAddress) ?: return@withSpamStateLock
+            if (state.isUserOverride) return@withSpamStateLock
+            db.senderStateDao.upsert(state.copy(spamCount = state.spamCount + 1, updatedAt = System.currentTimeMillis()))
+        }
     }
 
     private fun normalizedAddress(address: String): String =

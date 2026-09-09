@@ -15,8 +15,10 @@ import com.nospam.nospam.core.model.TelephonyConstants
 object NotificationHelper {
     const val CHANNEL_ID_MESSAGES = "messages"
     const val CHANNEL_ID_SPAM = "spam"
+    const val CHANNEL_ID_BACKFILL = "backfill"
     const val KEY_TEXT_REPLY = TelephonyConstants.KEY_TEXT_REPLY
     const val REQUEST_CODE_REPLY = 1001
+    const val NOTIFICATION_ID_BACKFILL = 4001
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -31,12 +33,38 @@ object NotificationHelper {
                 context.getString(R.string.channel_spam),
                 NotificationManager.IMPORTANCE_LOW
             ).apply { description = context.getString(R.string.channel_spam_desc) }
-            manager.createNotificationChannels(listOf(messagesChannel, spamChannel))
+            val backfillChannel = NotificationChannel(
+                CHANNEL_ID_BACKFILL,
+                context.getString(R.string.channel_backfill),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply { description = context.getString(R.string.channel_backfill_desc) }
+            manager.createNotificationChannels(listOf(messagesChannel, spamChannel, backfillChannel))
         }
     }
 
     fun cancelNotification(context: Context, threadId: Long) {
         androidx.core.app.NotificationManagerCompat.from(context).cancel(threadId.toInt())
+    }
+
+    /**
+     * Ongoing progress for the one-time history scan. [cancelPending] targets a
+     * cancel receiver owned by the app (core:notifications must not know it).
+     */
+    fun buildBackfillProgressNotification(
+        context: Context,
+        processed: Int,
+        total: Int,
+        cancelPending: PendingIntent,
+    ): android.app.Notification {
+        return NotificationCompat.Builder(context, CHANNEL_ID_BACKFILL)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle(context.getString(R.string.backfill_title))
+            .setContentText(context.getString(R.string.backfill_progress, processed, total))
+            .setProgress(total, processed, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addAction(0, context.getString(R.string.backfill_cancel), cancelPending)
+            .build()
     }
 
     fun buildMessageNotification(

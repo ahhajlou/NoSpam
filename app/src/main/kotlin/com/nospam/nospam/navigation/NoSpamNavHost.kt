@@ -114,8 +114,13 @@ fun NoSpamNavHost(
     // so the composable reuses the same StateFlow and replays instantly.
     val conversationsVm: ConversationsViewModel = viewModel(
         factory = vmFactory {
-            container?.let { ConversationsViewModel(it.conversationsRepository) }
-                ?: ConversationsViewModel()
+            container?.let {
+                ConversationsViewModel(
+                    it.conversationsRepository,
+                    backfillStatus = it.spamBackfill.status,
+                    onCancelBackfill = { it.spamBackfill.cancel() },
+                )
+            } ?: ConversationsViewModel()
         }
     )
     val archivedVm: ArchivedViewModel? = container?.let {
@@ -190,10 +195,13 @@ fun NoSpamNavHost(
             )
             ExportScreen(viewModel = vm)
         }
-        composable<SettingsRoute> { SettingsScreen() }
+        composable<SettingsRoute> {
+            SettingsScreen(onRescan = { container?.spamBackfill?.ensureStarted() })
+        }
         composable<OnboardingRoute> {
             OnboardingScreen(
                 onComplete = {
+                    container?.spamBackfill?.ensureStarted()
                     navController.navigate(ConversationsRoute) {
                         popUpTo(OnboardingRoute) { inclusive = true }
                     }

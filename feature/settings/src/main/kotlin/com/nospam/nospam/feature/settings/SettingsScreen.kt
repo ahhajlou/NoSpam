@@ -61,7 +61,9 @@ private fun languageOptions() = listOf(
 )
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onRescan: () -> Unit = {},
+) {
     val context = LocalContext.current
 
     var isDefault by remember { mutableStateOf(isDefaultSmsApp(context)) }
@@ -144,6 +146,13 @@ fun SettingsScreen() {
                 subtitle = stringResource(R.string.spam_sub),
                 checked = spamProtectionEnabled,
                 onCheckedChange = { scope.launch { SpamPreferences.setEnabled(context, it) } }
+            )
+        }
+        item {
+            SettingsRow(
+                title = stringResource(R.string.scan_title),
+                subtitle = stringResource(R.string.scan_sub),
+                onClick = onRescan
             )
         }
         item {

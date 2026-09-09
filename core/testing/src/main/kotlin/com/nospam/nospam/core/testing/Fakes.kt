@@ -32,11 +32,14 @@ class FakeSpamClassifier(
 class FakeTelephonyDataSource {
     val insertedMessages = mutableListOf<Message>()
     val conversations = mutableListOf<Conversation>()
+    val outboundAddresses = mutableSetOf<String>()
 
     fun seed(conversations: List<Conversation>) {
         this.conversations.clear()
         this.conversations.addAll(conversations)
     }
+
+    fun fakeOutboundSenderAddresses(): Set<String> = outboundAddresses
 
     fun fakeConversations(filter: ConversationFilter = ConversationFilter.ALL): List<Conversation> {
         return when (filter) {

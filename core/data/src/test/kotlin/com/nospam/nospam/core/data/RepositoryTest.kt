@@ -36,6 +36,8 @@ class RepositoryTest {
         fun emit(convs: List<Conversation>) { flow.value = convs }
         val inserted = mutableListOf<Triple<String, String, Boolean>>()
         var nextThreadId: Long = 42L
+        val allMessages = mutableListOf<Message>()
+        val outboundAddresses = mutableSetOf<String>()
         override fun observeMessages(threadId: ThreadId): Flow<List<Message>> = MutableStateFlow(emptyList())
         override fun observeConversations(): Flow<List<Conversation>> = flow
         override suspend fun getConversations(): List<Conversation> = flow.value
@@ -56,11 +58,12 @@ class RepositoryTest {
         override suspend fun searchBodyMatch(query: String): Set<Long> = emptySet()
         override suspend fun getActiveSubscriptions(): List<com.nospam.nospam.core.telephony.TelephonyDataSource.SimInfo> = emptyList()
         override suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean = false
+        override suspend fun getOutboundSenderAddresses(): Set<String> = outboundAddresses
         override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}
         override suspend fun getOrCreateThreadId(address: String): Long = nextThreadId
-        override suspend fun getAllMessages(): List<Message> = emptyList()
+        override suspend fun getAllMessages(): List<Message> = allMessages
     }
 
     class FakeClassifier(private val isSpam: Boolean = false) : SpamClassifier {

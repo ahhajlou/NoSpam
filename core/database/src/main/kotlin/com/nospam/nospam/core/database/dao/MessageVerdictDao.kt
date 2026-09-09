@@ -6,6 +6,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 interface MessageVerdictDao {
     suspend fun insert(entity: MessageVerdictEntity)
+    /** One atomic bulk insert; refreshes the observable flow once at the end. */
+    suspend fun insertAll(entities: List<MessageVerdictEntity>)
+    /** All classified message ids — used by backfill resume-skip checks. */
+    suspend fun getAllMessageIds(): Set<Long>
     suspend fun getByMessageId(messageId: Long): MessageVerdictEntity?
     fun observeAll(): Flow<List<MessageVerdictEntity>>
     suspend fun getByThread(threadId: Long): List<MessageVerdictEntity>
@@ -19,6 +23,12 @@ class InMemoryMessageVerdictDao : MessageVerdictDao {
     private val flow = MutableStateFlow<List<MessageVerdictEntity>>(emptyList())
     private fun refresh() { flow.value = data.values.toList() }
     override suspend fun insert(entity: MessageVerdictEntity) { data[entity.messageId] = entity; refresh() }
+    override suspend fun insertAll(entities: List<MessageVerdictEntity>) {
+        if (entities.isEmpty()) return
+        entities.forEach { data[it.messageId] = it }
+        refresh()
+    }
+    override suspend fun getAllMessageIds(): Set<Long> = data.keys.toSet()
     override suspend fun getByMessageId(messageId: Long) = data[messageId]
     override fun observeAll(): Flow<List<MessageVerdictEntity>> = flow
     override suspend fun getByThread(threadId: Long) = data.values.filter { it.threadId == threadId }

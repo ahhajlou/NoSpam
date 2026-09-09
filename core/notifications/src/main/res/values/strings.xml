@@ -3,4 +3,9 @@
     <string name="channel_messages_desc">Incoming SMS/MMS</string>
     <string name="channel_spam">Spam</string>
     <string name="channel_spam_desc">Blocked spam</string>
+    <string name="channel_backfill">History scan</string>
+    <string name="channel_backfill_desc">Progress of the one-time spam scan over existing messages</string>
+    <string name="backfill_title">Scanning old messages for spam</string>
+    <string name="backfill_progress">%1$d of %2$d messages checked</string>
+    <string name="backfill_cancel">Cancel</string>
 </resources>

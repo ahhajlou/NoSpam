@@ -385,6 +385,210 @@ the system default SMS app on the same seed data.
 
 ---
 
+## Phase 12 — Backfill: classify all existing messages after SMS permission granted
+
+> Origin: onboarding grants SMS + default role but never scans the user's
+> existing history. Thousands of messages from known spammers sit unclassified
+> in the inbox. This phase adds a one-time background scan that feeds every
+> historical inbox message through the spam pipeline to populate
+> `sender_state` and `message_verdict` for conversations that pre-date the
+> app's installation.
+>
+> Design constraints (from architecture review):
+> - **No blocking the UI** — the scan can take seconds to minutes depending on
+>   history size. A frozen spinner reads as a crash on slow devices. The scan
+>   runs on a background `SupervisorJob()+IO` scope with a progress notification
+>   **and** an in-app banner; either can be dismissed via Cancel.
+> - **Fail-open** — an unfinished scan leaves messages unclassified → they stay
+>   in the inbox. Nothing is hidden, moved, or mis-labeled. Process death
+>   mid-scan is safe.
+> - **Zero schema migration** — the scan is fully idempotent via
+>   verdict-ID-set skip (load all existing `message_verdict` IDs into a
+>   `Set<Long>` once, skip classified messages). No `backfill_complete` flag
+>   needed in DB or DataStore.
+> - **No provider writes** — old messages are never re-notified, re-inserted,
+>   or have their read state changed. The scan only reads from the Telephony
+>   provider and writes to `core:database` tables.
+> - **Single-writer serialization** — all `sender_state` read→decide→write
+>   paths (ingress, backfill, user overrides) go through a shared `Mutex`
+>   (`SpamStateWriter`) so concurrent writes are atomic and user overrides
+>   are never overwritten.
+> - **No new `core:*` → `core:*` edges** — the notification collector lives in
+>   `:app` (which depends on everything); `core:data` only exposes
+>   `StateFlow<BackfillStatus>`.
+>
+> Edge cases handled:
+> 1. Contact sender + spam history → MIXED, never auto-promoted to SPAM
+>    (protectFromSpam).
+> 2. User marks "Not spam" mid-scan → `isUserOverride=true` → scan skips
+>    under lock.
+> 3. Sticky SPAM: later ham never rescues automatically.
+> 4. New inbound SMS during scan → serialized; gets own verdict; scan
+>    skips via verdict-ID check → no double-count.
+> 5. User blocks mid-scan → blocklist checked per sender → BLOCKED wins.
+> 6. Permission revoked mid-scan → `SecurityException` → graceful abort,
+>    resumes when re-granted.
+> 7. Spam-protection toggle OFF → mirror ingress: force CLEAN, still
+>    store verdict.
+> 8. Retention window: `message_verdict` rows only for messages within
+>    30-day window; older messages feed `sender_state` only (§15).
+> 9. Chronological per-sender processing so graduation thresholds
+>    (`≥3 msgs, ≥80% spam`) compute correctly against history.
+> 10. MMS: out of scope (SMS-only via existing `getAllMessages()`).
+> 11. Graduation: `MIXED → SPAM` only when `!protectFromSpam &&
+>     spamCount≥3 && total≥3 && ratio≥0.8` (§15 policy).
+> 12. Cancel between senders: partial progress persists, `Cancelled`
+>     status emitted.
+
+**Gate:** `./gradlew :core:data:testDebugUnitTest` green with new
+backfill tests; on device: scan completes, conversations that were spam
+in history now appear in Spam & Blocked, known contacts stay in inbox,
+progress notification shows and dismisses.
+
+- [x] **12.1 Batch DAO methods (`core:database`)** — Add to
+  `MessageVerdictDao` / `SenderStateDao` interfaces + both `Sqlite*`
+  and `InMemory*` impls:
+  - `getAllMessageIds(): Set<Long>` — one query, no per-row DB call
+    during skip check.
+  - `insertAll(entities: List<MessageVerdictEntity>)` — single
+    `beginTransaction`, bulk insert, one `readAllSync()` + one flow
+    emission at end (kills the current O(n²) per-row emission).
+  - `getAll(): List<SenderStateEntity>` — snapshot for backfill preload.
+  - `upsertAll(entities: List<SenderStateEntity>)` — same
+    transaction + single emission pattern.
+  *Verify:* `:core:database:testDebugUnitTest` green; new test:
+  `insertAll_emits_once`, `upsertAll_emits_once`.
+
+- [x] **12.2 Batch outbound query (`core:telephony`)** — Add
+  `getOutboundSenderAddresses(): Set<String>` to
+  `TelephonyDataSource` interface. `RealTelephonyDataSource`:
+  single `SELECT DISTINCT address FROM sms WHERE type = 2` (SENT)
+  query. Replaces N per-thread `hasOutboundMessages` IPC calls during
+  backfill. `FakeTelephonyDataSource`: add mutable `outboundAddresses`
+  backing set + method.
+  *Verify:* `:core:telephony:testDebugUnitTest` green; fake test
+  seeded outbound set returns correct addresses.
+
+- [x] **12.3 Shared writer + backfill use case (`core:data`)** —
+  New files:
+  - `SpamStateWriter.kt` — `class SpamStateWriter(private val
+    senderStateDao: SenderStateDao)` with a `Mutex` and
+    `suspend fun upsertIfNotOverridden(normalizedAddress, compute):
+    SenderStateEntity?` — under lock: re-reads current state, returns
+    null if `isUserOverride`, else `compute(current)` + upsert.
+  - `SpamBackfillUseCase.kt` —
+    `class SpamBackfillUseCase(telephony, classifier, db, context,
+    spamStateWriter, isSpamProtectionEnabled)`:
+    - `val status: StateFlow<BackfillStatus>`
+    - `fun ensureStarted()` — AtomicBoolean guard, launches on
+      internal `CoroutineScope(SupervisorJob() + Dispatchers.IO)`.
+    - `fun cancel()` — sets cancel flag, checked between senders.
+    - `private suspend fun run()`:
+      1. `telephony.getAllMessages()` filtered
+         `type == INBOX` (snapshot, DATE ASC).
+      2. `db.messageVerdictDao.getAllMessageIds()` → Set (skip).
+      3. `telephony.getOutboundSenderAddresses()` → Set (protect).
+      4. `db.senderStateDao.getAll()` → Map (seed policy).
+      5. `db.blocklistDao` addresses + contact set (if READ_CONTACTS).
+      6. Group by normalized address (PhoneNumberNormalizer or
+         fallback uppercase).
+      7. Per sender, chronological: for each message → classify
+         (8s timeout, null → skip) → build PolicyInput from
+         preloaded sets → `ThreadSpamPolicy.decideWithAddress` →
+         spam-protection toggle check → `spamStateWriter
+         .upsertIfNotOverridden` (re-checks isUserOverride under
+         lock) → collect MessageVerdictEntity (only if message
+         date ≥ now − 30d) → batch `insertAll` per sender.
+      8. Emit `Running(processed, total)` after each sender.
+      9. On completion: `Done`. On exception: `Failed`. On cancel:
+         `Cancelled`. Partial progress persists.
+    - **No provider writes, no READ updates, no notifications.**
+  - Refactor `SmsIngressUseCase.handle`: extract sender-state writes
+    through `spamStateWriter` (behavior unchanged, just serialized).
+    `SpamRepository.markSender{Not}Spam` and
+    `markMessage{Not}Spam` also routed through the writer.
+  *Verify:* new `SpamBackfillUseCaseTest` (see 12.7). Existing
+  `SmsIngressUseCase` tests unchanged (shared writer is drop-in).
+
+- [x] **12.4 Notification channel + `:app` wiring** —
+  - `core:notifications/NotificationHelper.kt`: add
+    `CHANNEL_ID_BACKFILL = "backfill"` (low importance, cancelable),
+    register in `createChannels()`.
+  - `:app/NoSpamApplication.kt`: launch
+    `BackfillProgressNotifier` coroutine in `onCreate` that collects
+    `container.spamBackfill.status` and posts/cancels an ongoing
+    progress notification with cancel action via
+    `NotificationCompat.Builder(context, CHANNEL_ID_BACKFILL)`.
+    Cancel action → `PendingIntent.getBroadcast` → new
+    `BackfillCancelReceiver` (BroadcastReceiver in `:app`, exported
+    false, calls `container.spamBackfill.cancel()`).
+    On API 33+: if `POST_NOTIFICATIONS` not granted → silently skip
+    notification (in-app banner is the fallback).
+  - `app/AndroidManifest.xml`: register `BackfillCancelReceiver`
+    with `exported=false`.
+  - `AppContainer.kt`: add `spamBackfill: SpamBackfillUseCase by
+    lazy { ... }` wired with telephony/classifier/db/context +
+    `spamStateWriter` + `isSpamProtectionEnabled` lambda.
+  *Verify:* `:app:compileDebugKotlin` green; notification appears on
+  scan start, dismisses on completion; cancel tap stops scan.
+
+- [x] **12.5 In-app progress banner (`feature:conversations`)** —
+  - `ConversationsViewModel`: add optional constructor param
+    `backfillStatus: StateFlow<BackfillStatus>? = null` +
+    `onCancelBackfill: () -> Unit = {}`. Expose
+    `backfillProgress: BackfillProgress?` in `ConversationsUiState`
+    (data class with `processed: Int`, `total: Int`).
+  - `ConversationsScreen`: insert a slim `Surface` banner above the
+    `LazyColumn` when `backfillProgress != null` —
+    `CircularProgressIndicator`, "Scanning $processed/$total
+    messages", Cancel `TextButton`. Scoped to inbox only.
+  - `NoSpamNavHost`: pass `container.spamBackfill.status` and
+    `container.spamBackfill::cancel` to the hoisted
+    `ConversationsViewModel`.
+  *Verify:* banner visible during scan, dismisses on done; cancel
+  works; list re-renders live as senders move to Spam.
+
+- [x] **12.6 Manual rescan (`feature:settings`)** —
+  `SettingsScreen`: add "Scan existing messages" row. Pass
+  `onRescanMessages: () -> Unit` from `NoSpamNavHost` →
+  `container.spamBackfill::ensureStarted`. If scan already running,
+  guard prevents double-start.
+  *Verify:* tap in Settings kicks off scan; tap while running is
+  no-op.
+
+- [x] **12.7 Unit tests (`core:data`)** — `SpamBackfillUseCaseTest`
+  using `NoSpamDatabase.inMemory()` + `FakeTelephonyDataSource` +
+  `FakeSpamClassifier`:
+  - `contact_sender_never_auto_spam` — many spam msgs → MIXED.
+  - `override_not_overwritten` — user marks not-spam mid-scan →
+    scan skips.
+  - `sticky_spam_not_rescued` — SPAM sender stays SPAM even with
+    later ham.
+  - `resume_idempotent` — pre-inserted verdict IDs skipped, no
+    double count.
+  - `concurrent_ingress` — run ingress + backfill on alternate
+    dispatchers → override preserved.
+  - `retention_window` — old msgs get sender_state but no
+    message_verdict row.
+  - `toggle_off_forces_clean` — spam-protection OFF → CLEAN.
+  - `security_exception_aborts` — permission revoked → Failed status.
+  - `cancellation_between_senders` — partial progress, Cancelled.
+  - `chronological_graduation` — MIXED → SPAM at ≥3 msgs, ≥0.8
+    ratio, correctly ordered.
+  Also update `FakeTelephonyDataSource` with `outboundAddresses`.
+  *Verify:* `:core:data:testDebugUnitTest` green (all existing +
+  new).
+
+- [x] **12.8 Full verification** —
+  `./gradlew :core:data:testDebugUnitTest
+  :feature:conversations:testDebugUnitTest :app:compileDebugKotlin`
+  green. On device: grant permissions → scan runs → known spam in
+  history appears in Spam & Blocked; known contacts stay in inbox;
+  progress notification shows with cancel; in-app banner shows with
+  cancel; scan completes and both dismiss; Settings rescan works.
+
+---
+
 ## Deferred (Not in v1)
 - `build-logic` convention plugins (add at 8+ modules when duplication justifies).
 - Baseline profiles / macrobenchmark.
