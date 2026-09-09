@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mldebug_title">آزمایش طبقه‌بند</string>
+    <string name="mldebug_description">متن پیام را وارد کنید و طبقه‌بند هرزنامهٔ روی دستگاه را اجرا کنید تا کل مسیر را ببینید: نرمال‌سازی، انگرم‌ها، امتیاز و نتیجه.</string>
+    <string name="mldebug_hint">متن پیام…</string>
+    <string name="mldebug_run">اجرای طبقه‌بند</string>
+    <string name="mldebug_running">در حال طبقه‌بندی…</string>
+    <string name="mldebug_label_spam">هرزنامه</string>
+    <string name="mldebug_label_ham">عادی</string>
+    <string name="mldebug_score">امتیاز: %1$s</string>
+    <string name="mldebug_normalized">متن نرمال‌سازی‌شده</string>
+    <string name="mldebug_ngrams">انگرم‌ها</string>
+    <string name="mldebug_error_unavailable">طبقه‌بند در دسترس نیست.</string>
+    <string name="mldebug_error_failed">طبقه‌بندی ناموفق بود.</string>
+</resources>

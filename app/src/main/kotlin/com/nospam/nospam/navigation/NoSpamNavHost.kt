@@ -40,6 +40,8 @@ import com.nospam.nospam.feature.conversations.SpamScreen
 import com.nospam.nospam.feature.conversations.SpamViewModel
 import com.nospam.nospam.feature.export.ExportScreen
 import com.nospam.nospam.feature.export.ExportViewModel
+import com.nospam.nospam.feature.mldebug.MlDebugScreen
+import com.nospam.nospam.feature.mldebug.MlDebugViewModel
 import com.nospam.nospam.feature.onboarding.OnboardingScreen
 import com.nospam.nospam.feature.settings.SettingsScreen
 import com.nospam.nospam.feature.thread.NewConversationScreen
@@ -54,6 +56,7 @@ import kotlinx.serialization.Serializable
 @Serializable object OnboardingRoute
 @Serializable object NewConversationRoute
 @Serializable object ExportRoute
+@Serializable object MlDebugRoute
 @Serializable data class ThreadRoute(val threadId: Long, val address: String? = null)
 
 private inline fun <reified VM : ViewModel> vmFactory(crossinline create: () -> VM) =
@@ -194,6 +197,14 @@ fun NoSpamNavHost(
                 }
             )
             ExportScreen(viewModel = vm)
+        }
+        composable<MlDebugRoute> {
+            val vm: MlDebugViewModel = viewModel(
+                factory = vmFactory {
+                    container?.let { MlDebugViewModel(it.classifier) } ?: MlDebugViewModel()
+                }
+            )
+            MlDebugScreen(viewModel = vm)
         }
         composable<SettingsRoute> {
             SettingsScreen(onRescan = { container?.spamBackfill?.ensureStarted() })

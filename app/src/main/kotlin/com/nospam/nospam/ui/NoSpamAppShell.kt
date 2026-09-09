@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Warning
@@ -32,6 +33,7 @@ import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.navigation.ArchivedRoute
 import com.nospam.nospam.navigation.ConversationsRoute
 import com.nospam.nospam.navigation.ExportRoute
+import com.nospam.nospam.navigation.MlDebugRoute
 import com.nospam.nospam.navigation.NoSpamNavHost
 import com.nospam.nospam.navigation.SettingsRoute
 import com.nospam.nospam.navigation.SpamRoute
@@ -87,6 +89,15 @@ fun NoSpamAppShell() {
                             navController.navigate(ExportRoute) { launchSingleTop = true }
                         },
                         icon = { Icon(Icons.Filled.Upload, null) }
+                    )
+                    NavigationDrawerItem(
+                        label = { Text(stringResource(R.string.drawer_mldebug)) },
+                        selected = currentRoute?.contains("MlDebug") == true,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(MlDebugRoute) { launchSingleTop = true }
+                        },
+                        icon = { Icon(Icons.Filled.Science, null) }
                     )
                     androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     NavigationDrawerItem(

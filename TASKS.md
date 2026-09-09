@@ -589,6 +589,67 @@ progress notification shows and dismisses.
 
 ---
 
+## Phase 13 — ML classifier test screen (`feature:mldebug`)
+
+A debug/QA tool exposed from the side drawer: paste a message, run the
+on-device classifier, and inspect the full pipeline (normalized text →
+n-grams → score → verdict). All implementation lives in a **new**
+`feature:mldebug` module; existing modules are touched only for module
+registration and the drawer entry (no behavior change anywhere).
+
+**Gate:** `./gradlew :feature:mldebug:testDebugUnitTest
+:feature:mldebug:compileDebugKotlin :app:assembleDebug` green. (Full
+`./gradlew build` remains blocked by pre-existing `feature:export` lint
+`ExportScreen.kt:214` — unrelated.)
+
+- [x] **13.1 New module `feature:mldebug`** — Create
+  `feature/mldebug/build.gradle.kts` (namespace
+  `com.nospam.nospam.feature.mldebug`; deps `core:designsystem`,
+  `core:model`, `core:common`, `core:ml` + Compose/M3 +
+  `lifecycle-viewmodel-compose` + junit/coroutines-test). Register
+  `":feature:mldebug"` in `settings.gradle.kts` and
+  `implementation(project(":feature:mldebug"))` in `app/build.gradle.kts`.
+  *Verify:* `:feature:mldebug:compileDebugKotlin` green.
+
+- [x] **13.2 `MlDebugViewModel`** — `class MlDebugViewModel(private val
+  classifier: SpamClassifier? = null)` exposing immutable
+  `StateFlow<MlDebugUiState>`. `MlDebugUiState(input, isClassifying,
+  result: MlResult?, error: MlDebugError?)`. `onInputChanged(text)`
+  resets result/error. `classify()` launches on `Dispatchers.Default`,
+  calls `classifier.classifyText` and builds the pipeline trace via
+  `TfidfPreprocessor.preprocess` + `getCharWbNgrams`: `MlResult(input,
+  normalized, ngramCount, score, isSpam)`. Null classifier or exception
+  → localized error enum (no Android `Context` in the VM). No provider /
+  DB / settings access.
+  *Verify:* `MlDebugViewModelTest` with a local `SpamClassifier` fake.
+
+- [x] **13.3 `MlDebugScreen`** — `OutlinedTextField` (multiline,
+  rounded per design tokens) + Button "Run classifier" (disabled while
+  classifying / when input blank; inline `CircularProgressIndicator`
+  while running, like `ExportScreen`). Result `Card`
+  (`surfaceContainerLow`): verdict chip (SPAM → `errorContainer`,
+  HAM → `secondaryContainer`), score (`%.4f`), normalized text, ngram
+  count. Error card on failure. `NoSpamTheme`; en / fa / dark previews.
+  All strings in module `res/values` + `res/values-fa` (§10 owns its own
+  strings).
+  *Verify:* previews render; compile green.
+
+- [x] **13.4 Navigation + drawer entry** — `@Serializable object
+  MlDebugRoute` in `app/.../navigation/NoSpamNavHost.kt`;
+  `composable<MlDebugRoute>` factory injects `container.classifier` into
+  `MlDebugViewModel` (`?: MlDebugViewModel()` fallback for previews).
+  `NavigationDrawerItem` in `app/.../ui/NoSpamAppShell.kt` after
+  "Export SMS" (icon `Icons.Filled.Science`) navigating with
+  `launchSingleTop`; add `drawer_ml_test` to app `values` + `values-fa`.
+  *Verify:* `:app:assembleDebug` green; drawer entry opens the screen.
+
+- [ ] **13.5 Verification** — `./gradlew
+  :feature:mldebug:testDebugUnitTest :feature:mldebug:compileDebugKotlin
+  :app:assembleDebug` all green; smoke: paste a known spam text → SPAM +
+  score; a ham text → HAM; dashboard shows normalized text + ngram count.
+
+---
+
 ## Deferred (Not in v1)
 - `build-logic` convention plugins (add at 8+ modules when duplication justifies).
 - Baseline profiles / macrobenchmark.
