@@ -22,6 +22,7 @@ data class ExportUiState(
     val exportedCount: Int = 0,
     val error: String? = null,
     val successFile: String? = null,
+    val includeLabels: Boolean = true,
 )
 
 private val exportJson = Json { explicitNulls = true; encodeDefaults = true }
@@ -94,6 +95,10 @@ class ExportViewModel(
 
     fun clearStatus() {
         _uiState.value = _uiState.value.copy(error = null, successFile = null)
+    }
+
+    fun onToggleIncludeLabels(include: Boolean) {
+        _uiState.value = _uiState.value.copy(includeLabels = include)
     }
 
     fun export(context: Context, uri: Uri) {

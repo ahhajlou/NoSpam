@@ -11,5 +11,7 @@
     <string name="export_permission_required">برای خروجی گرفتن، مجوز پیامک لازم است</string>
     <string name="export_count">%1$d پیام</string>
     <string name="export_hwid_label">شناسه سخت‌افزار</string>
+    <string name="export_include_labels">شامل برچسب هرزنامه/عادی باشد</string>
+    <string name="export_include_labels_desc">برای هر پیام، برچسب هرزنامه/عادی را از طبقه‌بند روی دستگاه اضافه می‌کند.</string>
     <string name="export_file_hint">sms_export.jsonl</string>
 </resources>

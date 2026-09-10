@@ -11,5 +11,7 @@
     <string name="export_permission_required">SMS permission is required to export messages</string>
     <string name="export_count">%1$d messages</string>
     <string name="export_hwid_label">Hardware ID</string>
+    <string name="export_include_labels">Include spam/ham labels</string>
+    <string name="export_include_labels_desc">Adds a spam/ham label to each message from on-device classification.</string>
     <string name="export_file_hint">sms_export.jsonl</string>
 </resources>
