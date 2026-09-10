@@ -1,0 +1,96 @@
+name: Build Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version_name: ${{ steps.metadata.outputs.version_name }}
+      version_code: ${{ steps.metadata.outputs.version_code }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Assemble release + debug APKs
+        run: ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
+
+      - name: Read build metadata
+        id: metadata
+        run: |
+          META=app/build/outputs/apk/release/output-metadata.json
+          VERSION_NAME=$(jq -r '.elements[] | select(.filters | length == 0) | .versionName' "$META")
+          VERSION_CODE=$(jq -r '.elements[] | select(.filters | length == 0) | .versionCode' "$META")
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "--- Built APKs ---"
+          find app/build/outputs/apk -name '*.apk' -printf '%p\n'
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # only this job needs write access
+
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+          path: release-apk
+
+      - name: Verify tag matches build version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          BUILD_VERSION="${{ needs.build.outputs.version_name }}"
+          BUILD_VERSION="${BUILD_VERSION#v}"
+          if [ "$TAG_VERSION" != "$BUILD_VERSION" ]; then
+            echo "::error::Git tag ($TAG_VERSION) doesn't match app version ($BUILD_VERSION)"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3.0.2
+        with:
+          files: release-apk/*.apk
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.build.outputs.version_name, 'alpha') || contains(needs.build.outputs.version_name, 'beta') || contains(needs.build.outputs.version_name, 'rc') }}

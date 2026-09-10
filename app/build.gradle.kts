@@ -4,6 +4,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+val appVersionName = "v0.1.0-alpha.2"
+
+base {
+    archivesName = "NoSpam-$appVersionName"
+}
+
 android {
     namespace = "com.nospam.nospam"
     compileSdk {
@@ -15,7 +21,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 2
-        versionName = "v0.1.0-alpha.2"
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -30,6 +36,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = true
         }
     }
     compileOptions {
