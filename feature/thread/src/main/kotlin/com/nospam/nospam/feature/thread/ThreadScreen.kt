@@ -152,16 +152,16 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                         }
                     }
                 }
-                // Backward-pagination sentinel at the oldest end: loads the next
-                // older page when it comes into view (reverseLayout => last slot).
-                if (uiState.hasMoreOlder || uiState.loadingOlder) {
-                    item(key = "load-older") {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(if (uiState.loadingOlder) 40.dp else 1.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (uiState.loadingOlder) CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        }
+            }
+            // Backward-pagination sentinel at the oldest end: loads the next
+            // older page when it comes into view (reverseLayout => last slot).
+            if (uiState.hasMoreOlder || uiState.loadingOlder) {
+                item(key = "load-older") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(if (uiState.loadingOlder) 40.dp else 1.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (uiState.loadingOlder) CircularProgressIndicator(modifier = Modifier.size(20.dp))
                     }
                 }
             }
