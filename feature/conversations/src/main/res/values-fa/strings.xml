@@ -31,4 +31,7 @@
     <string name="menu_block">مسدود کردن</string>
     <string name="menu_unblock">رفع مسدودیت</string>
     <string name="menu_delete">حذف</string>
+    <string name="backfill_scanning">در حال بررسی پیام‌های قدیمی برای هرزنامه</string>
+    <string name="backfill_count">%1$d از %2$d پیام بررسی شد</string>
+    <string name="backfill_cancel">لغو</string>
 </resources>

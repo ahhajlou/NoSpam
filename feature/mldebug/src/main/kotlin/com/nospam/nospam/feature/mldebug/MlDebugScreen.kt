@@ -1,5 +1,6 @@
 package com.nospam.nospam.feature.mldebug
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -196,6 +197,7 @@ private fun TraceRow(label: String, value: String) {
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "ML Debug Light")
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "ML Debug Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "ML Debug RTL", locale = "fa")
+@SuppressLint("ViewModelConstructorInComposable")
 @Composable
 private fun MlDebugScreenPreview() {
     NoSpamTheme {

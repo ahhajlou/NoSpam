@@ -1,9 +1,11 @@
 package com.nospam.nospam.feature.mldebug
 
+import com.nospam.nospam.core.ml.HazmNormalizer
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.SpamLabel
 import com.nospam.nospam.core.model.SpamVerdict
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -43,7 +45,10 @@ class MlDebugViewModelTest {
 
     @Test
     fun `classify populates full pipeline trace`() = runTest(dispatcher) {
-        val vm = MlDebugViewModel(TestClassifier { SpamVerdict(SpamLabel.SPAM, 1.5) }, dispatcher)
+        // Real hazm resources from the sibling core:ml module (test working dir is
+        // the feature module dir, so ../../core/ml resolves from this module).
+        val normalizer = HazmNormalizer.fromFiles(File("../../core/ml/src/main/assets"))
+        val vm = MlDebugViewModel(TestClassifier { SpamVerdict(SpamLabel.SPAM, 1.5) }, dispatcher, normalizer)
         vm.onInputChanged("You won! Claim your https://example.com prize now")
         advanceUntilIdle()
 
@@ -55,7 +60,7 @@ class MlDebugViewModelTest {
         assertNull(state.error)
         val result = checkNotNull(state.result)
         assertEquals("You won! Claim your https://example.com prize now", result.input)
-        // URL tokenized, digits normalized by the preprocessor
+        // URL tokenized, digits normalized by the hazm preprocessor
         assertTrue("URLTOKEN" in result.normalized)
         assertEquals(1.5, result.score, 0.0)
         assertTrue(result.isSpam)

@@ -39,4 +39,6 @@
     <string name="about_version">اطلاعات نسخه</string>
     <string name="about_terms">شرایط خدمات</string>
     <string name="terms_text">شرایط خدمات برای این نسخه هنوز منتشر نشده است.</string>
+    <string name="scan_title">بررسی پیام‌های قدیمی</string>
+    <string name="scan_sub">بررسی دوباره گفت‌وگوهای موجود برای هرزنامه</string>
 </resources>
