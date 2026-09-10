@@ -30,11 +30,13 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
@@ -60,7 +63,7 @@ fun ConversationsScreen(
     onNewMessage: () -> Unit = {},
     onToggleRead: (Long, Boolean) -> Unit = { _, _ -> },
     onArchive: (Long) -> Unit = {},
-    onReportSpam: (Long) -> Unit = {},
+    onReportSpam: (Long, String) -> Unit = { _, _ -> },
     onBlock: (String) -> Unit = {},
     onDelete: (Long) -> Unit = {},
     onToggleStar: (Long) -> Unit = viewModel::toggleStar,
@@ -95,6 +98,40 @@ fun ConversationsScreen(
                             Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
                             Spacer(Modifier.width(8.dp))
                             Text("Not default SMS app — some features disabled", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
+                }
+                val backfill = uiState.backfillProgress
+                if (backfill is BackfillStatus.Running) {
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .padding(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(R.string.backfill_scanning),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        stringResource(R.string.backfill_count, backfill.processed, backfill.total),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                                TextButton(onClick = viewModel::cancelBackfill) {
+                                    Text(stringResource(R.string.backfill_cancel))
+                                }
+                            }
+                            val fraction = if (backfill.total == 0) 0f else backfill.processed.toFloat() / backfill.total
+                            LinearProgressIndicator(
+                                progress = { fraction },
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            )
                         }
                     }
                 }
@@ -190,7 +227,7 @@ fun ConversationsScreen(
                     address = address,
                     onToggleRead = { onToggleRead(conv.threadId.value, !conv.read) },
                     onArchive = { onArchive(conv.threadId.value) },
-                    onReportSpam = { onReportSpam(conv.threadId.value) },
+                    onReportSpam = { onReportSpam(conv.threadId.value, address ?: "") },
                     onBlock = { address?.let(onBlock) },
                     onDelete = { onDelete(conv.threadId.value) },
                     onToggleStar = { onToggleStar(conv.threadId.value) },
@@ -498,7 +535,7 @@ fun ArchivedScreen(
 fun SpamScreen(
     viewModel: SpamViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
-    onNotSpam: (Long) -> Unit = {},
+    onNotSpam: (Long, String) -> Unit = { _, _ -> },
     onBlock: (String) -> Unit = {},
     onDelete: (Long) -> Unit = {},
 ) {
@@ -523,7 +560,7 @@ fun SpamScreen(
         if (isLive) dismissed = dismissed + conv.threadId.value
         else fakeSpamList = fakeSpamList.filterNot { it.threadId == conv.threadId }
         showNotSpamSnack = message
-        onNotSpam(conv.threadId.value)
+        onNotSpam(conv.threadId.value, conv.participants.firstOrNull()?.address.orEmpty())
     }
     val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }

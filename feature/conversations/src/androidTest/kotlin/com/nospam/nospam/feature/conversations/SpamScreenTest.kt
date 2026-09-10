@@ -21,12 +21,12 @@ class SpamScreenTest {
     }
 
     @Test fun `not_spam_removes_row_and_reports_id`() {
-        val reported = mutableListOf<Long>()
-        rule.setContent { SpamScreen(onNotSpam = { reported.add(it) }) }
+        val reported = mutableListOf<Pair<Long, String>>()
+        rule.setContent { SpamScreen(onNotSpam = { id, addr -> reported.add(id to addr) }) }
         assertEquals(3, rule.onAllNodesWithText("Not spam").fetchSemanticsNodes().size)
         rule.onAllNodesWithText("Not spam")[0].performClick()
         rule.waitForIdle()
-        assertEquals(listOf(201L), reported)
+        assertEquals(listOf(201L to "Win A Free Cruise!"), reported)
         assertEquals(2, rule.onAllNodesWithText("Not spam").fetchSemanticsNodes().size)
     }
 

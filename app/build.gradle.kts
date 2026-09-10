@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val appVersionName = "v0.1.0-alpha.2"
+val appVersionName = "v0.1.0-alpha.3"
 
 base {
     archivesName = "NoSpam-$appVersionName"
@@ -20,7 +20,7 @@ android {
         applicationId = "com.nospam.nospam"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
+        versionCode = 3
         versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -80,6 +80,7 @@ dependencies {
     implementation(project(":feature:settings"))
     implementation(project(":feature:onboarding"))
     implementation(project(":feature:export"))
+    implementation(project(":feature:mldebug"))
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

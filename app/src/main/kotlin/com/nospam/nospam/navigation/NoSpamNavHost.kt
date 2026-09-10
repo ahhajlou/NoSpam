@@ -40,8 +40,11 @@ import com.nospam.nospam.feature.conversations.SpamScreen
 import com.nospam.nospam.feature.conversations.SpamViewModel
 import com.nospam.nospam.feature.export.ExportScreen
 import com.nospam.nospam.feature.export.ExportViewModel
+import com.nospam.nospam.feature.mldebug.MlDebugScreen
+import com.nospam.nospam.feature.mldebug.MlDebugViewModel
 import com.nospam.nospam.feature.onboarding.OnboardingScreen
 import com.nospam.nospam.feature.settings.SettingsScreen
+import com.nospam.nospam.feature.settings.SpamPreferences
 import com.nospam.nospam.feature.thread.NewConversationScreen
 import com.nospam.nospam.feature.thread.ThreadScreen
 import com.nospam.nospam.feature.thread.ThreadViewModel
@@ -54,6 +57,7 @@ import kotlinx.serialization.Serializable
 @Serializable object OnboardingRoute
 @Serializable object NewConversationRoute
 @Serializable object ExportRoute
+@Serializable object MlDebugRoute
 @Serializable data class ThreadRoute(val threadId: Long, val address: String? = null)
 
 private inline fun <reified VM : ViewModel> vmFactory(crossinline create: () -> VM) =
@@ -114,8 +118,13 @@ fun NoSpamNavHost(
     // so the composable reuses the same StateFlow and replays instantly.
     val conversationsVm: ConversationsViewModel = viewModel(
         factory = vmFactory {
-            container?.let { ConversationsViewModel(it.conversationsRepository) }
-                ?: ConversationsViewModel()
+            container?.let {
+                ConversationsViewModel(
+                    it.conversationsRepository,
+                    backfillStatus = it.spamBackfill.status,
+                    onCancelBackfill = { it.spamBackfill.cancel() },
+                )
+            } ?: ConversationsViewModel()
         }
     )
     val archivedVm: ArchivedViewModel? = container?.let {
@@ -138,8 +147,8 @@ fun NoSpamNavHost(
                 onArchive = { id ->
                     scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }
                 },
-                onReportSpam = { id ->
-                    scope.launch { container?.spamRepository?.markSpam(ThreadId(id)) }
+                onReportSpam = { id, address ->
+                    scope.launch { container?.spamRepository?.markSpam(ThreadId(id), address) }
                 },
                 onBlock = { address ->
                     scope.launch { container?.blocklistRepository?.block(address) }
@@ -167,9 +176,9 @@ fun NoSpamNavHost(
             SpamScreen(
                 viewModel = spamVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
-                onNotSpam = { id ->
+                onNotSpam = { id, address ->
                     scope.launch {
-                        container?.spamRepository?.markNotSpam(ThreadId(id))
+                        container?.spamRepository?.markNotSpam(ThreadId(id), address)
                     }
                 },
                 onBlock = { address ->
@@ -190,10 +199,25 @@ fun NoSpamNavHost(
             )
             ExportScreen(viewModel = vm)
         }
-        composable<SettingsRoute> { SettingsScreen() }
+        composable<MlDebugRoute> {
+            val vm: MlDebugViewModel = viewModel(
+                factory = vmFactory {
+                    container?.let { MlDebugViewModel(it.classifier) } ?: MlDebugViewModel()
+                }
+            )
+            MlDebugScreen(viewModel = vm)
+        }
+        composable<SettingsRoute> {
+            SettingsScreen(onRecheck = { container?.spamBackfill?.rescanAll() })
+        }
         composable<OnboardingRoute> {
+            val scope = rememberCoroutineScope()
             OnboardingScreen(
                 onComplete = {
+                    scope.launch {
+                        SpamPreferences.setBackfillPending(context, true)
+                        container?.spamBackfill?.ensureStarted()
+                    }
                     navController.navigate(ConversationsRoute) {
                         popUpTo(OnboardingRoute) { inclusive = true }
                     }

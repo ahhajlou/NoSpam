@@ -1,6 +1,7 @@
 package com.nospam.nospam.feature.export
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -208,6 +209,7 @@ fun ExportScreen(
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Export Light")
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Export Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Export RTL", locale = "fa")
+@SuppressLint("ViewModelConstructorInComposable")
 @Composable
 private fun ExportScreenPreview() {
     com.nospam.nospam.core.designsystem.theme.NoSpamTheme {

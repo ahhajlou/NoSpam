@@ -24,6 +24,9 @@
     <string name="default_sms_off">Tap to set as default</string>
     <string name="spam_title">Spam protection</string>
     <string name="spam_sub">Filter spam, scams and phishing on this device</string>
+    <string name="scan_title">Re-check all messages</string>
+    <string name="scan_sub">Re-scan every SMS with the current spam filter. Manual spam decisions are kept.</string>
+    <string name="recheck_started">Re-check started in the background</string>
     <string name="data_title">Your data in Messages</string>
     <string name="data_sub">Kept on this device</string>
     <string name="data_text">Messages stay in the system SMS store. NoSpam only keeps blocklist entries and spam corrections on this device. Nothing is uploaded.</string>

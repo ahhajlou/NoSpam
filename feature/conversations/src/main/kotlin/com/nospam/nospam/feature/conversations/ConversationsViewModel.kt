@@ -2,6 +2,7 @@ package com.nospam.nospam.feature.conversations
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.data.ConversationsRepository
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
@@ -26,7 +27,9 @@ data class ConversationsUiState(
     val filter: ConversationFilter = ConversationFilter.ALL,
     val searchQuery: String = "",
     val isSearchFocused: Boolean = false,
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    /** Non-null while a one-time history scan is running or just finished. */
+    val backfillProgress: BackfillStatus? = null,
 )
 
 /**
@@ -36,6 +39,9 @@ data class ConversationsUiState(
  */
 class ConversationsViewModel(
     private val repository: ConversationsRepository? = null,
+    /** Live scan status when a container provides one; null for tests/previews. */
+    private val backfillStatus: StateFlow<BackfillStatus?>? = null,
+    private val onCancelBackfill: () -> Unit = {},
 ) : ViewModel() {
     private val _filter = MutableStateFlow(ConversationFilter.ALL)
     private val _searchQuery = MutableStateFlow("")
@@ -76,7 +82,7 @@ class ConversationsViewModel(
                 emit(if (q.isBlank()) emptySet() else runCatching { repo.searchBodyMatch(q) }.getOrDefault(emptySet()))
             }
         }
-        combine(
+        val baseState = combine(
             _filter.flatMapLatest { repo.observeConversations(it) },
             _filter,
             _searchQuery,
@@ -93,7 +99,12 @@ class ConversationsViewModel(
                 isSearchFocused = focused,
                 isLoading = false
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationsUiState())
+        }
+        combine(
+            baseState,
+            backfillStatus ?: MutableStateFlow<BackfillStatus?>(null),
+        ) { ui, backfill -> ui.copy(backfillProgress = backfill) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationsUiState())
     }
 
     val uiState: StateFlow<ConversationsUiState> = _realState ?: _fakeState.asStateFlow()
@@ -114,6 +125,10 @@ class ConversationsViewModel(
     fun onSearchFocusChanged(focused: Boolean) {
         _isSearchFocused.value = focused
         _fakeState.value = _fakeState.value.copy(isSearchFocused = focused)
+    }
+
+    fun cancelBackfill() {
+        onCancelBackfill()
     }
 
     fun toggleStar(threadId: Long) {

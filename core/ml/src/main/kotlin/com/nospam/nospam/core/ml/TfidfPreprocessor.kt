@@ -1,33 +1,31 @@
 package com.nospam.nospam.core.ml
 
+/**
+ * Character n-gram feature builder matching sklearn's
+ * `CountVectorizer(analyzer="char_wb")` exactly (sklearn 1.9.0): normalize runs
+ * of whitespace, split on whitespace, pad each word with one space on each side,
+ * then for each n in [minN, maxN] slide a window across the padded word — a
+ * short word (< n chars after padding) contributes a single whole-substring
+ * window and stops the n-loop, exactly like the Python loop.
+ */
 object TfidfPreprocessor {
-    private val urlRegex = Regex("""(?:https?://[^\s]+)|(?:www\.[^\s]+)|(?:\b[a-zA-Z0-9][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)+(?:/[^\s]*)?)""")
-    private val digitsRegex = Regex("""\d+""")
-    private val diacriticsRegex = Regex("""[\u064B-\u065F\u0670]""")
-    private val whitespaceRegex = Regex("""\s+""")
 
-    fun preprocess(text: String): String {
-        var t = text
-        t = t.replace(urlRegex, " URLTOKEN ")
-        t = t.replace(digitsRegex, " NUM_TOKEN ")
-        t = t.replace("ي", "ی").replace("ك", "ک")
-        // ZWNJ handling: normalize to space for tokenization, preserve for Persian
-        t = t.replace("\u200C", " ") // ZWNJ -> space
-        t = t.replace("\u0640", "") // kashida removal
-        t = t.replace("\u200B", "") // zero-width space
-        t = t.replace(diacriticsRegex, "")
-        return t.trim().replace(whitespaceRegex, " ")
-    }
+    private val whitespaceRegex = Regex("(?u)\\s+")
 
     fun getCharWbNgrams(text: String, minN: Int = 2, maxN: Int = 4): List<String> {
         val ngrams = mutableListOf<String>()
-        val words = text.split(whitespaceRegex).filter { it.isNotEmpty() }
+        val words = whitespaceRegex.split(text).filter { it.isNotEmpty() }
         for (word in words) {
             val padded = " $word "
+            val length = padded.length
             for (n in minN..maxN) {
-                for (i in 0..(padded.length - n)) {
-                    ngrams.add(padded.substring(i, i + n))
+                var offset = 0
+                ngrams.add(padded.substring(0, (offset + n).coerceAtMost(length)))
+                while (offset + n < length) {
+                    offset += 1
+                    ngrams.add(padded.substring(offset, (offset + n).coerceAtMost(length)))
                 }
+                if (offset == 0) break
             }
         }
         return ngrams

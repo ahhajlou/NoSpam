@@ -28,6 +28,7 @@ class SmsIngressUseCase(
     private val db: NoSpamDatabase,
     private val context: android.content.Context? = null,
     private val isSpamProtectionEnabled: suspend () -> Boolean = { true },
+    private val spamStateWriter: SpamStateWriter = SpamStateWriter(db.senderStateDao),
 ) {
     data class Result(
         val threadId: ThreadId,
@@ -67,12 +68,9 @@ class SmsIngressUseCase(
 
         if (isBlocked) {
             if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
-            // Update sender state to BLOCKED
-            val prevBlocked = db.senderStateDao.getByAddress(normalized)
-            if (prevBlocked?.isUserOverride != true) {
-                db.senderStateDao.upsert(
-                    SenderStateEntity(normalized, ThreadSpamState.BLOCKED, isUserOverride = prevBlocked?.isUserOverride ?: false, spamCount = (prevBlocked?.spamCount ?: 0) + 1)
-                )
+            // Update sender state to BLOCKED — protected against user overrides under the writer lock.
+            spamStateWriter.upsertIfNotOverridden(normalized) { current ->
+                SenderStateEntity(normalized, ThreadSpamState.BLOCKED, isUserOverride = current?.isUserOverride ?: false, spamCount = (current?.spamCount ?: 0) + 1)
             }
             if (messageId != null) {
                 db.messageVerdictDao.insert(
@@ -126,17 +124,15 @@ class SmsIngressUseCase(
             notificationDecision = policyOut.notification
             isSpamForResult = verdict.isSpam
 
-            // Upsert SenderState only when not user override (per spec)
-            if (prevStateEntity?.isUserOverride != true) {
-                db.senderStateDao.upsert(
-                    SenderStateEntity(
-                        normalizedAddress = normalized,
-                        state = policyOut.newState.state,
-                        spamCount = policyOut.newState.spamCount,
-                        hamCount = policyOut.newState.hamCount,
-                        isUserOverride = policyOut.newState.isUserOverride,
-                        updatedAt = System.currentTimeMillis(),
-                    )
+            // Upsert SenderState only when not user override — atomic under the writer lock.
+            spamStateWriter.upsertIfNotOverridden(normalized) {
+                SenderStateEntity(
+                    normalizedAddress = normalized,
+                    state = policyOut.newState.state,
+                    spamCount = policyOut.newState.spamCount,
+                    hamCount = policyOut.newState.hamCount,
+                    isUserOverride = policyOut.newState.isUserOverride,
+                    updatedAt = System.currentTimeMillis(),
                 )
             }
 

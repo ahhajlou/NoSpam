@@ -413,6 +413,27 @@ class RealTelephonyDataSource(
         } catch (_: Exception) { false }
     }
 
+    override suspend fun getOutboundSenderAddresses(): Set<String> = withContext(Dispatchers.IO) {
+        try {
+            val addresses = mutableSetOf<String>()
+            context.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms.ADDRESS),
+                "${Telephony.Sms.TYPE} = ?",
+                arrayOf(Telephony.Sms.MESSAGE_TYPE_SENT.toString()),
+                null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    c.getString(0)?.takeIf { it.isNotBlank() }?.let { addresses.add(it) }
+                }
+            }
+            addresses
+        } catch (e: Exception) {
+            Log.w(TAG, "getOutboundSenderAddresses failed", e)
+            emptySet()
+        }
+    }
+
     @Suppress("DEPRECATION")
     @android.annotation.SuppressLint("MissingPermission")
     override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> = withContext(Dispatchers.IO) {

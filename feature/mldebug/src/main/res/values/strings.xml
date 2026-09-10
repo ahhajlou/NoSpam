@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mldebug_title">Classifier test</string>
+    <string name="mldebug_description">Paste a message and run the on-device spam classifier to inspect the full pipeline: normalization, n-grams, score and verdict.</string>
+    <string name="mldebug_hint">Message text…</string>
+    <string name="mldebug_run">Run classifier</string>
+    <string name="mldebug_running">Classifying…</string>
+    <string name="mldebug_label_spam">Spam</string>
+    <string name="mldebug_label_ham">Ham</string>
+    <string name="mldebug_score">Score: %1$s</string>
+    <string name="mldebug_normalized">Normalized text</string>
+    <string name="mldebug_ngrams">N-grams</string>
+    <string name="mldebug_error_unavailable">Classifier is not available.</string>
+    <string name="mldebug_error_failed">Classification failed.</string>
+</resources>

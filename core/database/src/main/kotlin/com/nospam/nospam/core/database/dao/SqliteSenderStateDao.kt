@@ -48,18 +48,37 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
             ) else null
         }
     }
+    override suspend fun getAll(): List<SenderStateEntity> = withContext(Dispatchers.IO) { readAllSync() }
     override suspend fun upsert(entity: SenderStateEntity) { withContext(Dispatchers.IO){
-        val v = android.content.ContentValues().apply {
-            put("normalizedAddress", entity.normalizedAddress)
-            put("state", entity.state.name)
-            put("spamCount", entity.spamCount)
-            put("hamCount", entity.hamCount)
-            put("isUserOverride", if(entity.isUserOverride)1 else 0)
-            put("updatedAt", entity.updatedAt)
-        }
-        helper.writableDatabase.insertWithOnConflict("sender_state", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
+        upsertEntity(entity)
         flow.value = readAllSync()
         initialized.set(true)
     }}
+    override suspend fun upsertAll(entities: List<SenderStateEntity>) { withContext(Dispatchers.IO){
+        if (entities.isEmpty()) return@withContext
+        helper.writableDatabase.beginTransaction()
+        try {
+            entities.forEach { upsertEntity(it) }
+            helper.writableDatabase.setTransactionSuccessful()
+        } finally {
+            helper.writableDatabase.endTransaction()
+        }
+        flow.value = readAllSync()
+        initialized.set(true)
+    }}
+
+    private fun upsertEntity(entity: SenderStateEntity) {
+        val v = senderStateValues(entity)
+        helper.writableDatabase.insertWithOnConflict("sender_state", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    private fun senderStateValues(entity: SenderStateEntity) = android.content.ContentValues().apply {
+        put("normalizedAddress", entity.normalizedAddress)
+        put("state", entity.state.name)
+        put("spamCount", entity.spamCount)
+        put("hamCount", entity.hamCount)
+        put("isUserOverride", if(entity.isUserOverride)1 else 0)
+        put("updatedAt", entity.updatedAt)
+    }
     override suspend fun deleteByAddress(normalizedAddress: String) { withContext(Dispatchers.IO){ helper.writableDatabase.delete("sender_state","normalizedAddress = ?", arrayOf(normalizedAddress)); flow.value = readAllSync() } }
 }

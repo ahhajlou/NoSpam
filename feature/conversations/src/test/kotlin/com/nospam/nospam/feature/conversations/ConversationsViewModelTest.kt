@@ -40,6 +40,7 @@ class ConversationsViewModelTest {
         override suspend fun searchBodyMatch(query: String): Set<Long> = emptySet()
         override suspend fun getActiveSubscriptions(): List<com.nospam.nospam.core.telephony.TelephonyDataSource.SimInfo> = emptyList()
         override suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean = false
+        override suspend fun getOutboundSenderAddresses(): Set<String> = emptySet()
         override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}

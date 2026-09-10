@@ -40,19 +40,45 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
         }
     }
     override suspend fun insert(entity: MessageVerdictEntity) = withContext(Dispatchers.IO) {
-        val v = android.content.ContentValues().apply {
-            put("messageId", entity.messageId)
-            put("threadId", entity.threadId)
-            put("normalizedAddress", entity.normalizedAddress)
-            put("isSpam", if (entity.isSpam) 1 else 0)
-            put("score", entity.score)
-            put("createdAt", entity.createdAt)
-            if (entity.userLabel == null) putNull("userLabel") else put("userLabel", if (entity.userLabel) 1 else 0)
-        }
-        helper.writableDatabase.insertWithOnConflict("message_verdict", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
+        insertEntity(entity)
         flow.value = readAllSync()
         initialized.set(true)
         Unit
+    }
+    override suspend fun insertAll(entities: List<MessageVerdictEntity>) = withContext(Dispatchers.IO) {
+        if (entities.isEmpty()) return@withContext
+        helper.writableDatabase.beginTransaction()
+        try {
+            entities.forEach { insertEntity(it) }
+            helper.writableDatabase.setTransactionSuccessful()
+        } finally {
+            helper.writableDatabase.endTransaction()
+        }
+        flow.value = readAllSync()
+        initialized.set(true)
+    }
+
+    private fun insertEntity(entity: MessageVerdictEntity) {
+        val v = messageVerdictValues(entity)
+        helper.writableDatabase.insertWithOnConflict("message_verdict", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    private fun messageVerdictValues(entity: MessageVerdictEntity) = android.content.ContentValues().apply {
+        put("messageId", entity.messageId)
+        put("threadId", entity.threadId)
+        put("normalizedAddress", entity.normalizedAddress)
+        put("isSpam", if (entity.isSpam) 1 else 0)
+        put("score", entity.score)
+        put("createdAt", entity.createdAt)
+        if (entity.userLabel == null) putNull("userLabel") else put("userLabel", if (entity.userLabel) 1 else 0)
+    }
+
+    override suspend fun getAllMessageIds(): Set<Long> = withContext(Dispatchers.IO) {
+        val ids = mutableSetOf<Long>()
+        helper.readableDatabase.query("message_verdict", arrayOf("messageId"), null, null, null, null, null).use { c ->
+            while (c.moveToNext()) ids.add(c.getLong(0))
+        }
+        ids
     }
     override suspend fun getByMessageId(messageId: Long): MessageVerdictEntity? = withContext(Dispatchers.IO) {
         helper.readableDatabase.query("message_verdict", null, "messageId = ?", arrayOf(messageId.toString()), null, null, null).use { c ->

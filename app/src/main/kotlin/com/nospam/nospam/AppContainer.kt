@@ -4,10 +4,13 @@ import android.content.Context
 import com.nospam.nospam.core.data.BlocklistRepository
 import com.nospam.nospam.core.data.ConversationsRepository
 import com.nospam.nospam.core.data.SmsIngressUseCase
+import com.nospam.nospam.core.data.SpamBackfillUseCase
 import com.nospam.nospam.core.data.SpamRepository
+import com.nospam.nospam.core.data.SpamStateWriter
 import com.nospam.nospam.core.database.NoSpamDatabase
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.ml.TfidfSpamClassifier
+import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import com.nospam.nospam.core.telephony.RealTelephonyDataSource
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 
@@ -32,16 +35,48 @@ class AppContainer(private val context: Context) {
         TfidfSpamClassifier.fromAsset(appContext)
     }
 
-    val spamRepository: SpamRepository by lazy { SpamRepository(database, classifier) }
+    /**
+     * Single-writer gate shared by ingress, backfill and user overrides so the
+     * check-then-write on `sender_state` cannot interleave (CLAUDE.md §15).
+     */
+    val spamStateWriter: SpamStateWriter by lazy { SpamStateWriter(database.senderStateDao) }
+
+    val spamRepository: SpamRepository by lazy { SpamRepository(database, classifier, appContext, spamStateWriter) }
     val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database, appContext) }
     val conversationsRepository: ConversationsRepository by lazy {
-        ConversationsRepository(telephony, database)
+        // Normalize in the same way SmsIngressUseCase/BlocklistRepository key
+        // their rows, so inbox/spam-section lookups agree (§15 single key).
+        ConversationsRepository(
+            telephony,
+            database,
+            normalizer = { PhoneNumberNormalizer.normalize(appContext, it) }
+        )
     }
 
     val smsIngress: SmsIngressUseCase by lazy {
         SmsIngressUseCase(
             telephony, classifier, database, appContext,
-            isSpamProtectionEnabled = { com.nospam.nospam.feature.settings.SpamPreferences.isEnabled(appContext) }
+            isSpamProtectionEnabled = { com.nospam.nospam.feature.settings.SpamPreferences.isEnabled(appContext) },
+            spamStateWriter = spamStateWriter,
+        )
+    }
+
+    /**
+     * One-shot background scan over existing history. Idempotent and permission-
+     * safe (returns fast when nothing is classifiable). Never auto-runs on app
+     * launch: it starts after SMS permission is granted in onboarding (a
+     * `history_backfill_pending` DataStore flag makes an interrupted scan resume
+     * on the next cold start, exactly once), and the UI can trigger rescanning
+     * from Settings.
+     */
+    val spamBackfill: SpamBackfillUseCase by lazy {
+        SpamBackfillUseCase(
+            telephony = telephony,
+            classifier = classifier,
+            db = database,
+            context = appContext,
+            spamStateWriter = spamStateWriter,
+            isSpamProtectionEnabled = { com.nospam.nospam.feature.settings.SpamPreferences.isEnabled(appContext) },
         )
     }
 }
