@@ -1,17 +1,29 @@
 package com.nospam.nospam.feature.thread
 
+import com.nospam.nospam.core.data.SpamRepository
+import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.database.entity.MessageVerdictEntity
+import com.nospam.nospam.core.database.entity.SenderStateEntity
+import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.model.RawMessage
+import com.nospam.nospam.core.model.SpamLabel
+import com.nospam.nospam.core.model.SpamVerdict
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.*
@@ -34,11 +46,17 @@ class ThreadViewModelTest {
         fun emitMessages() { messageTick.value++ }
         override fun observeConversations(): Flow<List<Conversation>> = flow
         override fun observeMessages(threadId: ThreadId): Flow<List<Message>> =
-            messageTick.map { store.filter { it.threadId == threadId } }
+            messageTick.map {
+                store.filter { it.threadId == threadId }.sortedBy { it.id.value }.takeLast(TelephonyDataSource.MESSAGES_PAGE_SIZE)
+            }
         override suspend fun getConversations(): List<Conversation> = emptyList()
-        override suspend fun getMessages(threadId: ThreadId): List<Message> =
-            store.filter { it.threadId == threadId }
+        override suspend fun getMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> {
+            val eligible = store.filter { it.threadId == threadId }
                 .filterNot { hideSentFromQuery && it.type == MessageType.SENT }
+                .sortedBy { it.id.value }
+            return if (beforeId != null) eligible.filter { it.id.value < beforeId }.takeLast(limit)
+            else eligible.takeLast(limit)
+        }
         override suspend fun markAsRead(threadId: ThreadId) { markedRead.add(threadId.value) }
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> {
             sent.add(Triple(address, body, subscriptionId))
@@ -71,6 +89,32 @@ class ThreadViewModelTest {
     @Test fun `initial state has fake messages`() {
         val vm = ThreadViewModel()
         assertTrue(vm.uiState.value.messages.isNotEmpty())
+    }
+
+    @Test fun `loadThread exposes per-message spam ids and not-spam action updates live`() = runTest {
+        // StandardTestDispatcher makes the verdict collector + action deterministic.
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val db = NoSpamDatabase.inMemory()
+        val hamClassifier = object : SpamClassifier {
+            override suspend fun classify(message: RawMessage) = SpamVerdict(SpamLabel.HAM, 0.0)
+            override suspend fun classifyText(text: String) = SpamVerdict(SpamLabel.HAM, 0.0)
+        }
+        val repo = SpamRepository(db, hamClassifier)
+        db.messageVerdictDao.insert(
+            MessageVerdictEntity(messageId = 1L, threadId = 9L, normalizedAddress = "+1555", isSpam = true, score = 0.9, createdAt = 1L)
+        )
+        db.senderStateDao.upsert(SenderStateEntity("+1555", ThreadSpamState.MIXED, spamCount = 1, hamCount = 1))
+
+        val vm = ThreadViewModel(FakeTelephony(), spamRepository = repo)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        assertTrue(1L in vm.uiState.value.spamMessageIds)
+        assertNotNull(vm.uiState.value.onMarkNotSpam)
+
+        vm.uiState.value.onMarkNotSpam!!.invoke(1L)
+        advanceUntilIdle()
+        assertEquals(false, db.messageVerdictDao.getByMessageId(1L)?.userLabel)
+        assertTrue(1L !in vm.uiState.value.spamMessageIds)
     }
 
     @Test fun `loadThread sets thread id`() {
@@ -135,6 +179,34 @@ class ThreadViewModelTest {
         val state = vm.uiState.value
         assertEquals(2, state.messages.size)
         assertTrue(state.messages.any { it.body == "fresh hello" })
+    }
+
+    @Test fun `long thread opens with newest page and loads older on demand`() {
+        // 251 messages (ids 1..251) → newest page = ids 52..251; loading older
+        // prepends 1..51 (what the ≥200-msg truncation used to hide).
+        val telephony = FakeTelephony()
+        for (i in 2L..251L) {
+            telephony.store.add(Message(MessageId(i), ThreadId(9), "+1555", "m$i", i, MessageType.INBOX, true))
+        }
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        assertEquals(200, vm.uiState.value.messages.size)
+        assertEquals(52L, vm.uiState.value.messages.first().id.value)
+        assertTrue(vm.uiState.value.hasMoreOlder)
+
+        vm.loadOlder()
+        assertEquals(251, vm.uiState.value.messages.size)
+        assertEquals(1L, vm.uiState.value.messages.first().id.value)
+        assertFalse(vm.uiState.value.hasMoreOlder)
+    }
+
+    @Test fun `loadOlder no-ops for short threads`() {
+        val vm = ThreadViewModel(FakeTelephony())
+        vm.loadThread(9L)
+        val size = vm.uiState.value.messages.size
+        vm.loadOlder()
+        assertEquals(size, vm.uiState.value.messages.size)
+        assertFalse(vm.uiState.value.hasMoreOlder)
     }
 
     @Test fun `opening thread with unread marks read once`() {

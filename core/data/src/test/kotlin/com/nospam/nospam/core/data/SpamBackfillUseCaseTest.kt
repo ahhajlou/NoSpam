@@ -48,7 +48,7 @@ class SpamBackfillUseCaseTest {
         override fun observeMessages(threadId: ThreadId): Flow<List<Message>> = MutableStateFlow(emptyList())
         override fun observeConversations(): Flow<List<Conversation>> = MutableStateFlow(emptyList())
         override suspend fun getConversations(): List<Conversation> = emptyList()
-        override suspend fun getMessages(threadId: ThreadId): List<Message> = emptyList()
+        override suspend fun getMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> = emptyList()
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = Result.success(Unit)
         override suspend fun markAsRead(threadId: ThreadId) {}
         override suspend fun markAsUnread(threadId: ThreadId) {}
@@ -286,11 +286,12 @@ class SpamBackfillUseCaseTest {
         assertTrue(verdict!!.isSpam)
     }
 
-    @Test fun `old messages vote on sender state but store no verdict row`() = runTest {
+    @Test fun `old spam keeps a verdict row but old ham does not`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val oldDate = System.currentTimeMillis() - 60L * 24L * 60L * 60L * 1000L
         val msgs = listOf(
             inbox(1, "+98912", "ancient spam", oldDate),
+            inbox(3, "+98912", "ancient ham", oldDate),
             inbox(2, "+98912", "recent ham", System.currentTimeMillis()),
         )
         val classifier = classifierWhere { it.body == "ancient spam" }
@@ -301,7 +302,12 @@ class SpamBackfillUseCaseTest {
 
         // Old spam voted -> SPAM (sticky, the recent ham can't rescue).
         assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
-        assertNull(db.messageVerdictDao.getByMessageId(1))
+        // Old spam keeps a per-message row so the "Suspected spam" marker can render forever.
+        val oldSpam = db.messageVerdictDao.getByMessageId(1)
+        assertNotNull(oldSpam)
+        assertTrue(oldSpam!!.isSpam)
+        // Old ham never gets a row (would be pruned immediately); recent ham still does.
+        assertNull(db.messageVerdictDao.getByMessageId(3))
         assertNotNull(db.messageVerdictDao.getByMessageId(2))
     }
 

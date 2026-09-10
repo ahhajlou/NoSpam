@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,6 +64,17 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
     val lazyState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val atBottom by remember { derivedStateOf { lazyState.firstVisibleItemIndex == 0 } }
+    // Scrolled to the oldest loaded message (end of a reverseLayout list) and more exist.
+    val atOldestEndLoadMore by remember(uiState.hasMoreOlder) {
+        derivedStateOf {
+            val info = lazyState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            uiState.hasMoreOlder && info.totalItemsCount > 0 && lastVisible >= info.totalItemsCount - 1
+        }
+    }
+    LaunchedEffect(atOldestEndLoadMore, uiState.threadId) {
+        if (atOldestEndLoadMore) viewModel.loadOlder()
+    }
     var hasScrolledInitially by remember { mutableStateOf(false) }
     LaunchedEffect(threadId) { hasScrolledInitially = false }
     // Fix 4: initial scroll must not depend on atBottom race — use threadId + first non-empty
@@ -137,6 +150,18 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                         Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp)) {
                             Text(formatDateHeader(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                    }
+                }
+            }
+            // Backward-pagination sentinel at the oldest end: loads the next
+            // older page when it comes into view (reverseLayout => last slot).
+            if (uiState.hasMoreOlder || uiState.loadingOlder) {
+                item(key = "load-older") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(if (uiState.loadingOlder) 40.dp else 1.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (uiState.loadingOlder) CircularProgressIndicator(modifier = Modifier.size(20.dp))
                     }
                 }
             }

@@ -225,9 +225,13 @@ class RealTelephonyDataSource(
         } catch (_: Exception) { null }
     }
 
-    override suspend fun getMessages(threadId: ThreadId): List<Message> = withContext(Dispatchers.IO) {
+    override suspend fun getMessages(
+        threadId: ThreadId,
+        limit: Int,
+        beforeId: Long?,
+    ): List<Message> = withContext(Dispatchers.IO) {
         try {
-            queryMessages(threadId)
+            queryMessages(threadId, limit, beforeId)
         } catch (e: Exception) {
             // SecurityException (no permission) or SQLiteException (provider
             // column differences) — surface as empty, never crash the UI.
@@ -236,7 +240,7 @@ class RealTelephonyDataSource(
         }
     }
 
-    private fun queryMessages(threadId: ThreadId): List<Message> {
+    private fun queryMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> {
         val list = mutableListOf<Message>()
         val uri = Telephony.Sms.CONTENT_URI
         val projection = arrayOf(
@@ -248,10 +252,20 @@ class RealTelephonyDataSource(
             Telephony.Sms.TYPE,
             Telephony.Sms.READ
         )
-        val sel = "${Telephony.Sms.THREAD_ID} = ?"
-        val args = arrayOf(threadId.value.toString())
-        // Paged: last 200 messages per thread (covers typical threads, avoids 1000+ row load) — secondary _ID for stable order on same DATE
-        context.contentResolver.query(uri, projection, sel, args, "${Telephony.Sms.DATE} DESC, ${Telephony.Sms._ID} DESC LIMIT 200")?.use { cursor ->
+        // Backward pagination: newest [limit] rows, or rows strictly older than
+        // [beforeId] (exclusive) when scrolling up — never a hard thread truncation.
+        val sel = if (beforeId != null) {
+            "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms._ID} < ?"
+        } else {
+            "${Telephony.Sms.THREAD_ID} = ?"
+        }
+        val args = if (beforeId != null) {
+            arrayOf(threadId.value.toString(), beforeId.toString())
+        } else {
+            arrayOf(threadId.value.toString())
+        }
+        // Secondary _ID for stable order on same DATE; LIMIT is an Int constant, never user input.
+        context.contentResolver.query(uri, projection, sel, args, "${Telephony.Sms.DATE} DESC, ${Telephony.Sms._ID} DESC LIMIT $limit")?.use { cursor ->
             while (cursor.moveToNext()) {
                 list.add(TelephonyMapper.mapCursorToMessage(cursor))
             }

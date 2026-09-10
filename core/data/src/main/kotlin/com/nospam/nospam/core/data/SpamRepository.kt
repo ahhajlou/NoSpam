@@ -7,6 +7,9 @@ import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 class SpamRepository(
     private val db: NoSpamDatabase,
@@ -82,6 +85,21 @@ class SpamRepository(
             db.senderStateDao.upsert(state.copy(spamCount = state.spamCount + 1, updatedAt = System.currentTimeMillis()))
         }
     }
+
+    /**
+     * Message IDs in [threadId] currently flagged spam — user label wins over the
+     * auto verdict (`userLabel ?: isSpam`), matching the export/overlap semantics.
+     * Cold-start-first but re-emits on every verdict change, so a per-message
+     * "Not spam"/"Report spam" action in the thread flips the UI live.
+     */
+    fun observeThreadSpamMessageIds(threadId: Long): Flow<Set<Long>> =
+        db.messageVerdictDao.observeAll()
+            .distinctUntilChanged()
+            .map { verdicts ->
+                verdicts
+                    .filter { it.threadId == threadId && (it.userLabel ?: it.isSpam) }
+                    .mapTo(mutableSetOf()) { it.messageId }
+            }
 
     private fun normalizedAddress(address: String): String =
         if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim().uppercase()

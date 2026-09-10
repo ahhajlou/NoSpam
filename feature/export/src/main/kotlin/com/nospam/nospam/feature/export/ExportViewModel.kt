@@ -23,6 +23,8 @@ data class ExportUiState(
     val exportedCount: Int = 0,
     val error: String? = null,
     val successFile: String? = null,
+    /** When on, each exported line carries a spam/ham label from on-device classification. */
+    val includeLabels: Boolean = true,
 )
 
 private val exportJson = Json { explicitNulls = true; encodeDefaults = true }
@@ -100,6 +102,10 @@ class ExportViewModel(
         _uiState.value = _uiState.value.copy(error = null, successFile = null)
     }
 
+    fun onToggleIncludeLabels(include: Boolean) {
+        _uiState.value = _uiState.value.copy(includeLabels = include)
+    }
+
     fun export(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -117,9 +123,14 @@ class ExportViewModel(
                     return@launch
                 }
 
+                val includeLabels = _uiState.value.includeLabels
                 context.contentResolver.openOutputStream(uri)?.use { output ->
-                    writeJsonlWithLabels(output, messages, hwid) { msg ->
-                        resolveLabel(msg, messageVerdictDao)
+                    if (includeLabels) {
+                        writeJsonlWithLabels(output, messages, hwid) { msg ->
+                            resolveLabel(msg, messageVerdictDao)
+                        }
+                    } else {
+                        writeJsonl(output, messages, hwid)
                     }
                 } ?: throw IllegalStateException("Cannot open output stream for $uri")
 

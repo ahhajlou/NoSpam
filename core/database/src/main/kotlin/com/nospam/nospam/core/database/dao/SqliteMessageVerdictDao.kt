@@ -114,7 +114,7 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
     }
     override suspend fun deleteByThread(threadId: Long) { withContext(Dispatchers.IO){ helper.writableDatabase.delete("message_verdict","threadId = ?", arrayOf(threadId.toString())); flow.value = readAllSync() } }
     override suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO){
-        val r = helper.writableDatabase.delete("message_verdict","userLabel IS NULL AND createdAt < ?", arrayOf(cutoffMillis.toString()))
+        val r = helper.writableDatabase.delete("message_verdict","userLabel IS NULL AND isSpam = 0 AND createdAt < ?", arrayOf(cutoffMillis.toString()))
         if (r>0) flow.value = readAllSync()
         r
     }

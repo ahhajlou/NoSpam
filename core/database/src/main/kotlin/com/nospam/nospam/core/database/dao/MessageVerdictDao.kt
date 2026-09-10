@@ -38,7 +38,7 @@ class InMemoryMessageVerdictDao : MessageVerdictDao {
         val it = data.entries.iterator()
         while (it.hasNext()) {
             val e = it.next().value
-            if (e.userLabel == null && e.createdAt < cutoffMillis) { it.remove(); r++ }
+            if (e.userLabel == null && !e.isSpam && e.createdAt < cutoffMillis) { it.remove(); r++ }
         }
         if (r > 0) refresh()
         return r
