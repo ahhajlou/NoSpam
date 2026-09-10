@@ -46,11 +46,17 @@ class ThreadViewModelTest {
         fun emitMessages() { messageTick.value++ }
         override fun observeConversations(): Flow<List<Conversation>> = flow
         override fun observeMessages(threadId: ThreadId): Flow<List<Message>> =
-            messageTick.map { store.filter { it.threadId == threadId } }
+            messageTick.map {
+                store.filter { it.threadId == threadId }.sortedBy { it.id.value }.takeLast(TelephonyDataSource.MESSAGES_PAGE_SIZE)
+            }
         override suspend fun getConversations(): List<Conversation> = emptyList()
-        override suspend fun getMessages(threadId: ThreadId): List<Message> =
-            store.filter { it.threadId == threadId }
+        override suspend fun getMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> {
+            val eligible = store.filter { it.threadId == threadId }
                 .filterNot { hideSentFromQuery && it.type == MessageType.SENT }
+                .sortedBy { it.id.value }
+            return if (beforeId != null) eligible.filter { it.id.value < beforeId }.takeLast(limit)
+            else eligible.takeLast(limit)
+        }
         override suspend fun markAsRead(threadId: ThreadId) { markedRead.add(threadId.value) }
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> {
             sent.add(Triple(address, body, subscriptionId))
@@ -173,6 +179,34 @@ class ThreadViewModelTest {
         val state = vm.uiState.value
         assertEquals(2, state.messages.size)
         assertTrue(state.messages.any { it.body == "fresh hello" })
+    }
+
+    @Test fun `long thread opens with newest page and loads older on demand`() {
+        // 251 messages (ids 1..251) → newest page = ids 52..251; loading older
+        // prepends 1..51 (what the ≥200-msg truncation used to hide).
+        val telephony = FakeTelephony()
+        for (i in 2L..251L) {
+            telephony.store.add(Message(MessageId(i), ThreadId(9), "+1555", "m$i", i, MessageType.INBOX, true))
+        }
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        assertEquals(200, vm.uiState.value.messages.size)
+        assertEquals(52L, vm.uiState.value.messages.first().id.value)
+        assertTrue(vm.uiState.value.hasMoreOlder)
+
+        vm.loadOlder()
+        assertEquals(251, vm.uiState.value.messages.size)
+        assertEquals(1L, vm.uiState.value.messages.first().id.value)
+        assertFalse(vm.uiState.value.hasMoreOlder)
+    }
+
+    @Test fun `loadOlder no-ops for short threads`() {
+        val vm = ThreadViewModel(FakeTelephony())
+        vm.loadThread(9L)
+        val size = vm.uiState.value.messages.size
+        vm.loadOlder()
+        assertEquals(size, vm.uiState.value.messages.size)
+        assertFalse(vm.uiState.value.hasMoreOlder)
     }
 
     @Test fun `opening thread with unread marks read once`() {

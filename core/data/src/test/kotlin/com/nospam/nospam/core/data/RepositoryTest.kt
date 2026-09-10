@@ -41,7 +41,7 @@ class RepositoryTest {
         override fun observeMessages(threadId: ThreadId): Flow<List<Message>> = MutableStateFlow(emptyList())
         override fun observeConversations(): Flow<List<Conversation>> = flow
         override suspend fun getConversations(): List<Conversation> = flow.value
-        override suspend fun getMessages(threadId: ThreadId): List<Message> = emptyList()
+        override suspend fun getMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> = emptyList()
         override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = Result.success(Unit)
         override suspend fun markAsRead(threadId: ThreadId) {}
         override suspend fun markAsUnread(threadId: ThreadId) {}

@@ -10,7 +10,15 @@ interface TelephonyDataSource {
     /** Live messages of one thread; re-emits on every provider change. */
     fun observeMessages(threadId: ThreadId): Flow<List<Message>>
     suspend fun getConversations(): List<Conversation>
-    suspend fun getMessages(threadId: ThreadId): List<Message>
+    /**
+     * Subset of a thread's messages in ascending date/id order.
+     * With [beforeId] == null returns the newest [limit] messages; with a
+     * [beforeId] (exclusive) returns up to [limit] messages strictly older.
+     * Backward pagination: the thread opens with the newest page and the UI
+     * prepends older pages as the user scrolls up, so long threads are never
+     * truncated and never loaded in one query.
+     */
+    suspend fun getMessages(threadId: ThreadId, limit: Int = MESSAGES_PAGE_SIZE, beforeId: Long? = null): List<Message>
     suspend fun sendMessage(address: String, body: String, subscriptionId: Int? = null): Result<Unit>
     suspend fun markAsRead(threadId: ThreadId)
     suspend fun markAsUnread(threadId: ThreadId)
@@ -32,4 +40,9 @@ interface TelephonyDataSource {
     suspend fun getContacts(limit: Int = 50, query: String? = null): List<com.nospam.nospam.core.model.ContactEntry>
     suspend fun getAllMessages(): List<com.nospam.nospam.core.model.Message>
     data class SimInfo(val subscriptionId: Int, val displayName: String, val number: String? = null)
+
+    companion object {
+        /** Thread page size for backward pagination (see [getMessages]). */
+        const val MESSAGES_PAGE_SIZE = 200
+    }
 }

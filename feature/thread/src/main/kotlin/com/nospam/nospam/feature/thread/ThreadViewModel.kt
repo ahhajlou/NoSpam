@@ -24,6 +24,9 @@ data class ThreadUiState(
     val onReportSpam: ((Long) -> Unit)? = null,
     val sims: List<TelephonyDataSource.SimInfo> = emptyList(),
     val selectedSimId: Int? = null,
+    /** Oldest loaded message(s) still on disk — the UI shows a scroll-to-load hint. */
+    val hasMoreOlder: Boolean = false,
+    val loadingOlder: Boolean = false,
 )
 
 /**
@@ -52,6 +55,10 @@ class ThreadViewModel(
     private var lastRemote: List<Message> = emptyList()
     // Optimistic rows (negative ids) not yet confirmed by the provider.
     private var optimistic: List<Message> = emptyList()
+    // Older pages accumulated by backward pagination (see [loadOlder]).
+    private var olderMessages: List<Message> = emptyList()
+    private var hasOlder = false
+    private var loadingOlder = false
 
     companion object {
         private const val TAG = "ThreadViewModel"
@@ -83,16 +90,24 @@ class ThreadViewModel(
         }
         optimistic = emptyList()
         lastRemote = emptyList()
-        _uiState.value = _uiState.value.copy(threadId = id, messages = emptyList(), spamMessageIds = emptySet())
+        olderMessages = emptyList()
+        hasOlder = false
+        loadingOlder = false
+        _uiState.value = _uiState.value.copy(
+            threadId = id, messages = emptyList(), spamMessageIds = emptySet(),
+            hasMoreOlder = false, loadingOlder = false,
+        )
         messagesJob?.cancel()
         messagesJob = viewModelScope.launch {
             dataSource.observeMessages(ThreadId(id)).collect { remote ->
                 lastRemote = remote
+                // The newest page fills a full page => older rows exist on disk.
+                if (remote.size >= TelephonyDataSource.MESSAGES_PAGE_SIZE) hasOlder = true
                 if (remote.any { !it.read }) {
                     // Terminates: the update re-emits with everything read.
                     dataSource.markAsRead(ThreadId(id))
                 }
-                _uiState.value = _uiState.value.copy(threadId = id, messages = merged())
+                _uiState.value = _uiState.value.copy(threadId = id, messages = merged(), hasMoreOlder = hasOlder)
             }
         }
         // Per-message "Not spam"/"Report spam" inside a MIXED thread (no sender override).
@@ -117,7 +132,40 @@ class ThreadViewModel(
             .map { it.body to it.address }
             .toSet()
         optimistic = optimistic.filterNot { (it.body to it.address) in confirmed }
-        return (lastRemote + optimistic).sortedWith(compareBy({ it.date }, { it.id.value }))
+        // The provider emits only the newest page; drop any older-page row that
+        // the sliding window has caught up with (re-emit after a new message).
+        lastRemote.minOfOrNull { it.id.value }?.let { newestPageMinId ->
+            if (olderMessages.isNotEmpty()) {
+                olderMessages = olderMessages.filter { it.id.value < newestPageMinId }
+            }
+        }
+        return (olderMessages + lastRemote + optimistic).sortedWith(compareBy({ it.date }, { it.id.value }))
+    }
+
+    /**
+     * Prepend the next older page. Guarded against re-entry; no-op while a page
+     * is in flight or once the oldest row has been reached.
+     */
+    fun loadOlder() {
+        if (loadingOlder || !hasOlder) return
+        val threadId = _uiState.value.threadId
+        if (threadId == 0L) return
+        val beforeId = (olderMessages + lastRemote).minOfOrNull { it.id.value } ?: return
+        loadingOlder = true
+        _uiState.value = _uiState.value.copy(loadingOlder = true)
+        viewModelScope.launch {
+            val page = runCatching {
+                dataSource?.getMessages(ThreadId(threadId), TelephonyDataSource.MESSAGES_PAGE_SIZE, beforeId)
+            }.getOrNull().orEmpty()
+            olderMessages = olderMessages + page
+            hasOlder = page.size >= TelephonyDataSource.MESSAGES_PAGE_SIZE
+            loadingOlder = false
+            _uiState.value = _uiState.value.copy(
+                messages = merged(),
+                loadingOlder = false,
+                hasMoreOlder = hasOlder,
+            )
+        }
     }
 
     fun onDraftChanged(text: String) {
