@@ -3,6 +3,7 @@ package com.nospam.nospam.feature.thread
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
@@ -35,6 +36,7 @@ data class ThreadUiState(
 class ThreadViewModel(
     private val dataSource: TelephonyDataSource? = null,
     initialAddress: String? = null,
+    private val spamRepository: SpamRepository? = null,
 ) : ViewModel() {
     // The other party for threads reached from New Conversation, which have
     // no messages yet. Mutable because one VM instance can serve successive
@@ -46,6 +48,7 @@ class ThreadViewModel(
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
 
     private var messagesJob: Job? = null
+    private var verdictsJob: Job? = null
     private var lastRemote: List<Message> = emptyList()
     // Optimistic rows (negative ids) not yet confirmed by the provider.
     private var optimistic: List<Message> = emptyList()
@@ -80,7 +83,7 @@ class ThreadViewModel(
         }
         optimistic = emptyList()
         lastRemote = emptyList()
-        _uiState.value = _uiState.value.copy(threadId = id, messages = emptyList())
+        _uiState.value = _uiState.value.copy(threadId = id, messages = emptyList(), spamMessageIds = emptySet())
         messagesJob?.cancel()
         messagesJob = viewModelScope.launch {
             dataSource.observeMessages(ThreadId(id)).collect { remote ->
@@ -90,6 +93,19 @@ class ThreadViewModel(
                     dataSource.markAsRead(ThreadId(id))
                 }
                 _uiState.value = _uiState.value.copy(threadId = id, messages = merged())
+            }
+        }
+        // Per-message "Not spam"/"Report spam" inside a MIXED thread (no sender override).
+        spamRepository?.let { repo ->
+            _uiState.value = _uiState.value.copy(
+                onMarkNotSpam = { msgId -> viewModelScope.launch { repo.markMessageNotSpam(msgId) } },
+                onReportSpam = { msgId -> viewModelScope.launch { repo.markMessageSpam(msgId) } },
+            )
+            verdictsJob?.cancel()
+            verdictsJob = viewModelScope.launch {
+                repo.observeThreadSpamMessageIds(id).collect { ids ->
+                    _uiState.value = _uiState.value.copy(spamMessageIds = ids)
+                }
             }
         }
     }

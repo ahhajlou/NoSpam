@@ -240,7 +240,7 @@ fun NoSpamNavHost(
             val args = backStackEntry.toRoute<ThreadRoute>()
             val vm: ThreadViewModel = viewModel(
                 factory = vmFactory {
-                    container?.let { ThreadViewModel(it.telephony, args.address) } ?: ThreadViewModel()
+                    container?.let { ThreadViewModel(it.telephony, args.address, it.spamRepository) } ?: ThreadViewModel()
                 }
             )
             ThreadScreen(threadId = args.threadId, address = args.address, viewModel = vm)
