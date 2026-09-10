@@ -39,13 +39,15 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Assemble release + debug APKs
-        run: ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
+      - name: "Assemble debug APK (pre-release: debug only)"
+        # Pre-release: no point shipping unsigned release builds yet.
+        # run: ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
+        run: ./gradlew :app:assembleDebug --stacktrace
 
       - name: Read build metadata
         id: metadata
         run: |
-          META=app/build/outputs/apk/release/output-metadata.json
+          META=app/build/outputs/apk/debug/output-metadata.json
           VERSION_NAME=$(jq -r '.elements[] | select(.filters | length == 0) | .versionName' "$META")
           VERSION_CODE=$(jq -r '.elements[] | select(.filters | length == 0) | .versionCode' "$META")
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
@@ -58,7 +60,6 @@ jobs:
         with:
           name: release-apk
           path: |
-            app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/debug/*.apk
           retention-days: 7
           if-no-files-found: error
@@ -91,6 +92,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3.0.2
         with:
-          files: release-apk/*.apk
+          files: release-apk/debug/*.apk
+          fail_on_unmatched_files: true
           generate_release_notes: true
           prerelease: ${{ contains(needs.build.outputs.version_name, 'alpha') || contains(needs.build.outputs.version_name, 'beta') || contains(needs.build.outputs.version_name, 'rc') }}
