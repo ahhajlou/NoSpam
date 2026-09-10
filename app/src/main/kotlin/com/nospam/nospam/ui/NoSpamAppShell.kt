@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nospam.nospam.R
@@ -59,7 +60,10 @@ fun NoSpamAppShell() {
                         selected = currentRoute?.contains("Conversations") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            navController.navigate(ConversationsRoute) { launchSingleTop = true }
+                            navController.navigate(ConversationsRoute) {
+                                launchSingleTop = true
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                            }
                         },
                         icon = { Icon(Icons.Filled.Menu, null) }
                     )
@@ -68,7 +72,10 @@ fun NoSpamAppShell() {
                         selected = currentRoute?.contains("Archived") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            navController.navigate(ArchivedRoute) { launchSingleTop = true }
+                            navController.navigate(ArchivedRoute) {
+                                launchSingleTop = true
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                            }
                         },
                         icon = { Icon(Icons.Filled.Delete, null) }
                     )
@@ -77,7 +84,10 @@ fun NoSpamAppShell() {
                         selected = currentRoute?.contains("Spam") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            navController.navigate(SpamRoute) { launchSingleTop = true }
+                            navController.navigate(SpamRoute) {
+                                launchSingleTop = true
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                            }
                         },
                         icon = { Icon(Icons.Filled.Warning, null) }
                     )
@@ -86,7 +96,10 @@ fun NoSpamAppShell() {
                         selected = currentRoute?.contains("Export") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            navController.navigate(ExportRoute) { launchSingleTop = true }
+                            navController.navigate(ExportRoute) {
+                                launchSingleTop = true
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                            }
                         },
                         icon = { Icon(Icons.Filled.Upload, null) }
                     )
@@ -112,7 +125,10 @@ fun NoSpamAppShell() {
                         selected = currentRoute?.contains("Settings") == true,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            navController.navigate(SettingsRoute) { launchSingleTop = true }
+                            navController.navigate(SettingsRoute) {
+                                launchSingleTop = true
+                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                            }
                         },
                         icon = { Icon(Icons.Filled.Settings, null) }
                     )
