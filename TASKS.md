@@ -691,6 +691,21 @@ contact/outbound anti-promotion retained by replaying through
   `./gradlew build` green; on device: change model → Settings "Re-check all
   messages" → verdicts/sender states re-evaluated with the current model, manual
   decisions preserved; banner + cancel reuses the existing `BackfillStatus` flow.
+- [x] **14.5 Immediate re-check feedback** — On-device report: tapping
+  "Re-check all messages" showed ~55s of nothing because `BackfillStatus.Running`
+  was only emitted at `processed % 100 == 0` and a 37-message inbox never reached
+  100 — the notification and inbox banner (both render only on `Running`) stayed
+  silent and the scan jumped straight to `Done`, so the button looked dead. Now:
+  (a) `SpamBackfillUseCase.run()` emits `Running(0, total)` immediately when the
+  scan starts (`total > 0`); (b) progress ticks adapt to history size via
+  `step = maxOf(1, total / 100)` instead of a fixed every-100 gate — small inboxes
+  update per message, large ones stay capped at ~100 updates; (c)
+  `NotificationHelper.buildBackfillProgressNotification` shows an indeterminate
+  bar while `processed == 0` ("starting…"); (d) Settings wraps its list in a
+  `Scaffold` + `SnackbarHost` and shows `recheck_started` (en+fa) so the tap is
+  confirmed even when notifications are disabled (the notifier silently no-ops).
+  *Verify:* `:core:data:testDebugUnitTest` (3 new progress tests) +
+  `:core:notifications:testDebugUnitTest` + `./gradlew build`. Done 2026-09-10 (not yet committed).
 
 ---
 

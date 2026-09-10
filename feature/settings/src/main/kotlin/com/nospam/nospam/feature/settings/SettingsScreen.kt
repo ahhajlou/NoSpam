@@ -25,6 +25,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -80,6 +83,7 @@ fun SettingsScreen(
     val spamEnabledState by spamFlow.collectAsState(initial = true)
     val spamProtectionEnabled = spamEnabledState
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
     var autoDownloadMms by rememberSaveable { mutableStateOf(true) }
     var groupMode by rememberSaveable { mutableStateOf("mass") }
 
@@ -100,7 +104,8 @@ fun SettingsScreen(
         onPauseOrDispose { }
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { innerPadding ->
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp)) {
         item { SectionHeader(stringResource(R.string.section_general)) }
         item {
             SettingsRow(
@@ -152,7 +157,12 @@ fun SettingsScreen(
             SettingsRow(
                 title = stringResource(R.string.scan_title),
                 subtitle = stringResource(R.string.scan_sub),
-                onClick = onRecheck
+                onClick = {
+                    onRecheck()
+                    scope.launch {
+                        snackbarHostState.showSnackbar(context.getString(R.string.recheck_started))
+                    }
+                }
             )
         }
         item {
@@ -191,6 +201,7 @@ fun SettingsScreen(
                 subtitle = null,
                 onClick = { showTermsDialog = true }
             )
+        }
         }
     }
 

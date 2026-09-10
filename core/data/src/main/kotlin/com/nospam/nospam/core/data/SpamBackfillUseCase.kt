@@ -102,6 +102,10 @@ class SpamBackfillUseCase(
             _status.value = BackfillStatus.Done
             return
         }
+        // Announce progress immediately so the notification + in-app banner appear
+        // as soon as the scan starts — never a silent multi-second gap (small
+        // inboxes otherwise never reach the first %100 progress tick).
+        _status.value = BackfillStatus.Running(0, total)
 
         // Existing verdicts: keys drive the gap-fill skip; force mode also needs
         // userLabel + createdAt to pin manual decisions and preserve row age.
@@ -250,7 +254,10 @@ class SpamBackfillUseCase(
     }
 
     private fun statusProgress(processed: Int, total: Int) {
-        if (processed % PROGRESS_EVERY == 0) {
+        // Adapt the tick to history size: small inboxes update every message,
+        // large ones are capped at ~100 updates per scan.
+        val step = maxOf(1, total / PROGRESS_UPDATES)
+        if (processed % step == 0 || processed == total) {
             _status.value = BackfillStatus.Running(processed, total)
         }
     }
@@ -281,7 +288,7 @@ class SpamBackfillUseCase(
 
     companion object {
         private const val CLASSIFY_TIMEOUT_MS = 8_000L
-        private const val PROGRESS_EVERY = 100
+        private const val PROGRESS_UPDATES = 100
         private const val FLUSH_BATCH_SIZE = 100
         private const val BACKFILL_CONTACT_LIMIT = 10_000
     }

@@ -60,7 +60,9 @@ object NotificationHelper {
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle(context.getString(R.string.backfill_title))
             .setContentText(context.getString(R.string.backfill_progress, processed, total))
-            .setProgress(total, processed, false)
+            // Before the first message is processed show an indeterminate spinner so
+            // the bar reads "starting…" instead of "stuck at 0".
+            .setProgress(if (processed == 0) 0 else total, processed, processed == 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(0, context.getString(R.string.backfill_cancel), cancelPending)
