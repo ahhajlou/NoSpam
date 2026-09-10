@@ -44,6 +44,7 @@ import com.nospam.nospam.feature.mldebug.MlDebugScreen
 import com.nospam.nospam.feature.mldebug.MlDebugViewModel
 import com.nospam.nospam.feature.onboarding.OnboardingScreen
 import com.nospam.nospam.feature.settings.SettingsScreen
+import com.nospam.nospam.feature.settings.SpamPreferences
 import com.nospam.nospam.feature.thread.NewConversationScreen
 import com.nospam.nospam.feature.thread.ThreadScreen
 import com.nospam.nospam.feature.thread.ThreadViewModel
@@ -210,9 +211,13 @@ fun NoSpamNavHost(
             SettingsScreen(onRecheck = { container?.spamBackfill?.rescanAll() })
         }
         composable<OnboardingRoute> {
+            val scope = rememberCoroutineScope()
             OnboardingScreen(
                 onComplete = {
-                    container?.spamBackfill?.ensureStarted()
+                    scope.launch {
+                        SpamPreferences.setBackfillPending(context, true)
+                        container?.spamBackfill?.ensureStarted()
+                    }
                     navController.navigate(ConversationsRoute) {
                         popUpTo(OnboardingRoute) { inclusive = true }
                     }

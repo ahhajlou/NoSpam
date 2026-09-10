@@ -35,7 +35,8 @@ sealed interface BackfillStatus {
  * One-shot background classification pass over the existing SMS history.
  * Runs on its own IO scope, never blocks the UI, and is fully idempotent:
  *
- * - Gap-fill mode ([ensureStarted], also the auto-run on app launch): messages
+ * - Gap-fill mode ([ensureStarted], fired explicitly after permission grant or
+ *   from a one-shot pending-resume on cold start): messages
  *   with a stored `message_verdict` are skipped, so an interrupted scan resumes
  *   without double-counting. [rescanAll] instead re-evaluates every message,
  *   so classifier/model updates can be applied to existing history.
@@ -166,9 +167,20 @@ class SpamBackfillUseCase(
             }
 
             // Running per-sender state, seeded from today's DB so counts stay consistent.
+            // On a force rescan the sticky terminal state (SPAM) is unfrozen to CLEAN:
+            // the whole point is to re-derive state from the *corrected* history, and
+            // ThreadSpamPolicy's stickiness would otherwise trap a sender a fixed model
+            // now calls ham in the Spam section forever. Counts still seed the graduation
+            // math, so genuinely-spam senders re-promote via the ≥3/≥80% threshold.
             val seedEntity = existingStates[key]
-            var running: SenderState? = seedEntity?.let {
-                SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt)
+            var running: SenderState? = if (forceReclassify) {
+                seedEntity?.let {
+                    SenderState(it.normalizedAddress, ThreadSpamState.CLEAN, it.spamCount, it.hamCount, isUserOverride = false, it.updatedAt)
+                }
+            } else {
+                seedEntity?.let {
+                    SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt)
+                }
             }
 
             for (m in messages) {

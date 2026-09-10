@@ -380,6 +380,30 @@ class SpamBackfillUseCaseTest {
         assertEquals(originalVerdict.createdAt, verdict.createdAt)
     }
 
+    @Test fun `rescanAll demotes an auto-SPAM sender the corrected model now calls ham`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephony(
+            // E.g. the IELTS payment receipt that the broken preprocessor misfiled as spam.
+            messages = listOf(inbox(1, "+98912", "IELTS On Computer payment receipt", recentAgo(200))),
+        )
+        // Old model: false positive -> auto SPAM.
+        val backfill = useCase(db, telephony, classifierWhere { true }, scope = this)
+        backfill.ensureStarted()
+        advanceUntilIdle()
+        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
+        assertTrue(db.messageVerdictDao.getByMessageId(1)!!.isSpam)
+
+        // Preprocessing fixed: the same message now classifies as ham.
+        val recheck = useCase(db, telephony, classifierWhere { false }, scope = this)
+        recheck.rescanAll()
+        advanceUntilIdle()
+
+        // Sticky SPAM must not trap an auto-classified sender across a
+        // user-initiated model-fix rescan (user overrides stay frozen elsewhere).
+        assertEquals(ThreadSpamState.CLEAN, db.senderStateDao.getByAddress("+98912")!!.state)
+        assertTrue(!db.messageVerdictDao.getByMessageId(1)!!.isSpam)
+    }
+
     @Test fun `rescanAll can be cancelled mid re-evaluation and stays fail-open`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val telephony = FakeTelephony(

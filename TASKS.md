@@ -655,13 +655,21 @@ registration and the drawer entry (no behavior change anywhere).
 Replaces the Settings "Scan old messages" gap-filler with a re-classify-all
 scan so model/preprocessor improvements (e.g. the hazm parity work in Phase 13)
 apply to existing history — old verdicts became stale after the preprocessor
-was made byte-identical to Python. Auto gap-fill on app launch
-(`NoSpamApplication`) is unchanged. Safety invariants (CLAUDE.md §15):
+was made byte-identical to Python. The launch-time auto gap-fill was removed:
+history is scanned only after SMS permission is granted in onboarding or via
+Settings → Re-check, with a `history_backfill_pending` DataStore flag making an
+interrupted scan resume on the next cold start exactly once (so ordinary launches
+never re-scan). Safety invariants (CLAUDE.md §15):
 user-override senders are never touched; per-message `userLabel` rows are
-pinned (model never overwrites a manual decision); SPAM stickiness +
-contact/outbound anti-promotion retained by replaying through
-`ThreadSpamPolicy`; 30-day retention cutoff kept; writes still funnel through
-`SpamStateWriter` he under the single-writer lock.
+pinned (model never overwrites a manual decision); SPAM stickiness applies
+*within* the replayed history (post-fix spammers still graduate a sender to
+SPAM via the ≥3/≥80% rule) but the sticky terminal state is unfrozen during
+a rescan — the `run` seeding resets an auto-`SPAM` sender to `CLEAN`
+(counts preserved) so a sender a corrected model now calls ham actually
+leaves the Spam section instead of being trapped by stickiness
+(2026-09-10 on-device regression); contact/outbound anti-promotion retained
+by replaying through `ThreadSpamPolicy`; 30-day retention cutoff kept; writes
+still funnel through `SpamStateWriter` under the single-writer lock.
 
 **Gate:** `./gradlew :core:data:testDebugUnitTest` green + `./gradlew build`.
 
@@ -684,9 +692,11 @@ contact/outbound anti-promotion retained by replaying through
   force re-scan updates an already-classified verdict's `isSpam`/`score` and
   preserves `createdAt`; `userLabel`-pinned rows and `isUserOverride` senders
   untouched; CLEAN→SPAM flip when the classifier now votes spam (dropped
-  `allClassified` skip); cancellation + retention still hold in force mode.
+  `allClassified` skip); SPAM→CLEAN **demotion** when a sender a corrected
+  model now calls ham re-files (2026-09-10 on-device regression, see Phase
+  intro); cancellation + retention still hold in force mode.
   Existing gap-filler tests stay green.
-  *Verify:* `:core:data:testDebugUnitTest` 15/15 pass; `./gradlew build` green (1302 tasks). Done 2026-09-10 (not yet committed).
+  *Verify:* `:core:data:testDebugUnitTest` 20/20 pass; `./gradlew build` green (1302 tasks). Done 2026-09-10 (not yet committed).
 - [ ] **14.4 Verification** —
   `./gradlew build` green; on device: change model → Settings "Re-check all
   messages" → verdicts/sender states re-evaluated with the current model, manual

@@ -11,9 +11,9 @@
 - [] `flush()` writes `sender_state` then `message_verdict` in two transactions; wrap in a single transaction for atomicity
 
 ## Backfill — open decisions (analyze before coding)
-- [] Decide startup policy: `ensureStarted()` on every cold start re-reads all SMS + regroups senders; add a `backfill_complete` marker (invalidated on new inbound / Settings rescan) or keep the no-flag idempotent design
+- [x] Decide startup policy — RESOLVED (single-shot flag): no launch-time scan; a `history_backfill_pending` DataStore flag is set on onboarding permission grant, lets an interrupted scan resume on the next cold start exactly once, and is cleared (app-side watcher) on any terminal status (Done/Cancelled/Failed). Ordinary launches re-read the flag only.
 - [] Decide resume strategy: cancelled scans restart from the beginning (idempotent via verdict-ID skip); a per-sender resume cursor would bound cost on large histories
-- [] Decide if launch-time scan should be gated on onboarding completion (currently fails fast on SecurityException before permissions are granted)
+- [x] Gate launch-time scan on onboarding — folded into the startup-policy decision above: launch re-reads the flag only, and the flag is set only after permission is granted, so there is no SecurityException path
 
 ## Project-wide
 - [] Fix pre-existing lint in `feature/export/ExportScreen.kt:214` (ViewModelConstructorInComposable) — blocks full `./gradlew build`

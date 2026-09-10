@@ -3,10 +3,14 @@ package com.nospam.nospam
 import android.app.Application
 import android.os.StrictMode
 import android.util.Log
+import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.notifications.NotificationHelper
+import com.nospam.nospam.feature.settings.SpamPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class NoSpamApplication : Application() {
@@ -59,10 +63,22 @@ class NoSpamApplication : Application() {
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { container.database }
         }
-        // Auto-scan existing history once permissions are in place. Idempotent:
-        // with no permission or nothing new to classify it returns Done instantly.
+        // History backfill is one-shot: it runs after SMS permission is granted
+        // (onboarding) and resumes once on a later cold start only if the process
+        // died mid-scan. When nothing is pending we never touch SMS or the
+        // classifier here, so an ordinary launch adds no scan overhead.
         appScope.launch {
-            container.spamBackfill.ensureStarted()
+            if (SpamPreferences.isBackfillPending(this@NoSpamApplication)) {
+                container.spamBackfill.ensureStarted()
+            }
+        }
+        // Any completed scan (the resumed one or a Settings re-check) clears the
+        // pending flag, so the resume never fires a second time.
+        appScope.launch {
+            container.spamBackfill.status
+                .dropWhile { it is BackfillStatus.Idle }
+                .first { it is BackfillStatus.Done || it is BackfillStatus.Cancelled || it is BackfillStatus.Failed }
+            SpamPreferences.setBackfillPending(this@NoSpamApplication, false)
         }
     }
 }

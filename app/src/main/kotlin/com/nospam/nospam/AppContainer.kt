@@ -63,8 +63,11 @@ class AppContainer(private val context: Context) {
 
     /**
      * One-shot background scan over existing history. Idempotent and permission-
-     * safe (returns fast when nothing is classifiable). Auto-starts on app launch
-     * and after onboarding; the UI also triggers rescanning from Settings.
+     * safe (returns fast when nothing is classifiable). Never auto-runs on app
+     * launch: it starts after SMS permission is granted in onboarding (a
+     * `history_backfill_pending` DataStore flag makes an interrupted scan resume
+     * on the next cold start, exactly once), and the UI can trigger rescanning
+     * from Settings.
      */
     val spamBackfill: SpamBackfillUseCase by lazy {
         SpamBackfillUseCase(
