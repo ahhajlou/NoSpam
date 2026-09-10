@@ -38,14 +38,17 @@ android {
             )
         }
     }
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = true
-        }
-    }
+    // ABI splits disabled: the app has negligible native code, so split APKs
+    // end up nearly the same size as the universal APK — splitting just adds
+    // download/manifest complexity with no size benefit.
+    // splits {
+    //     abi {
+    //         isEnable = true
+    //         reset()
+    //         include("armeabi-v7a", "arm64-v8a")
+    //         isUniversalApk = true
+    //     }
+    // }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
