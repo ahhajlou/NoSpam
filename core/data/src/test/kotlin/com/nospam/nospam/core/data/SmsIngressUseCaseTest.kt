@@ -1,6 +1,7 @@
 package com.nospam.nospam.core.data
 
 import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.Message
@@ -129,5 +130,23 @@ class SmsIngressUseCaseTest {
         assertEquals(1, repo.pruneOldSpam())
         assertNull(db.spamVerdictDao.getByThread(1L))
         assertNotNull(db.spamVerdictDao.getByThread(2L))
+    }
+
+    @Test fun `retention prunes only auto ham rows`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val cutoff = System.currentTimeMillis() - SpamRepository.SPAM_RETENTION_DAYS * 24L * 60L * 60L * 1000L
+        val old = cutoff - 1L
+        // Auto spam older than the cutoff must survive forever (per-message marker).
+        db.messageVerdictDao.insert(MessageVerdictEntity(1L, 1L, "+98912", isSpam = true, score = 1.0, createdAt = old))
+        // Auto ham older than the cutoff is the only thing pruned.
+        db.messageVerdictDao.insert(MessageVerdictEntity(2L, 1L, "+98912", isSpam = false, score = -1.0, createdAt = old))
+        // User-labeled rows are never pruned.
+        db.messageVerdictDao.insert(MessageVerdictEntity(3L, 1L, "+98912", isSpam = true, score = 1.0, createdAt = old, userLabel = false))
+
+        db.messageVerdictDao.deleteAutoOlderThan(cutoff)
+
+        assertNotNull(db.messageVerdictDao.getByMessageId(1L))
+        assertNull(db.messageVerdictDao.getByMessageId(2L))
+        assertNotNull(db.messageVerdictDao.getByMessageId(3L))
     }
 }

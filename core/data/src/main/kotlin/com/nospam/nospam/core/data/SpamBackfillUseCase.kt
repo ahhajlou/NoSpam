@@ -229,8 +229,10 @@ class SpamBackfillUseCase(
                 }
                 running = policyOut.newState
 
-                // Retention: old messages get a sender-state vote but no verdict row.
-                if (m.date >= retentionCutoff) {
+                // Retention: old ham messages get a sender-state vote but no verdict
+                // row (they would be pruned immediately anyway); old spam messages keep
+                // a row so per-message "Suspected spam" markers persist regardless of age.
+                if (verdict.isSpam || m.date >= retentionCutoff) {
                     verdicts.add(
                         MessageVerdictEntity(
                             messageId = m.id.value,

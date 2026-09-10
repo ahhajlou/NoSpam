@@ -526,9 +526,14 @@ spam"/"Report spam" action — nothing is hidden, it's just not interruptive.
 The conversation-list snippet for a `MIXED` thread should be the latest **ham**
 message, not the latest message, so a promo doesn't bury an OTP.
 
-**Retention:** 30-day pruning applies only to auto-classified `MessageVerdict`
-rows; `SenderState` and every user override are kept indefinitely — a
-sender that a user has already labelled should never silently reset.
+**Retention:** 30-day pruning applies only to auto-classified **ham**
+`MessageVerdict` rows; auto-**spam** verdict rows are kept indefinitely because
+they are the per-message evidence powering the "Suspected spam" marker in
+`feature:thread` (pruning them makes a MIXED conversation show no per-message
+sign — see Phase 14.5). Backfill therefore writes a verdict row for every
+message it classifies as spam, regardless of age. `SenderState` and every user
+override are kept indefinitely — a sender that a user has already labelled
+should never silently reset.
 
 ## 16. Intent & PendingIntent security rules
 
