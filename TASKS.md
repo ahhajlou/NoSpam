@@ -650,6 +650,50 @@ registration and the drawer entry (no behavior change anywhere).
 
 ---
 
+## Phase 14 — Re-check all messages (Settings rescan re-classifies everything)
+
+Replaces the Settings "Scan old messages" gap-filler with a re-classify-all
+scan so model/preprocessor improvements (e.g. the hazm parity work in Phase 13)
+apply to existing history — old verdicts became stale after the preprocessor
+was made byte-identical to Python. Auto gap-fill on app launch
+(`NoSpamApplication`) is unchanged. Safety invariants (CLAUDE.md §15):
+user-override senders are never touched; per-message `userLabel` rows are
+pinned (model never overwrites a manual decision); SPAM stickiness +
+contact/outbound anti-promotion retained by replaying through
+`ThreadSpamPolicy`; 30-day retention cutoff kept; writes still funnel through
+`SpamStateWriter` he under the single-writer lock.
+
+**Gate:** `./gradlew :core:data:testDebugUnitTest` green + `./gradlew build`.
+
+- [x] **14.1 `SpamBackfillUseCase` force mode** (`core/data/SpamBackfillUseCase.kt`) —
+  Add `fun rescanAll()` (CAS + launch `run(forceReclassify = true)`; extract a
+  private `startWith(force)` shared with `ensureStarted()`; `forceScanForTesting()`
+  delegates to `rescanAll()`). In force mode: drop the whole-sender `allClassified`
+  skip; per message skip **only** verdicts with `userLabel != null`; load existing
+  verdicts once via `messageVerdictDao.observeAll().first()` as a
+  `Map<messageId, entity>` and preserve the original `createdAt` when
+  re-inserting (`CONFLICT_REPLACE` overwrites `isSpam`/`score`). Override skip,
+  sender seeding, retention, and `SpamStateWriter` live-count merge unchanged.
+  *Verify:* `./gradlew :core:data:testDebugUnitTest`. Done 2026-09-10 (not yet committed).
+- [x] **14.2 Settings UI + wiring** — `feature/settings` `SettingsScreen`
+  `onRescan` → `onRecheck`; retitle `scan_title`/`scan_sub` in `values/strings.xml`
+  + `values-fa/strings.xml` ("Re-check all messages" / «بررسی مجدد همه پیامها»);
+  `app/NoSpamNavHost.kt:210` → `container.spamBackfill.rescanAll()`. *Verify:*
+  `:app:assembleDebug`. Done 2026-09-10 (not yet committed).
+- [x] **14.3 Tests** (`core/data/src/test/.../SpamBackfillUseCaseTest.kt`) —
+  force re-scan updates an already-classified verdict's `isSpam`/`score` and
+  preserves `createdAt`; `userLabel`-pinned rows and `isUserOverride` senders
+  untouched; CLEAN→SPAM flip when the classifier now votes spam (dropped
+  `allClassified` skip); cancellation + retention still hold in force mode.
+  Existing gap-filler tests stay green.
+  *Verify:* `:core:data:testDebugUnitTest` 15/15 pass; `./gradlew build` green (1302 tasks). Done 2026-09-10 (not yet committed).
+- [ ] **14.4 Verification** —
+  `./gradlew build` green; on device: change model → Settings "Re-check all
+  messages" → verdicts/sender states re-evaluated with the current model, manual
+  decisions preserved; banner + cancel reuses the existing `BackfillStatus` flow.
+
+---
+
 ## Deferred (Not in v1)
 - `build-logic` convention plugins (add at 8+ modules when duplication justifies).
 - Baseline profiles / macrobenchmark.

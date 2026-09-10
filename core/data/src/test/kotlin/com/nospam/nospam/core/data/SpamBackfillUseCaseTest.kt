@@ -1,6 +1,7 @@
 package com.nospam.nospam.core.data
 
 import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.ContactEntry
@@ -300,5 +301,102 @@ class SpamBackfillUseCaseTest {
         assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
         assertNull(db.messageVerdictDao.getByMessageId(1))
         assertNotNull(db.messageVerdictDao.getByMessageId(2))
+    }
+
+    @Test fun `rescanAll re-evaluates already classified messages and preserves createdAt`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephony(messages = listOf(inbox(1, "+98912", "free gift", recentAgo(200))))
+        var spam = false
+        val classifier = FakeClassifier({ if (spam) SpamVerdict(SpamLabel.SPAM, 2.0) else SpamVerdict(SpamLabel.HAM, -1.0) })
+        val backfill = useCase(db, telephony, classifier, scope = this)
+
+        backfill.ensureStarted()
+        advanceUntilIdle()
+        assertEquals(ThreadSpamState.CLEAN, db.senderStateDao.getByAddress("+98912")!!.state)
+        assertTrue(!db.messageVerdictDao.getByMessageId(1)!!.isSpam)
+        val originalCreatedAt = db.messageVerdictDao.getByMessageId(1)!!.createdAt
+        assertEquals(1, classifier.callCount)
+
+        // The model/preprocessor improved and now votes spam — re-check everything.
+        spam = true
+        backfill.rescanAll()
+        advanceUntilIdle()
+
+        val verdict = db.messageVerdictDao.getByMessageId(1)!!
+        assertTrue(verdict.isSpam)
+        assertEquals(2.0, verdict.score, 0.0)
+        assertEquals(originalCreatedAt, verdict.createdAt)
+        // Ham history is retained (CLAUDE.md §15): one spam on a CLEAN sender -> MIXED.
+        assertEquals(ThreadSpamState.MIXED, db.senderStateDao.getByAddress("+98912")!!.state)
+        assertEquals(2, classifier.callCount)
+    }
+
+    @Test fun `rescanAll never overwrites a user-pinned verdict`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephony(messages = listOf(inbox(1, "+98912", "free gift", recentAgo(200))))
+        val classifier = classifierWhere { true }
+        val backfill = useCase(db, telephony, classifier, scope = this)
+
+        backfill.ensureStarted()
+        advanceUntilIdle()
+        assertTrue(db.messageVerdictDao.getByMessageId(1)!!.isSpam)
+        // User pins the message as "not spam" (per-message label).
+        db.messageVerdictDao.updateUserLabel(1, false)
+        assertEquals(1, classifier.callCount)
+
+        backfill.rescanAll()
+        advanceUntilIdle()
+
+        // Pinned row is untouched: no reclassify, label preserved.
+        assertEquals(1, classifier.callCount)
+        val verdict = db.messageVerdictDao.getByMessageId(1)!!
+        assertEquals(false, verdict.userLabel)
+        assertTrue(verdict.isSpam)
+    }
+
+    @Test fun `rescanAll skips senders with a user override`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephony(messages = listOf(inbox(1, "+98912", "free gift", recentAgo(200))))
+        val classifier = classifierWhere { false }
+        val backfill = useCase(db, telephony, classifier, scope = this)
+
+        backfill.ensureStarted()
+        advanceUntilIdle()
+        assertEquals(1, classifier.callCount)
+        // User trusts the sender even though the model would now call it spam.
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.TRUSTED, isUserOverride = true))
+        val originalVerdict = db.messageVerdictDao.getByMessageId(1)!!
+
+        backfill.rescanAll()
+        advanceUntilIdle()
+
+        assertEquals(BackfillStatus.Done, backfill.status.value)
+        assertEquals(1, classifier.callCount) // whole sender skipped, votes too
+        assertEquals(ThreadSpamState.TRUSTED, db.senderStateDao.getByAddress("+98912")!!.state)
+        val verdict = db.messageVerdictDao.getByMessageId(1)!!
+        assertEquals(originalVerdict.isSpam, verdict.isSpam)
+        assertEquals(originalVerdict.createdAt, verdict.createdAt)
+    }
+
+    @Test fun `rescanAll can be cancelled mid re-evaluation and stays fail-open`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephony(
+            messages = listOf(inbox(1, "+98912", "spam a", recentAgo(300)), inbox(2, "+98999", "spam b", recentAgo(200))),
+        )
+        // Pre-seed verdicts so both senders are fully classified (force mode re-runs them anyway).
+        db.messageVerdictDao.insert(MessageVerdictEntity(1, 1, "+98912", true, 2.0))
+        db.messageVerdictDao.insert(MessageVerdictEntity(2, 2, "+98999", true, 2.0))
+        var holder: SpamBackfillUseCase? = null
+        val classifier = FakeClassifier({ SpamVerdict(SpamLabel.SPAM, 2.0) }) { holder?.cancel() }
+        val backfill = useCase(db, telephony, classifier, scope = this)
+        holder = backfill
+
+        backfill.rescanAll()
+        advanceUntilIdle()
+
+        assertEquals(BackfillStatus.Cancelled, backfill.status.value)
+        // Fail-open: the aborted pass writes nothing.
+        assertNull(db.senderStateDao.getByAddress("+98912"))
+        assertNull(db.senderStateDao.getByAddress("+98999"))
     }
 }

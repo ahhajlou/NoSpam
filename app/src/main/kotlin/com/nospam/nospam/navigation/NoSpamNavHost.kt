@@ -207,7 +207,7 @@ fun NoSpamNavHost(
             MlDebugScreen(viewModel = vm)
         }
         composable<SettingsRoute> {
-            SettingsScreen(onRescan = { container?.spamBackfill?.ensureStarted() })
+            SettingsScreen(onRecheck = { container?.spamBackfill?.rescanAll() })
         }
         composable<OnboardingRoute> {
             OnboardingScreen(

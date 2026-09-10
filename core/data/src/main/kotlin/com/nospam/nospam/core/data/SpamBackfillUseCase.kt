@@ -35,8 +35,10 @@ sealed interface BackfillStatus {
  * One-shot background classification pass over the existing SMS history.
  * Runs on its own IO scope, never blocks the UI, and is fully idempotent:
  *
- * - Messages with a stored `message_verdict` on [start] are skipped, so an
- *   interrupted scan resumes without double-counting.
+ * - Gap-fill mode ([ensureStarted], also the auto-run on app launch): messages
+ *   with a stored `message_verdict` are skipped, so an interrupted scan resumes
+ *   without double-counting. [rescanAll] instead re-evaluates every message,
+ *   so classifier/model updates can be applied to existing history.
  * - No provider writes: no inserts, no READ flips, no notifications for old
  *   messages — content is read-only here.
  * - Fail-open: a crash / abort leaves messages unclassified (still visible in
@@ -60,12 +62,22 @@ class SpamBackfillUseCase(
     private val started = AtomicBoolean(false)
     @Volatile private var cancelled = false
 
-    /** Idempotent start: no-op while a scan is already running or finished. */
-    fun ensureStarted() {
+    /** Idempotent gap-fill start: no-op while a scan is already running or finished. */
+    fun ensureStarted() = startWith(forceReclassify = false)
+
+    /**
+     * Re-evaluates every inbox message with the current classifier, including
+     * messages that already have a verdict (for model/preprocessor updates).
+     * Manual decisions — sender overrides and per-message user labels — are never
+     * overwritten. No-op while a scan is already running.
+     */
+    fun rescanAll() = startWith(forceReclassify = true)
+
+    private fun startWith(forceReclassify: Boolean) {
         if (!started.compareAndSet(false, true)) return
         scope.launch {
             try {
-                run()
+                run(forceReclassify)
             } catch (e: Exception) {
                 _status.value = BackfillStatus.Failed
             } finally {
@@ -81,12 +93,9 @@ class SpamBackfillUseCase(
     }
 
     /** Test hook: force a fresh scan even if one already completed. */
-    fun forceScanForTesting() {
-        started.set(false)
-        ensureStarted()
-    }
+    fun forceScanForTesting() = rescanAll()
 
-    private suspend fun run() {
+    private suspend fun run(forceReclassify: Boolean) {
         val allMessages = telephony.getAllMessages().filter { it.type == MessageType.INBOX }
         val total = allMessages.size
         if (total == 0) {
@@ -94,11 +103,14 @@ class SpamBackfillUseCase(
             return
         }
 
-        val classifiedIds = try {
-            db.messageVerdictDao.getAllMessageIds()
+        // Existing verdicts: keys drive the gap-fill skip; force mode also needs
+        // userLabel + createdAt to pin manual decisions and preserve row age.
+        val existingVerdicts = try {
+            db.messageVerdictDao.observeAll().first().associateBy { it.messageId }
         } catch (e: Exception) {
-            emptySet()
+            emptyMap()
         }
+        val classifiedIds = existingVerdicts.keys
         val outboundNormalized = telephony.getOutboundSenderAddresses()
             .map { normalize(it) }
             .toSet()
@@ -144,7 +156,7 @@ class SpamBackfillUseCase(
             val isContact = key in contactIds
             val hasOutbound = key in outboundNormalized
             val allClassified = messages.all { it.id.value in classifiedIds }
-            if (allClassified) {
+            if (!forceReclassify && allClassified) {
                 processed += messages.size
                 continue
             }
@@ -160,7 +172,15 @@ class SpamBackfillUseCase(
                     _status.value = BackfillStatus.Cancelled
                     return
                 }
-                if (m.id.value in classifiedIds) {
+                if (forceReclassify) {
+                    // User-pinned per-message labels ("not spam"/"report spam") are
+                    // never overwritten by the model; everything else is re-evaluated.
+                    if (existingVerdicts[m.id.value]?.userLabel != null) {
+                        processed++
+                        statusProgress(processed, total)
+                        continue
+                    }
+                } else if (m.id.value in classifiedIds) {
                     processed++
                     continue
                 }
@@ -202,7 +222,9 @@ class SpamBackfillUseCase(
                             normalizedAddress = key,
                             isSpam = verdict.isSpam,
                             score = verdict.score,
-                            createdAt = now,
+                            // Preserve the original row's age so retention/pruning
+                            // still reflects when the message first arrived.
+                            createdAt = existingVerdicts[m.id.value]?.createdAt ?: now,
                         )
                     )
                 }

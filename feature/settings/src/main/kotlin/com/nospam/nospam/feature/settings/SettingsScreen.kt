@@ -62,7 +62,7 @@ private fun languageOptions() = listOf(
 
 @Composable
 fun SettingsScreen(
-    onRescan: () -> Unit = {},
+    onRecheck: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -152,7 +152,7 @@ fun SettingsScreen(
             SettingsRow(
                 title = stringResource(R.string.scan_title),
                 subtitle = stringResource(R.string.scan_sub),
-                onClick = onRescan
+                onClick = onRecheck
             )
         }
         item {
