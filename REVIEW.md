@@ -121,11 +121,51 @@ ViewModel init to the first populated list:
 | Before this session | 9943, 10917 ms |
 | Main-thread IPC removed | 9223, 7536, 7169 ms |
 | Contacts + cursor walk fixed | 4406, 5585, 1686, 1831 ms |
+| Same code, **release** build | 2457, 909, 895, 946, 910 ms |
 
 The first launches after each install include dex/JIT compilation, which the
 trace showed as 2.5 s of `Compiling` slices; the later launches are the honest
-steady state. Roughly 10 s to roughly 1.7 s. Still above the 500 ms gate in
-`CLAUDE.md` §14, so this is an improvement, not a finished job.
+steady state.
+
+**The build type is worth as much as all the code fixes combined.** The same
+commit measures ~1.75 s debuggable and ~0.91 s release, and the release numbers
+are far steadier (four launches inside a 51 ms band, versus 1686-1831 ms). The
+trace explains why: JIT accounted for 2646 ms of compilation plus 3178 ms of
+code-cache and arena support, and a `debuggable` APK also runs StrictMode with
+`penaltyLog` on every disk touch.
+
+So the 500 ms gate in `CLAUDE.md` §14 has been measured against the slower of
+the two builds all along, and the doc does not say which build type it means.
+It should. Against release the figure is ~910 ms, not ~1.75 s.
+
+Release already ships a baseline profile at `assets/dexopt/baseline.prof`,
+contributed by AndroidX and Compose and merged by AGP. What is absent is a
+profile covering NoSpam's own classes.
+
+### What is left, and one thing that did not work
+
+The release trace shows the IPC problems are gone: calls into `com.android.phone`
+fell from 1332 to 7, and `android.process.acore` no longer appears at all.
+
+What remains, measured:
+
+- **~750 ms of main-thread disk stalls**, arriving as many small faults (17 in a
+  single 100 ms bucket) rather than a few large reads. That is cold-start paging
+  of code and resources, so code layout from an app-specific baseline profile is
+  the lever, not an app-code change.
+- **~475 ms across 7 calls into the telephony service**, the country lookup now
+  paid once instead of 1332 times.
+- **All 121 conversations are built before first paint** when ~10 are visible.
+  This is the only remaining item that can plausibly close the gap to 500 ms, and
+  the only one needing an architectural change.
+
+**A hypothesis that failed.** Those 7 telephony calls looked like critical-path
+cost, so the country lookup was moved into the existing application warm-up.
+Measured result: 920, 936, 920, 930 ms against 909, 895, 946, 910 ms without —
+neutral. The calls are evidently not blocking the inbox path. The change was kept
+because it is free and folds two never-cancelled `CoroutineScope(Dispatchers.IO)`
+instances into `appScope`, which closes the scope-leak item from pass 3, but it
+is not a performance win and should not be recorded as one.
 
 The contact matching change was verified rather than assumed. The new key is the
 last 7 digits, the platform's own `PHONE_NUMBERS_EQUAL` suffix rule. Across the

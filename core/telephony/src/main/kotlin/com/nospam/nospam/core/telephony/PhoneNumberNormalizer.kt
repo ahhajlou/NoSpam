@@ -25,6 +25,17 @@ object PhoneNumberNormalizer {
      */
     @Volatile private var countryIso: String? = null
 
+    /**
+     * Resolves the device country ahead of time. The first touch of the
+     * telephony service is expensive — a trace measured the remaining calls at
+     * ~68 ms each, largely service binding and proxy class loading — so
+     * [com.nospam.nospam.core.telephony] callers should not pay it on the
+     * inbox's critical path. Safe to call repeatedly; safe to call off Main.
+     */
+    fun warm(context: Context) {
+        getCountryIso(context)
+    }
+
     fun normalize(context: Context, raw: String): String {
         val trimmed = raw.trim()
         return normalized.getOrPut(trimmed) { compute(context, trimmed) }

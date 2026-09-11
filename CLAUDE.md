@@ -467,7 +467,21 @@ Before publishing: `com.nospam.nospam` is the Android Studio template
 ./gradlew build   # full project, all modules
 ```
 
-**Performance gates (SM-A730F, 269 threads):** `adb logcat -s NoSpamPerf` → `inbox loaded <500ms` cold, `<50ms` on `Inbox->Settings->Inbox` replay (was 3573ms); `Davey! <200ms`, `Skipped 0` (was 1936ms/109 frames). No `DiskReadViolation` at `Sqlite*Dao.<init>`.
+**Performance gates (SM-A730F):** measure a **release** build, not `debug` — the
+same commit measures ~1.75s debuggable and ~0.91s release, because a debuggable
+APK JITs far more (a trace showed 2646ms compiling + 3178ms code-cache support)
+and runs StrictMode with `penaltyLog`. Discard the first launch after an install
+and take the median of three; release launches land inside a ~50ms band, debug
+ones vary by hundreds of ms.
+
+`adb logcat -s NoSpamPerf` → `inbox loaded <500ms` cold, `<50ms` on
+`Inbox->Settings->Inbox` replay; `Davey! <200ms`, `Skipped 0`. No
+`DiskReadViolation` at `Sqlite*Dao.<init>`.
+
+Release APKs are unsigned (no `signingConfig`), so to measure one, `zipalign`
+then `apksigner sign` it with `~/.android/debug.keystore` — that keeps the
+signature identical to the debug build, so it installs as an update and the
+existing `nospam.db` survives.
 
 ## 15. Spam/ham state model (v2 — see TASKS.md Phase 8)
 
