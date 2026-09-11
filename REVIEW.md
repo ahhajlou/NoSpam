@@ -37,6 +37,28 @@ by direct execution and is marked accordingly.
 
 ---
 
+## 1b. Status
+
+Fixed since this review was written. Each finding below is left as originally
+written, so the reasoning stays readable.
+
+| Finding | Status | Regression test |
+|---|---|---|
+| HIGH-1 ingress loses counter updates | fixed | yes, fails without the fix |
+| HIGH-2 contact misses never cached | fixed | no, needs a content resolver |
+| HIGH-3 DAO flow write race | fixed | no, Sqlite DAOs need a device |
+| MED-2 stale cancel flag | fixed | yes, fails without the fix |
+
+Still open: MED-1, MED-3, MED-4, MED-5, MED-6, and all LOW items.
+
+Note on HIGH-3: `SqliteSpamVerdictDao` names its read `readSpamSync` rather than
+`readAllSync`, so it was missed on the first pass of this review and only found
+while fixing. It had the same defect in 4 write methods. All 8 flow-backed DAOs
+now serialize both the mutate-then-refresh pair and the lazy-init read, which had
+the same race against a concurrent writer.
+
+---
+
 ## 2. Findings
 
 ### HIGH-1 — Concurrent inbound SMS silently lose `sender_state` counter updates

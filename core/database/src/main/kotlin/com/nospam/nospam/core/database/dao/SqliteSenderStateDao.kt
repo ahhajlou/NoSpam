@@ -8,11 +8,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderStateDao {
     private val flow = MutableStateFlow<List<SenderStateEntity>>(emptyList())
     private val initialized = AtomicBoolean(false)
+    // Serializes each mutate-then-refresh pair. Without it two writers
+    // could publish their snapshots out of order and strand the flow on
+    // a stale list until the next write to this table.
+    private val writeLock = Mutex()
     private fun readAllSync(): List<SenderStateEntity> {
         val list = mutableListOf<SenderStateEntity>()
         helper.readableDatabase.query("sender_state", null, null, null, null, null, null).use { c ->
@@ -33,7 +39,7 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
     }
     override fun observeAll(): Flow<List<SenderStateEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
         }
     }
     override suspend fun getByAddress(normalizedAddress: String): SenderStateEntity? = withContext(Dispatchers.IO){
@@ -49,12 +55,12 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
         }
     }
     override suspend fun getAll(): List<SenderStateEntity> = withContext(Dispatchers.IO) { readAllSync() }
-    override suspend fun upsert(entity: SenderStateEntity) { withContext(Dispatchers.IO){
+    override suspend fun upsert(entity: SenderStateEntity) { withContext(Dispatchers.IO){ writeLock.withLock {
         upsertEntity(entity)
         flow.value = readAllSync()
         initialized.set(true)
-    }}
-    override suspend fun upsertAll(entities: List<SenderStateEntity>) { withContext(Dispatchers.IO){
+    } }}
+    override suspend fun upsertAll(entities: List<SenderStateEntity>) { withContext(Dispatchers.IO){ writeLock.withLock {
         if (entities.isEmpty()) return@withContext
         helper.writableDatabase.beginTransaction()
         try {
@@ -65,7 +71,7 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
         }
         flow.value = readAllSync()
         initialized.set(true)
-    }}
+    } }}
 
     private fun upsertEntity(entity: SenderStateEntity) {
         val v = senderStateValues(entity)
@@ -80,5 +86,5 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
         put("isUserOverride", if(entity.isUserOverride)1 else 0)
         put("updatedAt", entity.updatedAt)
     }
-    override suspend fun deleteByAddress(normalizedAddress: String) { withContext(Dispatchers.IO){ helper.writableDatabase.delete("sender_state","normalizedAddress = ?", arrayOf(normalizedAddress)); flow.value = readAllSync() } }
+    override suspend fun deleteByAddress(normalizedAddress: String) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("sender_state","normalizedAddress = ?", arrayOf(normalizedAddress)); flow.value = readAllSync() } } }
 }

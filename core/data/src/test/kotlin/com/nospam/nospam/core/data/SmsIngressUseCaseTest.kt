@@ -13,6 +13,8 @@ import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
@@ -21,6 +23,7 @@ class SmsIngressUseCaseTest {
     private class FakeTelephony(
         var threadId: Long = 7L,
         var insertResult: Long? = 99L,
+        var contactName: String? = null,
     ) : TelephonyDataSource {
         val inserted = mutableListOf<Triple<String, String, Boolean>>()
         val updatedReads = mutableListOf<Pair<Long, Boolean>>()
@@ -44,7 +47,8 @@ class SmsIngressUseCaseTest {
         override suspend fun getActiveSubscriptions(): List<com.nospam.nospam.core.telephony.TelephonyDataSource.SimInfo> = emptyList()
         override suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean = false
         override suspend fun getOutboundSenderAddresses(): Set<String> = emptySet()
-        override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = null
+        override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? =
+            contactName?.let { com.nospam.nospam.core.model.Participant(address = address, displayName = it) }
         override suspend fun isSystemBlocked(address: String): Boolean = false
         override suspend fun updateMessageRead(messageId: Long, read: Boolean) { updatedReads.add(messageId to read) }
         override suspend fun getOrCreateThreadId(address: String): Long = threadId
@@ -56,6 +60,48 @@ class SmsIngressUseCaseTest {
             SpamVerdict(if (isSpam) SpamLabel.SPAM else SpamLabel.HAM, if (isSpam) 2.0 else -2.0)
         override suspend fun classifyText(text: String) =
             SpamVerdict(if (isSpam) SpamLabel.SPAM else SpamLabel.HAM, if (isSpam) 2.0 else -2.0)
+    }
+
+    /**
+     * Holds the read → write window open so two concurrent ingress calls
+     * interleave deterministically instead of depending on thread timing.
+     */
+    private class SlowReadSenderStateDao(
+        private val delegate: com.nospam.nospam.core.database.dao.SenderStateDao,
+    ) : com.nospam.nospam.core.database.dao.SenderStateDao by delegate {
+        override suspend fun getByAddress(
+            normalizedAddress: String,
+        ): com.nospam.nospam.core.database.entity.SenderStateEntity? {
+            val value = delegate.getByAddress(normalizedAddress)
+            kotlinx.coroutines.yield()
+            return value
+        }
+    }
+
+    @Test fun `two messages from one sender arriving together both count`() = runTest {
+        val db = NoSpamDatabase(
+            senderStateDao = SlowReadSenderStateDao(
+                com.nospam.nospam.core.database.dao.InMemorySenderStateDao()
+            )
+        )
+        // A known contact, so the policy lands on MIXED and keeps counting.
+        // A stranger would go straight to SPAM, which is sticky by design and
+        // stops incrementing, hiding the race.
+        val useCase = SmsIngressUseCase(
+            FakeTelephony(contactName = "Bank Mellat"),
+            FakeClassifier(isSpam = true),
+            db,
+        )
+
+        // Each SMS_DELIVER broadcast runs its own coroutine on Dispatchers.IO,
+        // so two messages from one short code can be in flight at once.
+        listOf(
+            launch { useCase.handle(RawMessage("+98912", "win prize now", 1L)) },
+            launch { useCase.handle(RawMessage("+98912", "claim your prize", 2L)) },
+        ).joinAll()
+
+        val state = db.senderStateDao.getByAddress("+98912")!!
+        assertEquals(2, state.spamCount)
     }
 
     @Test fun `spam is inserted as read and verdict stored`() = runTest {

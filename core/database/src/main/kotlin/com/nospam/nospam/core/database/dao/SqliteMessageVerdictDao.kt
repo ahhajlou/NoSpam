@@ -7,11 +7,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : MessageVerdictDao {
     private val flow = MutableStateFlow<List<MessageVerdictEntity>>(emptyList())
     private val initialized = AtomicBoolean(false)
+    // Serializes each mutate-then-refresh pair. Without it two writers
+    // could publish their snapshots out of order and strand the flow on
+    // a stale list until the next write to this table.
+    private val writeLock = Mutex()
     private fun readAllSync(): List<MessageVerdictEntity> {
         val list = mutableListOf<MessageVerdictEntity>()
         helper.readableDatabase.query("message_verdict", null, null, null, null, null, "createdAt DESC").use { c ->
@@ -36,16 +42,16 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
     }
     override fun observeAll(): Flow<List<MessageVerdictEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
         }
     }
-    override suspend fun insert(entity: MessageVerdictEntity) = withContext(Dispatchers.IO) {
+    override suspend fun insert(entity: MessageVerdictEntity) = withContext(Dispatchers.IO) { writeLock.withLock {
         insertEntity(entity)
         flow.value = readAllSync()
         initialized.set(true)
         Unit
-    }
-    override suspend fun insertAll(entities: List<MessageVerdictEntity>) = withContext(Dispatchers.IO) {
+    } }
+    override suspend fun insertAll(entities: List<MessageVerdictEntity>) = withContext(Dispatchers.IO) { writeLock.withLock {
         if (entities.isEmpty()) return@withContext
         helper.writableDatabase.beginTransaction()
         try {
@@ -56,7 +62,7 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
         }
         flow.value = readAllSync()
         initialized.set(true)
-    }
+    } }
 
     private fun insertEntity(entity: MessageVerdictEntity) {
         val v = messageVerdictValues(entity)
@@ -112,15 +118,15 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
         }
         list
     }
-    override suspend fun deleteByThread(threadId: Long) { withContext(Dispatchers.IO){ helper.writableDatabase.delete("message_verdict","threadId = ?", arrayOf(threadId.toString())); flow.value = readAllSync() } }
-    override suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO){
+    override suspend fun deleteByThread(threadId: Long) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("message_verdict","threadId = ?", arrayOf(threadId.toString())); flow.value = readAllSync() } } }
+    override suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO){ writeLock.withLock {
         val r = helper.writableDatabase.delete("message_verdict","userLabel IS NULL AND isSpam = 0 AND createdAt < ?", arrayOf(cutoffMillis.toString()))
         if (r>0) flow.value = readAllSync()
         r
-    }
-    override suspend fun updateUserLabel(messageId: Long, userLabel: Boolean?) { withContext(Dispatchers.IO){
+    } }
+    override suspend fun updateUserLabel(messageId: Long, userLabel: Boolean?) { withContext(Dispatchers.IO){ writeLock.withLock {
         val v = android.content.ContentValues().apply { if (userLabel==null) putNull("userLabel") else put("userLabel", if(userLabel)1 else 0) }
         helper.writableDatabase.update("message_verdict", v, "messageId = ?", arrayOf(messageId.toString()))
         flow.value = readAllSync()
-    }}
+    } }}
 }

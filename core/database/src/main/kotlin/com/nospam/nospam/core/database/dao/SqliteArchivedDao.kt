@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SqliteArchivedDao(
@@ -14,6 +16,10 @@ class SqliteArchivedDao(
 ) : ArchivedDao {
     private val flow = MutableStateFlow<List<ArchivedThreadEntity>>(emptyList())
     private val initialized = AtomicBoolean(false)
+    // Serializes each mutate-then-refresh pair. Without it two writers
+    // could publish their snapshots out of order and strand the flow on
+    // a stale list until the next write to this table.
+    private val writeLock = Mutex()
 
     private fun readAllSync(): List<ArchivedThreadEntity> {
         val list = mutableListOf<ArchivedThreadEntity>()
@@ -27,26 +33,26 @@ class SqliteArchivedDao(
 
     override fun observeAll(): Flow<List<ArchivedThreadEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
         }
     }
 
     override suspend fun archive(threadId: Long) {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { writeLock.withLock {
             val values = android.content.ContentValues().apply { put("threadId", threadId) }
             helper.writableDatabase.insertWithOnConflict(
                 "archived_threads", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE
             )
             flow.value = readAllSync()
             initialized.set(true)
-        }
+        } }
     }
 
     override suspend fun unarchive(threadId: Long) {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("archived_threads", "threadId = ?", arrayOf(threadId.toString()))
             flow.value = readAllSync()
-        }
+        } }
     }
 
     override suspend fun isArchived(threadId: Long): Boolean = withContext(Dispatchers.IO) {

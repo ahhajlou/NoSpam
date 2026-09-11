@@ -7,11 +7,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SqliteMutedDao(private val helper: SqliteNoSpamOpenHelper) : MutedDao {
     private val flow = MutableStateFlow<List<MutedThreadEntity>>(emptyList())
     private val initialized = AtomicBoolean(false)
+    // Serializes each mutate-then-refresh pair. Without it two writers
+    // could publish their snapshots out of order and strand the flow on
+    // a stale list until the next write to this table.
+    private val writeLock = Mutex()
     private fun readAllSync(): List<MutedThreadEntity> {
         val list = mutableListOf<MutedThreadEntity>()
         helper.readableDatabase.query("muted_threads", null, null, null, null, null, null).use { c ->
@@ -21,10 +27,10 @@ class SqliteMutedDao(private val helper: SqliteNoSpamOpenHelper) : MutedDao {
     }
     override fun observeAll(): Flow<List<MutedThreadEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
         }
     }
-    override suspend fun mute(threadId: Long) = withContext(Dispatchers.IO){ val v = android.content.ContentValues().apply{ put("threadId", threadId)}; helper.writableDatabase.insertWithOnConflict("muted_threads", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE); flow.value = readAllSync(); initialized.set(true) }
-    override suspend fun unmute(threadId: Long) { withContext(Dispatchers.IO){ helper.writableDatabase.delete("muted_threads", "threadId = ?", arrayOf(threadId.toString())); flow.value = readAllSync() } }
+    override suspend fun mute(threadId: Long) = withContext(Dispatchers.IO){ writeLock.withLock { val v = android.content.ContentValues().apply{ put("threadId", threadId)}; helper.writableDatabase.insertWithOnConflict("muted_threads", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE); flow.value = readAllSync(); initialized.set(true) } }
+    override suspend fun unmute(threadId: Long) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("muted_threads", "threadId = ?", arrayOf(threadId.toString())); flow.value = readAllSync() } } }
     override suspend fun isMuted(threadId: Long): Boolean = withContext(Dispatchers.IO){ helper.readableDatabase.query("muted_threads", null, "threadId = ?", arrayOf(threadId.toString()), null, null, null).use{ it.count>0 } }
 }

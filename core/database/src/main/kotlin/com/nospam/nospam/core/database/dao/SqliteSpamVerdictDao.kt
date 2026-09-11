@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SqliteSpamVerdictDao(
@@ -14,6 +16,10 @@ class SqliteSpamVerdictDao(
 ) : SpamVerdictDao {
     private val flow = MutableStateFlow<List<SpamVerdictEntity>>(emptyList())
     private val initialized = AtomicBoolean(false)
+    // Serializes each mutate-then-refresh pair. Without it two writers
+    // could publish their snapshots out of order and strand the flow on
+    // a stale list until the next write to this table.
+    private val writeLock = Mutex()
 
     private fun readSpamSync(): List<SpamVerdictEntity> {
         val list = mutableListOf<SpamVerdictEntity>()
@@ -44,11 +50,11 @@ class SqliteSpamVerdictDao(
 
     override fun observeSpam(): Flow<List<SpamVerdictEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            flow.value = withContext(Dispatchers.IO) { readSpamSync() }
+            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readSpamSync() } }
         }
     }
 
-    override suspend fun upsert(entity: SpamVerdictEntity) = withContext(Dispatchers.IO) {
+    override suspend fun upsert(entity: SpamVerdictEntity) = withContext(Dispatchers.IO) { writeLock.withLock {
         val values = android.content.ContentValues().apply {
             put("threadId", entity.threadId)
             put("isSpam", if (entity.isSpam) 1 else 0)
@@ -62,23 +68,23 @@ class SqliteSpamVerdictDao(
         flow.value = readSpamSync()
         initialized.set(true)
         Unit
-    }
+    } }
 
     override suspend fun deleteByThread(threadId: Long) {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("spam_verdict", "threadId = ?", arrayOf(threadId.toString()))
             flow.value = readSpamSync()
-        }
+        } }
     }
 
     override suspend fun clearAutoSpam() {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("spam_verdict", "isSpam = 1 AND isUserOverride = 0", null)
             flow.value = readSpamSync()
-        }
+        } }
     }
 
-    override suspend fun deleteAutoSpamOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO) {
+    override suspend fun deleteAutoSpamOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO) { writeLock.withLock {
         val removed = helper.writableDatabase.delete(
             "spam_verdict",
             "isSpam = 1 AND isUserOverride = 0 AND updatedAt < ?",
@@ -86,5 +92,5 @@ class SqliteSpamVerdictDao(
         )
         if (removed > 0) flow.value = readSpamSync()
         removed
-    }
+    } }
 }

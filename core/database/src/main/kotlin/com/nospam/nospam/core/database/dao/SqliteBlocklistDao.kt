@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SqliteBlocklistDao(
@@ -14,6 +16,10 @@ class SqliteBlocklistDao(
 ) : BlocklistDao {
     private val flow = MutableStateFlow<List<BlocklistEntity>>(emptyList())
     private val initialized = AtomicBoolean(false)
+    // Serializes each mutate-then-refresh pair. Without it two writers
+    // could publish their snapshots out of order and strand the flow on
+    // a stale list until the next write to this table.
+    private val writeLock = Mutex()
 
     private fun readAllSync(): List<BlocklistEntity> {
         val db = helper.readableDatabase
@@ -35,7 +41,7 @@ class SqliteBlocklistDao(
 
     override fun observeAll(): Flow<List<BlocklistEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            flow.value = withContext(Dispatchers.IO) { readAllSync() }
+            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
         }
     }
 
@@ -54,7 +60,7 @@ class SqliteBlocklistDao(
         }
     }
 
-    override suspend fun insert(entry: BlocklistEntity): Long = withContext(Dispatchers.IO) {
+    override suspend fun insert(entry: BlocklistEntity): Long = withContext(Dispatchers.IO) { writeLock.withLock {
         val db = helper.writableDatabase
         val values = android.content.ContentValues().apply {
             put("address", entry.address)
@@ -66,18 +72,18 @@ class SqliteBlocklistDao(
         flow.value = readAllSync()
         initialized.set(true)
         id
-    }
+    } }
 
-    override suspend fun delete(entry: BlocklistEntity) = withContext(Dispatchers.IO) {
+    override suspend fun delete(entry: BlocklistEntity) = withContext(Dispatchers.IO) { writeLock.withLock {
         helper.writableDatabase.delete("blocklist", "id = ?", arrayOf(entry.id.toString()))
         flow.value = readAllSync()
         Unit
-    }
+    } }
 
     override suspend fun deleteByAddress(address: String) {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("blocklist", "address = ?", arrayOf(address))
             flow.value = readAllSync()
-        }
+        } }
     }
 }
