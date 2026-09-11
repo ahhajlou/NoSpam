@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.ContactsContract
 import com.nospam.nospam.core.model.Participant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ContactLookup(private val context: Context) {
     /**
@@ -17,16 +18,89 @@ class ContactLookup(private val context: Context) {
 
     private val cache = ConcurrentHashMap<String, Cached>()
 
+    /**
+     * Every contact phone number, keyed by [matchKey], read in a single query.
+     *
+     * The per-address `PhoneLookup` path cost one provider query per
+     * conversation. A system trace of a 121-conversation inbox showed 444 of
+     * them fanned out over as many as 29 threads, all queued against the one
+     * contacts provider process and waiting 300-500 ms each, which was most of
+     * the visible inbox delay. Contacts are a small table; reading it once is
+     * cheaper than asking about 121 numbers individually.
+     *
+     * Null until [warm] has run, which is how [lookup] knows whether a miss is
+     * trustworthy or whether it still has to ask the provider.
+     */
+    @Volatile private var directory: Map<String, Participant>? = null
+    private val warmed = AtomicBoolean(false)
+
+    /** Loads the contact directory once. Safe to call from any thread. */
+    fun warm() {
+        if (!warmed.compareAndSet(false, true)) return
+        directory = runCatching { loadDirectory() }.getOrNull()
+    }
+
     fun lookup(address: String): Participant? {
         // Alphanumeric senders are not in contacts PhoneLookup
         if (address.any { it.isLetter() }) return null
         cache[address]?.let { return it.participant }
-        val result = query(address)
+
+        val dir = directory
+        val result = when {
+            dir == null -> query(address)                      // not warmed, ask the provider
+            else -> dir[matchKey(address)]?.copy(address = address)
+        }
         cache[address] = Cached(result)
         return result
     }
 
     fun invalidate(address: String) { cache.remove(address) }
+
+    /**
+     * Last [MATCH_DIGITS] digits of the number, which is how the platform's own
+     * PhoneLookup compares numbers. Keying on the suffix is what lets a stored
+     * "+98912..." match an incoming "0912...".
+     */
+    private fun matchKey(raw: String): String {
+        val digits = raw.filter { it.isDigit() }
+        return if (digits.length <= MATCH_DIGITS) digits else digits.takeLast(MATCH_DIGITS)
+    }
+
+    private fun loadDirectory(): Map<String, Participant> {
+        val out = HashMap<String, Participant>()
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+            ContactsContract.CommonDataKinds.Phone.PHOTO_URI,
+            ContactsContract.CommonDataKinds.Phone.STARRED,
+        )
+        context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, null, null, null
+        )?.use { c ->
+            val number = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            val name = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val id = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+            val photo = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.PHOTO_URI)
+            val starred = c.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.STARRED)
+            while (c.moveToNext()) {
+                val raw = c.getString(number) ?: continue
+                val key = matchKey(raw)
+                if (key.isEmpty()) continue
+                // First row wins, matching PhoneLookup's single-result behaviour
+                // when one number is attached to several contacts.
+                if (out.containsKey(key)) continue
+                out[key] = Participant(
+                    address = raw,
+                    displayName = c.getString(name),
+                    contactId = c.getLong(id),
+                    photoUri = c.getString(photo),
+                    isStarred = c.getInt(starred) == 1,
+                )
+            }
+        }
+        return out
+    }
 
     private fun query(address: String): Participant? {
         return try {
@@ -52,5 +126,10 @@ class ContactLookup(private val context: Context) {
                 } else null
             }
         } catch (_: Exception) { null }
+    }
+
+    private companion object {
+        /** Platform default for PHONE_NUMBERS_EQUAL suffix matching. */
+        const val MATCH_DIGITS = 7
     }
 }

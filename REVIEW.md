@@ -53,6 +53,7 @@ written, so the reasoning stays readable.
 
 Still open: MED-1, MED-5, MED-6, and all LOW items.
 
+
 MED-4 became more pressing once HIGH-3 was fixed: putting the mutate and the
 refresh under one lock made the full table re-read the length of the critical
 section. Writes now apply a delta to the observed snapshot instead. The
@@ -65,6 +66,75 @@ Note on HIGH-3: `SqliteSpamVerdictDao` names its read `readSpamSync` rather than
 while fixing. It had the same defect in 4 write methods. All 8 flow-backed DAOs
 now serialize both the mutate-then-refresh pair and the lazy-init read, which had
 the same race against a concurrent writer.
+
+---
+
+## 1c. Inbox latency: what the trace actually showed
+
+A 20-second Perfetto system trace of cold start into first inbox render on the
+SM-A730F (Android 9, 121 conversations, 4374 verdict rows) contradicts the
+assumption Phase 11 was built on. The trace is clean, no data loss.
+
+**3,149 binder transactions for one inbox load**, split into two unrelated
+problems:
+
+| Caller | Destination | Calls | Wall time |
+|---|---|---|---|
+| main thread | `com.android.phone` | 1332 | 1444 ms |
+| main thread | `servicemanager` | 1332 | 650 ms |
+| `DefaultDispatch` | `android.process.acore` | 444 | 181757 ms summed |
+
+**Cause 1: the country code was fetched over binder per address, on the main
+thread.** `PhoneNumberNormalizer.getCountryIso` read `networkCountryIso` and
+`simCountryIso` on every `normalize()` call, and evaluated both eagerly even
+though only one is used. `ConversationsRepository` normalizes the same address
+three or more times per emission, in `withFlags`, `applyFilter` and the
+blocklist check. That is the 1332 pairs, about 2.1 s of main-thread IPC.
+
+It ran on the main thread because `observeConversations(filter)` was the one
+flow in the file with no `flowOn`. `observeSpam` and `observeArchived` both hop
+to IO; the inbox flow inherited `viewModelScope`, which is `Main`. Phase 11.1
+recorded that the final combine was "cheap" once the telephony work was hot;
+it is not cheap, because it normalizes.
+
+**Cause 2: unbounded parallel contact lookups saturate one provider process.**
+444 lookups fanned out via `async(Dispatchers.IO)` with no concurrency limit,
+reaching 29 threads in flight against a single contacts provider that serializes
+them anyway. Average wait 300-500 ms each, sustained from 0.9 s to 4.1 s of the
+trace, which is the visible inbox delay. The process ran 88 threads.
+
+The tail of that timeline is the useful part: at 4.0 s the average drops to
+18 ms and at 4.1 s to 3 ms, which is the contact cache from HIGH-2 finally
+taking effect. Before that fix it never did, so this cost was paid on every
+rebuild rather than once.
+
+Phase 11 explicitly marked contact lookup "do not rework" on the grounds that it
+was already parallel. Parallel was the problem, not the solution.
+
+### Result
+
+Measured on the same device and inbox, `NoSpamPerf: inbox loaded: 121`, from
+ViewModel init to the first populated list:
+
+| Build | Launches |
+|---|---|
+| Before this session | 9943, 10917 ms |
+| Main-thread IPC removed | 9223, 7536, 7169 ms |
+| Contacts + cursor walk fixed | 4406, 5585, 1686, 1831 ms |
+
+The first launches after each install include dex/JIT compilation, which the
+trace showed as 2.5 s of `Compiling` slices; the later launches are the honest
+steady state. Roughly 10 s to roughly 1.7 s. Still above the 500 ms gate in
+`CLAUDE.md` §14, so this is an improvement, not a finished job.
+
+The contact matching change was verified rather than assumed. The new key is the
+last 7 digits, the platform's own `PHONE_NUMBERS_EQUAL` suffix rule. Across the
+device's 227 contact phone rows there are 136 distinct keys and **zero** keys
+mapping to more than one contact, so the suffix cannot alias two people here. Six
+sampled numbers were queried through the platform's `phone_lookup` and all six
+returned the name the new directory would return, across mobile and landline,
+local and international formats.
+
 
 ---
 

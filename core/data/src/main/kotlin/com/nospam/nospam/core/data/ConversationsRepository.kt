@@ -31,6 +31,13 @@ class ConversationsRepository(
     // ViewModel collector triggered a fresh telephony query (3.6s on SM-A730F).
     private val repositoryScope = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // Context the flag combine runs on. Production gets IO; a test that injects
+    // its own scope gets that scope's dispatcher, so flowOn does not break the
+    // synchronous dispatch those tests rely on.
+    private val computeContext: kotlin.coroutines.CoroutineContext =
+        externalScope?.coroutineContext?.get(kotlin.coroutines.ContinuationInterceptor)
+            ?: Dispatchers.IO
+
     // Heavy telephony + adjustMixedSnippet shared with replay=1 so revisiting
     // the inbox replays the last list instantly instead of re-querying.
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -137,7 +144,11 @@ class ConversationsRepository(
             )
             val sorted = withFlags.sortedWith(compareByDescending<Conversation> { it.isPinned }.thenByDescending { it.date })
             applyFilter(sorted, flags.senderStates, filter)
-        }
+        // Without this the combine runs on the collector's context, which is
+        // viewModelScope (Main). withFlags/applyFilter normalize every address,
+        // so a trace showed 1332 binder calls to com.android.phone on the main
+        // thread per inbox load. observeSpam/observeArchived already hop to IO.
+        }.flowOn(computeContext)
     }
 
     private data class Flags(

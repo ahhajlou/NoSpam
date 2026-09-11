@@ -111,6 +111,7 @@ class RealTelephonyDataSource(
             }
         }
         val grouped = messages.groupBy { it.threadId }
+        contactLookup.warm()
         // Parallelize contact lookups
         return coroutineScope {
             grouped.map { (threadId, threadMessages) ->
@@ -191,11 +192,18 @@ class RealTelephonyDataSource(
                             val rawDate = c.getLong(3)
                             val date = if (rawDate in 1 until 1_000_000_0000L) rawDate * 1000 else rawDate
                             latestMap[tid] = SmsLatest(addr, body, date)
+                            // Rows come back DATE DESC, so the first row seen for
+                            // a thread is already its newest. Once every thread has
+                            // one, the rest of the cursor is older messages we
+                            // discard anyway - on this inbox that was ~4000 extra
+                            // rows walked across the CursorWindow for nothing.
+                            if (latestMap.size >= metas.size) return@use
                         }
                     }
                 }
             }
             // Parallelize contact lookups + build
+            contactLookup.warm()
             val conversations = coroutineScope {
                 metas.mapNotNull { meta ->
                     val latest = latestMap[meta.id] ?: return@mapNotNull null
