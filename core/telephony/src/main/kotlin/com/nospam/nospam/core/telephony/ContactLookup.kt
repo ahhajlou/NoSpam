@@ -7,14 +7,22 @@ import com.nospam.nospam.core.model.Participant
 import java.util.concurrent.ConcurrentHashMap
 
 class ContactLookup(private val context: Context) {
-    private val cache = ConcurrentHashMap<String, Participant?>()
+    /**
+     * Wraps the lookup result so a miss can be cached too. `ConcurrentHashMap`
+     * rejects null values, so storing a bare null threw and the caller's
+     * `runCatching` swallowed it — every non-contact sender re-queried
+     * PhoneLookup on each conversation-list rebuild.
+     */
+    private data class Cached(val participant: Participant?)
+
+    private val cache = ConcurrentHashMap<String, Cached>()
 
     fun lookup(address: String): Participant? {
         // Alphanumeric senders are not in contacts PhoneLookup
         if (address.any { it.isLetter() }) return null
-        cache[address]?.let { return it }
+        cache[address]?.let { return it.participant }
         val result = query(address)
-        cache[address] = result
+        cache[address] = Cached(result)
         return result
     }
 

@@ -76,6 +76,10 @@ class SpamBackfillUseCase(
 
     private fun startWith(forceReclassify: Boolean) {
         if (!started.compareAndSet(false, true)) return
+        // Clear any cancel that arrived while no scan was running (a tap on a
+        // stale progress notification). Resetting only in the finally below
+        // left the flag set, and the next scan aborted on its first batch.
+        cancelled = false
         scope.launch {
             try {
                 run(forceReclassify)
