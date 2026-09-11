@@ -1,0 +1,434 @@
+# NoSpam — implementation review
+
+Reviewed 2026-09-11 against `dev` (branched from `main` at `72636a9`).
+Scope: 11,553 lines of Kotlin across 17 Gradle modules.
+Priorities, as requested: **thread safety** and **optimization** deepest, then
+modern-Android-API correctness and structure.
+
+---
+
+## 1. Verdict
+
+The architecture is sound and the module boundaries are real, not decorative.
+The build is green across the board:
+
+| Check | Result |
+|---|---|
+| `./gradlew testDebugUnitTest test` | exit 0, all 22 JVM suites pass |
+| `./gradlew lint` | exit 0 |
+| `./gradlew :app:assembleDebug` | exit 0 |
+
+`TODO.md` says a lint error at `feature/export/ExportScreen.kt:214` blocks a full
+build. That is **stale**; the build is clean. But lint passing means less than it
+appears, because `app/build.gradle.kts:66` sets `abortOnError = false`, and the
+app module currently reports 42 lint issues including one Error. The CI gate that
+runs `./gradlew build` cannot fail on any of them.
+
+The serious problems are concentrated in two places: the `sender_state` write
+path, and the `StateFlow`-over-SQLite pattern that every DAO uses. Three findings
+are high severity. All three are new, none are in `TODO.md`, and each has a
+concrete failure scenario below.
+
+**What I could not verify.** Only JDK 25 is installed, so Robolectric is broken,
+and there is no emulator, so the 7 `androidTest` suites never ran. Every finding
+below is derived from reading the source plus the build output. Findings that
+depend on device behavior are labelled as such. One JDK-level claim was confirmed
+by direct execution and is marked accordingly.
+
+---
+
+## 2. Findings
+
+### HIGH-1 — Concurrent inbound SMS silently lose `sender_state` counter updates
+
+**New.** `core/data/.../SmsIngressUseCase.kt:98` and `:128`.
+
+`SpamStateWriter` exists to make the read-decide-write on `sender_state` atomic,
+and `CLAUDE.md` §15 states that guarantee. The ingress path breaks it. The
+previous state is read at line 98, **outside** the lock:
+
+```kotlin
+val prevStateEntity = db.senderStateDao.getByAddress(normalized)   // line 98, unlocked
+```
+
+The policy computes `policyOut` from that snapshot. The lock is then taken at
+line 128, but the lambda **ignores the `current` value the writer hands it** and
+writes the already-computed result:
+
+```kotlin
+spamStateWriter.upsertIfNotOverridden(normalized) {
+    SenderStateEntity(..., spamCount = policyOut.newState.spamCount, ...)   // ignores `current`
+}
+```
+
+So the mutex protects only the user-override check, not the counters.
+
+**Failure scenario.** Two messages arrive from the same short code close
+together. Each `SMS_DELIVER` broadcast constructs its own `AppSmsReceiver` with
+its own scope (`app/.../sms/AppSmsReceiver.kt:25`) and both run on
+`Dispatchers.IO`. Both read `spamCount = 5` at line 98, both compute 6, both
+write 6. One increment is lost. The graduation rule in `CLAUDE.md` §15 is "≥3
+messages and ≥80% spam", so drifting counters mean a genuine spam sender is not
+promoted to `SPAM` when it should be, or a mixed sender is promoted when it
+should not be.
+
+That this is a bug rather than a deliberate trade-off is clear from the two
+neighbouring paths that get it right. The blocked branch at line 72 does use the
+locked value:
+
+```kotlin
+spamCount = (current?.spamCount ?: 0) + 1     // line 73, correct
+```
+
+And `SpamBackfillUseCase` goes further, carrying `seedSpamCount`/`seedHamCount`
+through `PendingStateWrite` specifically so a scan cannot clobber increments that
+raced in from live ingress. The main classification path is the one place the
+pattern was not applied.
+
+**Fix shape.** Move the line 98 read inside the lock, or recompute the counters
+from `current` inside the `compute` lambda. `withSpamStateLock` at
+`SpamStateWriter.kt:68` already exists for exactly this.
+
+**Confirmable without a device**, by a test in `core:data` that runs two
+`handle()` calls concurrently against the in-memory DAO and asserts the final
+`spamCount`.
+
+---
+
+### HIGH-2 — Contact lookups are never negatively cached, so every non-contact re-queries forever
+
+**New.** `core/telephony/.../ContactLookup.kt:10`, `:15`, `:17`.
+
+```kotlin
+private val cache = ConcurrentHashMap<String, Participant?>()   // line 10
+
+fun lookup(address: String): Participant? {
+    if (address.any { it.isLetter() }) return null
+    cache[address]?.let { return it }       // line 15
+    val result = query(address)
+    cache[address] = result                 // line 17
+    return result
+}
+```
+
+`ConcurrentHashMap` rejects null values. When `query()` returns null, meaning the
+number is not in contacts, line 17 throws `NullPointerException`. I confirmed the
+JDK behavior by direct execution rather than relying on the docs:
+
+```
+put(null) threw NullPointerException
+map size after: 0
+```
+
+The exception does not surface, because both call sites wrap the lookup in
+`runCatching { ... }.getOrNull()` (`RealTelephonyDataSource.kt:140` and `:56`).
+So the failure is invisible: the lookup appears to work, returns null correctly,
+and caches nothing.
+
+Line 15 compounds it. Even if a null could be stored, `?.let` treats a cached
+null as a miss, so a negative result could never be served.
+
+**Failure scenario.** An inbox where most senders are not saved contacts, which
+is the normal case for an app whose purpose is spam. Every conversation-list
+rebuild issues one `ContactsContract.PhoneLookup` query per non-contact sender.
+`CLAUDE.md` §5 describes exactly this symptom as a solved problem, "269
+`ContactLookup` IPCs, was 3573ms on SM-A730F". It was not solved. It was masked
+by the repository-level replay cache added in the same phase, which hides the
+cost on revisit but not on first load or after any provider change.
+
+**Fix shape.** Two lines:
+
+```kotlin
+if (cache.containsKey(address)) return cache[address]
+...
+cache[address] = result ?: NOT_A_CONTACT_SENTINEL
+```
+
+or change the map to hold a non-null wrapper. Also consider bounding the cache,
+which is currently unbounded and only cleared by an explicit `invalidate`.
+
+---
+
+### HIGH-3 — Every DAO refreshes its `StateFlow` with an unsynchronized read-modify-write
+
+**New.** 19 call sites across 8 DAOs. Representative:
+`core/database/.../dao/SqliteBlocklistDao.kt:66`,
+`SqliteMessageVerdictDao.kt:44`, `SqliteSenderStateDao.kt:54`.
+
+Every write method ends with the same two steps:
+
+```kotlin
+db.insertWithOnConflict(...)      // step 1: mutate the table
+flow.value = readAllSync()        // step 2: re-read the whole table into the flow
+```
+
+Step 2 is a read-modify-write on shared state with nothing serializing it. SQLite
+makes each statement atomic; it does nothing to order these two steps between
+coroutines.
+
+**Failure scenario.** Writer A blocks a number; writer B blocks a different one.
+Interleaving: A inserts, A reads `{x}`, B inserts, B reads `{x,y}`, B publishes
+`{x,y}`, A publishes `{x}`. The flow now says the second number is not blocked.
+It stays wrong until the next write to that table, because the flow is only ever
+refreshed by a write. The UI reads `sharedFlags` from these flows
+(`ConversationsRepository.kt:47-69`), so the inbox shows a conversation as
+unblocked, unarchived, or not-spam when the database says otherwise.
+
+This is reachable whenever ingress and a backfill flush touch the same table, and
+whenever the user acts on two conversations quickly.
+
+**Fix shape.** A per-DAO `Mutex` around the mutate-and-refresh pair, or drop the
+full re-read and apply the delta to `flow.value` with `MutableStateFlow.update`.
+The second also fixes MED-4.
+
+---
+
+### MED-1 — The telephony conversation cache is read across four separate lock acquisitions
+
+**New.** `core/telephony/.../RealTelephonyDataSource.kt:150-218`.
+
+Three fields form one logical cache generation:
+
+```kotlin
+private var cachedConversations: List<Conversation>? = null   // :37
+private var cachedMetas: List<ThreadMeta>? = null             // :38
+private var cachedLatestMap: Map<Long, SmsLatest> = emptyMap() // :39
+```
+
+They are written together inside one critical section, which is correct. But they
+are read in four separate ones: `withLock { cachedMetas }`, then
+`withLock { cachedConversations }`, then `withLock { cachedMetas?.associateBy }`,
+then `withLock { cachedLatestMap }`. Another writer can install a whole new
+generation between any two of them.
+
+**Failure scenario.** The code validates `cached == metas` against generation N,
+then separately reads `cachedConversations`, which by then belongs to generation
+N+1. It returns a conversation list that was never validated against the metas it
+was checked against, so the inbox renders rows from a different snapshot. Also,
+`mapLatest` in `observeConversations` cancels an in-flight reload, and
+cancellation between two of these acquisitions leaves the read half-done.
+
+**Fix shape.** One `withLock` returning a snapshot of all three, or a single
+immutable holder object swapped atomically.
+
+---
+
+### MED-2 — A stale cancel flag silently kills the next backfill
+
+**New.** `core/data/.../SpamBackfillUseCase.kt:63-64` and `startWith`.
+
+```kotlin
+@Volatile private var cancelled = false
+
+fun cancel() { cancelled = true }
+
+private fun startWith(forceReclassify: Boolean) {
+    if (!started.compareAndSet(false, true)) return
+    scope.launch {
+        try { run(forceReclassify) }
+        ...
+        finally { started.set(false); cancelled = false }   // only reset here
+    }
+}
+```
+
+`cancelled` is reset in the `finally` of a scan that actually ran. It is never
+reset when a scan *starts*.
+
+**Failure scenario.** The user taps Cancel on a backfill progress notification
+that is stale, or `BackfillCancelReceiver` fires after the scan already finished.
+`cancelled` is now `true` with nothing running, and nothing will clear it. The
+next `ensureStarted()` or `rescanAll()` enters the per-sender loop, hits
+`if (cancelled)` on the first iteration, and immediately reports `Cancelled`. The
+user asks for a rescan from Settings and silently gets nothing. A cold restart is
+the only recovery, since the flag is in-memory.
+
+**Fix shape.** Set `cancelled = false` immediately after the successful
+`compareAndSet`, before `scope.launch`.
+
+---
+
+### MED-3 — No indexes on any table
+
+**New.** `core/database/.../SqliteNoSpamOpenHelper.kt`.
+
+Nine tables are created, zero `CREATE INDEX` statements exist anywhere in the
+module. Primary keys cover some access paths, but not the hot ones:
+
+- `message_verdict` has `messageId` as its primary key, and is queried by
+  `threadId` in `getByThread` and `deleteByThread`. Both are full table scans.
+- `deleteAutoOlderThan` filters on `userLabel`, `isSpam`, and `createdAt`. Full
+  scan, and it runs opportunistically on **every** inbound SMS
+  (`SmsIngressUseCase.kt:185`).
+
+This matters more than usual because `CLAUDE.md` §15 says auto-spam verdict rows
+are kept indefinitely by design, so this table is the one that grows without
+bound.
+
+**Fix shape.** An index on `message_verdict(threadId)` and a composite covering
+the retention predicate, added in an `onUpgrade` to version 4.
+
+---
+
+### MED-4 — Write amplification: each write re-reads its entire table
+
+**Partly tracked.** `TODO.md` notes the `CONFLICT_REPLACE` race and the
+per-address `getByAddress` loop, but not this.
+
+The `flow.value = readAllSync()` in HIGH-3 is also a performance problem
+independent of the race. Every single write re-reads and re-materializes the
+whole table into a new list.
+
+On the ingress path this happens up to three times per received SMS:
+`messageVerdictDao.insert`, `senderStateDao.upsert`, and whichever retention
+delete removes a row. With `message_verdict` growing without bound by design,
+per-message cost grows linearly with total history, and combined with MED-3 each
+of those reads is itself a full scan.
+
+**Fix shape.** Same as HIGH-3: apply deltas with `MutableStateFlow.update` rather
+than re-reading.
+
+---
+
+### MED-5 — UI flows keep collecting while the app is backgrounded
+
+**New.** All 7 screens. `feature/conversations/.../ConversationsScreen.kt:73`,
+`:74`, `:435`, `:543`; `feature/thread/.../ThreadScreen.kt:63`;
+`feature/export/.../ExportScreen.kt:51`; `feature/mldebug/.../MlDebugScreen.kt:46`.
+
+Every screen uses `collectAsState()`. None use `collectAsStateWithLifecycle()`,
+even though `androidx-lifecycle-runtime-compose` is already in the version
+catalog and available.
+
+`collectAsState()` keeps the collector active while the app is in the background.
+Because `ConversationsRepository` shares its upstream `Eagerly`
+(`ConversationsRepository.kt:40`, `:69`) and the telephony source re-queries on
+every `ContentObserver` change, a backgrounded app keeps rebuilding the whole
+conversation list on each provider change, paying the contact-lookup cost from
+HIGH-2 each time.
+
+**Fix shape.** Mechanical: swap the call and the import at all 7 sites.
+
+---
+
+### MED-6 — The broadcast completion budget may be tight
+
+**New.** `app/.../sms/AppSmsReceiver.kt:41-66`, `SmsIngressUseCase.kt:87`.
+
+`goAsync()` allows roughly 10 seconds before the system considers the receiver
+stuck. Inside that budget the ingress path does a blocklist check, a provider
+insert, thread resolution, classification under `withTimeout(8000L)`, a contact
+lookup, an outbound-history check, three or four database writes, and two
+retention deletes.
+
+If classification actually reaches its 8-second timeout, everything else has
+under 2 seconds. First-message-after-boot is the worst case, because the
+classifier lazily parses a 1.2 MB JSON model
+(`AppContainer.kt:34`) if the pre-warm at `NoSpamApplication.kt:59` has not
+finished.
+
+The `finally { pending.finish() }` is correctly placed, so the receiver always
+completes. The risk is exceeding the window, not leaking it.
+
+**Device-dependent. Not verified.** Worth measuring on the SM-A730F that the
+existing perf gates use before treating it as real.
+
+---
+
+### LOW
+
+| # | Finding | Location |
+|---|---|---|
+| L-1 | ViewModel holds a `Context` field; lint `StaticFieldLeak`. Leaks the Activity across rotation if it is not the application context. | `feature/thread/.../ThreadViewModel.kt:48` |
+| L-2 | Export embeds `Settings.Secure.ANDROID_ID` in exported message data. A persistent device identifier written into a file of the user's private SMS. Lint `HardwareIds`. | `feature/export/.../ExportViewModel.kt:113`, `ExportScreen.kt:153` |
+| L-3 | `notify()` without a POST_NOTIFICATIONS check; lint `MissingPermission` Error. The comment at `NoSpamApplication.kt:53` claims it "silently no-ops", which is an assumption, not a guard. | `app/.../BackfillProgressNotifier.kt:50` |
+| L-4 | `threadId.toInt()` truncates a `Long` for notification ids and PendingIntent request codes. With `FLAG_UPDATE_CURRENT`, a collision repoints a reply action at the wrong thread. | `NotificationHelper.kt:92`, `:110`; `AppSmsReceiver.kt:84` |
+| L-5 | `MessagingStyle.addMessage` uses `System.currentTimeMillis()` instead of the message timestamp, so notification ordering ignores actual send time. | `NotificationHelper.kt:83` |
+| L-6 | `pushDynamicShortcut` runs on every notification build, on the ingress path. ShortcutManager is rate-limited and this is an IPC per message. | `NotificationHelper.kt:122` |
+| L-7 | `LIMIT 3000` passed inside the `sortOrder` string. Works on SQLite-backed providers but is outside the `ContentResolver` contract; API 30+ wants `QUERY_ARG_LIMIT` in a `Bundle`. The cap also silently truncates history, which may relate to the two open items at the top of `TODO.md`. | `RealTelephonyDataSource.kt:107` |
+| L-8 | `catch (_: Exception) { null }` wraps the entire threads query, swallowing `SecurityException` from a revoked permission and reporting it as an empty inbox. | `RealTelephonyDataSource.kt:225` |
+| L-9 | `feature/export/src/main/AndroidManifest.xml:1` uses the legacy `package=` attribute and declares no `android` namespace. | as noted |
+| L-10 | The default-SMS check is reimplemented at 6 sites and the role request at 2. `feature:settings` calls `RoleManager` while declaring no telephony dependency. | see §4 |
+| L-11 | Root Kover config omits `:feature:export` and `:feature:mldebug`, so 1,084 lines never count toward the coverage ratchet. | `build.gradle.kts:63-77` |
+| L-12 | `abortOnError = false` makes the CI lint gate unable to fail, including on the Error in L-3. | `app/build.gradle.kts:66` |
+| L-13 | `allowBackup="true"` with no backup rules, on an app holding a spam-verdict database keyed by phone number. | `app/src/main/AndroidManifest.xml:23` |
+
+---
+
+## 3. Not findings
+
+Recorded so they are not re-litigated later.
+
+- **`lateinit var container` read from background threads** (`NoSpamApplication.kt:17`).
+  Not volatile, but every read is either inside a coroutine launched after the
+  assignment, which carries a happens-before edge through the dispatcher, or in a
+  broadcast dispatched after `onCreate` completes. Safe as written.
+- **`SpamStateWriter` as a defaultable constructor parameter**
+  (`SmsIngressUseCase.kt:31`). The default builds a private mutex, which would
+  defeat cross-component serialization, but `AppContainer.kt:60` and `:78` both
+  pass the shared instance. A latent footgun, not a live bug.
+- **Unsynchronized collections in the in-memory DAOs.** Reachable only through
+  `NoSpamDatabase.inMemory()`, which production never calls.
+- **`FLAG_MUTABLE` on the reply PendingIntent** (`NotificationHelper.kt:93`).
+  Required by `RemoteInput`, and the base intent sets an explicit component via
+  `setClassName`, which is what `CLAUDE.md` §16 asks for. Correct.
+- **`Uri.fromParts` everywhere.** No `Uri.parse` with string interpolation exists
+  in the codebase. §16 is being followed.
+- **LazyColumn keys.** Every list passes a stable `key`. The Compose list code is
+  in good shape.
+- **The rest of the 42 app lint issues.** Dependency-freshness noise
+  (`GradleDependency`, `NewerVersionAvailable`) and unused resources.
+
+---
+
+## 4. `CLAUDE.md` corrections
+
+The doc drives future agent work, so fixing it has leverage beyond this review.
+
+1. **§4, §11 module count.** Says 15 modules. `settings.gradle.kts` has 17;
+   `:feature:export` and `:feature:mldebug` are undocumented.
+2. **§13 AGP version.** Says Room is blocked by "AGP 9.0.0 + Kotlin 2.2.10". The
+   catalog pins AGP `9.0.1`. Worth re-testing whether the KSP incompatibility
+   still holds before treating Room as permanently blocked.
+3. **§5 contact-lookup claim.** States the 269-IPC problem was fixed in Phase
+   11.4. See HIGH-2: the underlying cache never worked. Replace the claim with
+   what is actually true, that a replay cache hides the cost on revisit.
+4. **§11 directory layout.** The `core:database` line still reads
+   "Room: blocklist, spam verdicts...". It is `SQLiteOpenHelper`, as §2 and §13
+   correctly say. Internally inconsistent.
+5. **§15 atomicity guarantee.** Claims the writer lock makes every
+   read-decide-write on `sender_state` non-interleaving. HIGH-1 shows ingress
+   does not honour it. Either fix the code or soften the claim; right now the doc
+   asserts a guarantee the code does not provide.
+6. **§12 migration status.** Five dead packages still exist under `app/` and are
+   excluded from coverage rather than deleted: `ui`, `navigation`, `receiver`,
+   `service`, `ml`.
+7. **§14 commands.** The comment says `core:data` has 11 tests. This run reports
+   35, all passing. The suite tripled and the doc was not updated.
+
+---
+
+## 5. Suggested order of work
+
+Severity first, but two of these are cheap enough to do immediately:
+
+1. **HIGH-2** is a two-line fix with the largest measurable win. Do it first.
+2. **HIGH-1**, then add the concurrent-ingress test that proves it.
+3. **HIGH-3** and **MED-4** share one fix. Replacing the full re-read with
+   `MutableStateFlow.update` addresses both.
+4. **MED-2** is a one-line fix.
+5. **MED-5** is mechanical across 7 files.
+6. **L-12** and **L-11** restore the gates that would have caught L-3 on their own.
+
+## 6. How to verify any of this
+
+```bash
+./gradlew testDebugUnitTest test    # currently exit 0, 22 suites
+./gradlew lint                      # currently exit 0, but see L-12
+./gradlew :app:assembleDebug        # currently exit 0
+```
+
+HIGH-1 and HIGH-3 are both provable off-device with a `core:data` or
+`core:database` test that issues two concurrent writes and asserts the result.
+HIGH-2 is provable by the JDK snippet quoted in that finding. MED-6 needs a
+device and is explicitly unverified.
