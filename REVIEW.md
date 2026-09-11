@@ -480,7 +480,7 @@ existing perf gates use before treating it as real.
 
 | # | Finding | Location |
 |---|---|---|
-| L-1 | ViewModel holds a `Context` field; lint `StaticFieldLeak`. Leaks the Activity across rotation if it is not the application context. | `feature/thread/.../ThreadViewModel.kt:48` |
+| L-1 | ~~ViewModel holds a `Context` field; lint `StaticFieldLeak`.~~ **Withdrawn on inspection:** line 69 assigns `context.applicationContext`, so no Activity is retained. Lint cannot see that and reports it anyway. It is a warning, not an error, so it does not affect the now-enabled gate. | `feature/thread/.../ThreadViewModel.kt:48` |
 | L-2 | Export embeds `Settings.Secure.ANDROID_ID` in exported message data. A persistent device identifier written into a file of the user's private SMS. Lint `HardwareIds`. | `feature/export/.../ExportViewModel.kt:113`, `ExportScreen.kt:153` |
 | L-3 | `notify()` without a POST_NOTIFICATIONS check; lint `MissingPermission` Error. The comment at `NoSpamApplication.kt:53` claims it "silently no-ops", which is an assumption, not a guard. | `app/.../BackfillProgressNotifier.kt:50` |
 | L-4 | `threadId.toInt()` truncates a `Long` for notification ids and PendingIntent request codes. With `FLAG_UPDATE_CURRENT`, a collision repoints a reply action at the wrong thread. | `NotificationHelper.kt:92`, `:110`; `AppSmsReceiver.kt:84` |
