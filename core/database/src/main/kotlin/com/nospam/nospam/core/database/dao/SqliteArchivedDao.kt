@@ -21,6 +21,31 @@ class SqliteArchivedDao(
     // a stale list until the next write to this table.
     private val writeLock = Mutex()
 
+    /** True once [flow] holds a full snapshot. Guarded by [writeLock]. */
+    private var loaded = false
+
+    /** Reads the whole table. Caller must hold [writeLock]. */
+    private fun load() {
+        flow.value = readAllSync()
+        loaded = true
+        initialized.set(true)
+    }
+
+    /**
+     * Publishes a write by applying [delta] to the current snapshot instead of
+     * re-reading the table, so the critical section stays O(1). Falls back to a
+     * full read while the flow has no snapshot to apply a delta to. Caller must
+     * hold [writeLock].
+     */
+    private fun publish(delta: (List<ArchivedThreadEntity>) -> List<ArchivedThreadEntity>) {
+        if (loaded) {
+            flow.value = delta(flow.value)
+            initialized.set(true)
+        } else {
+            load()
+        }
+    }
+
     private fun readAllSync(): List<ArchivedThreadEntity> {
         val list = mutableListOf<ArchivedThreadEntity>()
         helper.readableDatabase.query("archived_threads", null, null, null, null, null, null).use { c ->
@@ -33,7 +58,9 @@ class SqliteArchivedDao(
 
     override fun observeAll(): Flow<List<ArchivedThreadEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
+            withContext(Dispatchers.IO) {
+                writeLock.withLock { if (!loaded) load() }
+            }
         }
     }
 
@@ -43,15 +70,14 @@ class SqliteArchivedDao(
             helper.writableDatabase.insertWithOnConflict(
                 "archived_threads", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE
             )
-            flow.value = readAllSync()
-            initialized.set(true)
+            publish { it.withThread(threadId) }
         } }
     }
 
     override suspend fun unarchive(threadId: Long) {
         withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("archived_threads", "threadId = ?", arrayOf(threadId.toString()))
-            flow.value = readAllSync()
+            publish { it.withoutThread(threadId) }
         } }
     }
 

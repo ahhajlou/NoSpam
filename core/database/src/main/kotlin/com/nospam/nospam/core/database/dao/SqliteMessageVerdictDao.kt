@@ -18,6 +18,31 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
     // could publish their snapshots out of order and strand the flow on
     // a stale list until the next write to this table.
     private val writeLock = Mutex()
+
+    /** True once [flow] holds a full snapshot. Guarded by [writeLock]. */
+    private var loaded = false
+
+    /** Reads the whole table. Caller must hold [writeLock]. */
+    private fun load() {
+        flow.value = readAllSync()
+        loaded = true
+        initialized.set(true)
+    }
+
+    /**
+     * Publishes a write by applying [delta] to the current snapshot instead of
+     * re-reading the table, so the critical section stays O(1). Falls back to a
+     * full read while the flow has no snapshot to apply a delta to. Caller must
+     * hold [writeLock].
+     */
+    private fun publish(delta: (List<MessageVerdictEntity>) -> List<MessageVerdictEntity>) {
+        if (loaded) {
+            flow.value = delta(flow.value)
+            initialized.set(true)
+        } else {
+            load()
+        }
+    }
     private fun readAllSync(): List<MessageVerdictEntity> {
         val list = mutableListOf<MessageVerdictEntity>()
         helper.readableDatabase.query("message_verdict", null, null, null, null, null, "createdAt DESC").use { c ->
@@ -42,13 +67,14 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
     }
     override fun observeAll(): Flow<List<MessageVerdictEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
+            withContext(Dispatchers.IO) {
+                writeLock.withLock { if (!loaded) load() }
+            }
         }
     }
     override suspend fun insert(entity: MessageVerdictEntity) = withContext(Dispatchers.IO) { writeLock.withLock {
         insertEntity(entity)
-        flow.value = readAllSync()
-        initialized.set(true)
+        publish { it.withVerdict(entity) }
         Unit
     } }
     override suspend fun insertAll(entities: List<MessageVerdictEntity>) = withContext(Dispatchers.IO) { writeLock.withLock {
@@ -60,8 +86,7 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
         } finally {
             helper.writableDatabase.endTransaction()
         }
-        flow.value = readAllSync()
-        initialized.set(true)
+        publish { it.withVerdicts(entities) }
     } }
 
     private fun insertEntity(entity: MessageVerdictEntity) {
@@ -118,15 +143,15 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
         }
         list
     }
-    override suspend fun deleteByThread(threadId: Long) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("message_verdict","threadId = ?", arrayOf(threadId.toString())); flow.value = readAllSync() } } }
+    override suspend fun deleteByThread(threadId: Long) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("message_verdict","threadId = ?", arrayOf(threadId.toString())); publish { it.withoutThread(threadId) } } } }
     override suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO){ writeLock.withLock {
         val r = helper.writableDatabase.delete("message_verdict","userLabel IS NULL AND isSpam = 0 AND createdAt < ?", arrayOf(cutoffMillis.toString()))
-        if (r>0) flow.value = readAllSync()
+        if (r>0) publish { it.prunedAutoHamBefore(cutoffMillis) }
         r
     } }
     override suspend fun updateUserLabel(messageId: Long, userLabel: Boolean?) { withContext(Dispatchers.IO){ writeLock.withLock {
         val v = android.content.ContentValues().apply { if (userLabel==null) putNull("userLabel") else put("userLabel", if(userLabel)1 else 0) }
         helper.writableDatabase.update("message_verdict", v, "messageId = ?", arrayOf(messageId.toString()))
-        flow.value = readAllSync()
+        publish { it.withUserLabel(messageId, userLabel) }
     } }}
 }

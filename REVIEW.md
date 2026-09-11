@@ -48,8 +48,17 @@ written, so the reasoning stays readable.
 | HIGH-2 contact misses never cached | fixed | no, needs a content resolver |
 | HIGH-3 DAO flow write race | fixed | no, Sqlite DAOs need a device |
 | MED-2 stale cancel flag | fixed | yes, fails without the fix |
+| MED-3 no indexes | fixed | no, schema change needs a device |
+| MED-4 write amplification | fixed | yes, 19 tests on the delta transforms |
 
-Still open: MED-1, MED-3, MED-4, MED-5, MED-6, and all LOW items.
+Still open: MED-1, MED-5, MED-6, and all LOW items.
+
+MED-4 became more pressing once HIGH-3 was fixed: putting the mutate and the
+refresh under one lock made the full table re-read the length of the critical
+section. Writes now apply a delta to the observed snapshot instead. The
+transforms live in `FlowDeltas.kt`, free of Android imports, so the part most
+likely to drift from its SQL is unit-tested even though the DAOs themselves
+cannot be.
 
 Note on HIGH-3: `SqliteSpamVerdictDao` names its read `readSpamSync` rather than
 `readAllSync`, so it was missed on the first pass of this review and only found

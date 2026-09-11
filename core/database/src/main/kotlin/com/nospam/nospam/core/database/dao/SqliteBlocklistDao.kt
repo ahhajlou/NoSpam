@@ -21,6 +21,31 @@ class SqliteBlocklistDao(
     // a stale list until the next write to this table.
     private val writeLock = Mutex()
 
+    /** True once [flow] holds a full snapshot. Guarded by [writeLock]. */
+    private var loaded = false
+
+    /** Reads the whole table. Caller must hold [writeLock]. */
+    private fun load() {
+        flow.value = readAllSync()
+        loaded = true
+        initialized.set(true)
+    }
+
+    /**
+     * Publishes a write by applying [delta] to the current snapshot instead of
+     * re-reading the table, so the critical section stays O(1). Falls back to a
+     * full read while the flow has no snapshot to apply a delta to. Caller must
+     * hold [writeLock].
+     */
+    private fun publish(delta: (List<BlocklistEntity>) -> List<BlocklistEntity>) {
+        if (loaded) {
+            flow.value = delta(flow.value)
+            initialized.set(true)
+        } else {
+            load()
+        }
+    }
+
     private fun readAllSync(): List<BlocklistEntity> {
         val db = helper.readableDatabase
         val list = mutableListOf<BlocklistEntity>()
@@ -41,7 +66,9 @@ class SqliteBlocklistDao(
 
     override fun observeAll(): Flow<List<BlocklistEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            withContext(Dispatchers.IO) { writeLock.withLock { flow.value = readAllSync() } }
+            withContext(Dispatchers.IO) {
+                writeLock.withLock { if (!loaded) load() }
+            }
         }
     }
 
@@ -69,21 +96,22 @@ class SqliteBlocklistDao(
         }
         // REPLACE on conflict to mimic in-memory behaviour (unique address)
         val id = db.insertWithOnConflict("blocklist", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
-        flow.value = readAllSync()
-        initialized.set(true)
+        // insertWithOnConflict returns -1 when the row was not written; leave the
+        // snapshot alone in that case rather than publishing a row that is not there.
+        if (id != -1L) publish { it.withEntry(entry.copy(id = id)) }
         id
     } }
 
     override suspend fun delete(entry: BlocklistEntity) = withContext(Dispatchers.IO) { writeLock.withLock {
         helper.writableDatabase.delete("blocklist", "id = ?", arrayOf(entry.id.toString()))
-        flow.value = readAllSync()
+        publish { it.withoutId(entry.id) }
         Unit
     } }
 
     override suspend fun deleteByAddress(address: String) {
         withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("blocklist", "address = ?", arrayOf(address))
-            flow.value = readAllSync()
+            publish { it.withoutAddress(address) }
         } }
     }
 }
