@@ -482,16 +482,16 @@ existing perf gates use before treating it as real.
 |---|---|---|
 | L-1 | ~~ViewModel holds a `Context` field; lint `StaticFieldLeak`.~~ **Withdrawn on inspection:** line 69 assigns `context.applicationContext`, so no Activity is retained. Lint cannot see that and reports it anyway. It is a warning, not an error, so it does not affect the now-enabled gate. | `feature/thread/.../ThreadViewModel.kt:48` |
 | L-2 | Export embeds `Settings.Secure.ANDROID_ID` in exported message data. A persistent device identifier written into a file of the user's private SMS. Lint `HardwareIds`. | `feature/export/.../ExportViewModel.kt:113`, `ExportScreen.kt:153` |
-| L-3 | `notify()` without a POST_NOTIFICATIONS check; lint `MissingPermission` Error. The comment at `NoSpamApplication.kt:53` claims it "silently no-ops", which is an assumption, not a guard. | `app/.../BackfillProgressNotifier.kt:50` |
-| L-4 | `threadId.toInt()` truncates a `Long` for notification ids and PendingIntent request codes. With `FLAG_UPDATE_CURRENT`, a collision repoints a reply action at the wrong thread. | `NotificationHelper.kt:92`, `:110`; `AppSmsReceiver.kt:84` |
-| L-5 | `MessagingStyle.addMessage` uses `System.currentTimeMillis()` instead of the message timestamp, so notification ordering ignores actual send time. | `NotificationHelper.kt:83` |
-| L-6 | `pushDynamicShortcut` runs on every notification build, on the ingress path. ShortcutManager is rate-limited and this is an IPC per message. | `NotificationHelper.kt:122` |
+| L-3 | **Fixed.** The `POST_NOTIFICATIONS` check now sits where `notify()` is called, not only in the caller. | `app/.../BackfillProgressNotifier.kt` |
+| L-4 | **Fixed.** `threadId.toInt()` truncated the `Long` thread id for notification ids and request codes. A single `NotificationHelper.notificationId()` now folds the high bits via `hashCode()`, and every notify/cancel/request-code goes through it so they stay in agreement. | `NotificationHelper.kt`, `AppSmsReceiver.kt` |
+| L-5 | **Fixed.** `buildMessageNotification` takes a `timestamp`, used for both `addMessage` and `setWhen`, so ordering follows when the message was sent rather than when the notification was built. | `NotificationHelper.kt` |
+| L-6 | **Not fixed, deliberately.** It is an IPC per message on the ingress path, but `setShortcutId` needs the shortcut to exist for conversation-style notifications on Android 11+, so removing it would downgrade them. Left alone. | `NotificationHelper.kt:122` |
 | L-7 | `LIMIT 3000` passed inside the `sortOrder` string. Works on SQLite-backed providers but is outside the `ContentResolver` contract; API 30+ wants `QUERY_ARG_LIMIT` in a `Bundle`. The cap also silently truncates history, which may relate to the two open items at the top of `TODO.md`. | `RealTelephonyDataSource.kt:107` |
 | L-8 | `catch (_: Exception) { null }` wraps the entire threads query, swallowing `SecurityException` from a revoked permission and reporting it as an empty inbox. | `RealTelephonyDataSource.kt:225` |
-| L-9 | `feature/export/src/main/AndroidManifest.xml:1` uses the legacy `package=` attribute and declares no `android` namespace. | as noted |
+| L-9 | **Fixed.** The legacy `package=` attribute is gone; the namespace was already declared in `feature/export/build.gradle.kts`, so the attribute was redundant. The stub now matches the other feature modules. | `feature/export/src/main/AndroidManifest.xml` |
 | L-10 | The default-SMS check is reimplemented at 6 sites and the role request at 2. `feature:settings` calls `RoleManager` while declaring no telephony dependency. | see §4 |
 | L-11 | Root Kover config omits `:feature:export` and `:feature:mldebug`, so 1,084 lines never count toward the coverage ratchet. | `build.gradle.kts:63-77` |
-| L-12 | `abortOnError = false` makes the CI lint gate unable to fail, including on the Error in L-3. | `app/build.gradle.kts:66` |
+| L-12 | **Fixed.** `abortOnError = true`; `checkReleaseBuilds` and the promoted `UnsafeIntentLaunch`/`MutableImplicitPendingIntent` checks are unchanged. | `app/build.gradle.kts` |
 | L-13 | `allowBackup="true"` with no backup rules, on an app holding a spam-verdict database keyed by phone number. | `app/src/main/AndroidManifest.xml:23` |
 
 ---
