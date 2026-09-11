@@ -36,7 +36,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +52,7 @@ import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeIncoming
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.nospam.nospam.core.model.MessageType
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -60,7 +60,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
     val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(threadId, address) { viewModel.loadThread(threadId, address, context) }
     var selected by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lazyState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val atBottom by remember { derivedStateOf { lazyState.firstVisibleItemIndex == 0 } }

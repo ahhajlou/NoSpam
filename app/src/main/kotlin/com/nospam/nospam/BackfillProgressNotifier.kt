@@ -1,7 +1,11 @@
 package com.nospam.nospam
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.data.SpamBackfillUseCase
 import com.nospam.nospam.core.notifications.NotificationHelper
@@ -43,6 +47,15 @@ class BackfillProgressNotifier(
     }
 
     private fun show(processed: Int, total: Int) {
+        // render() already gates on areNotificationsEnabled(), but lint cannot see
+        // through that and a future caller might not have the guard, so the
+        // permission is checked where the call actually happens.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
         val notification = NotificationHelper.buildBackfillProgressNotification(
             context, processed, total,
             BackfillCancelReceiver.cancelPendingIntent(context)

@@ -39,7 +39,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +54,7 @@ import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun ConversationsScreen(
@@ -70,8 +70,8 @@ fun ConversationsScreen(
     onTogglePin: (Long) -> Unit = viewModel::togglePin,
     onToggleMute: (Long) -> Unit = viewModel::toggleMute,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val isDefault by viewModel.isDefaultSmsApp.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDefault by viewModel.isDefaultSmsApp.collectAsStateWithLifecycle()
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -432,7 +432,7 @@ fun ArchivedScreen(
 ) {
     // Live data when a ViewModel is provided (empty until an archived-thread
     // store exists); fake seed for previews.
-    val live = viewModel?.conversations?.collectAsState()?.value
+    val live = viewModel?.conversations?.collectAsStateWithLifecycle()?.value
     var fakeArchived by androidx.compose.runtime.remember(viewModel) {
         mutableStateOf(
             if (viewModel == null) listOf(
@@ -540,7 +540,7 @@ fun SpamScreen(
     onDelete: (Long) -> Unit = {},
 ) {
     // Live verdicts when a ViewModel is provided; fake seed for previews/tests.
-    val live = viewModel?.conversations?.collectAsState()?.value
+    val live = viewModel?.conversations?.collectAsStateWithLifecycle()?.value
     val isLive = viewModel != null
     var fakeSpamList by androidx.compose.runtime.remember(viewModel) {
         mutableStateOf(

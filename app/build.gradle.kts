@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.baselineprofile)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -61,14 +62,19 @@ android {
     buildFeatures {
         compose = true
     }
+
     lint {
         checkReleaseBuilds = true
-        abortOnError = false
+        // The gate is only a gate if it can fail. This was false, so CI's
+        // `./gradlew build` could not fail on any lint issue, including the
+        // MissingPermission Error in BackfillProgressNotifier.
+        abortOnError = true
         error += setOf("UnsafeIntentLaunch", "MutableImplicitPendingIntent")
     }
 }
 
 dependencies {
+    baselineProfile(project(":baselineprofile"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:common"))
