@@ -245,7 +245,16 @@ class RealTelephonyDataSource(
                 }
                 conversations
             }
-        } catch (_: Exception) { null }
+        } catch (e: SecurityException) {
+            // A revoked READ_SMS lands here. Returning null still falls through to
+            // the message-table path, which fails the same way, so the user sees an
+            // empty inbox either way — but the cause is no longer invisible.
+            Log.w(TAG, "Threads query denied by permissions", e)
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Threads query failed, falling back to message scan", e)
+            null
+        }
     }
 
     override suspend fun getMessages(

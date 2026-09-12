@@ -29,6 +29,7 @@ android {
 dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
+    implementation(project(":core:telephony"))
     implementation(project(":core:common"))
     implementation(project(":core:i18n"))
     implementation(project(":core:data"))

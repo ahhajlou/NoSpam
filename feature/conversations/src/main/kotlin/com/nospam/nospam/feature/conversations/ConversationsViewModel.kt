@@ -56,14 +56,8 @@ class ConversationsViewModel(
         }
     }
 
-    private fun isDefaultSmsAppSync(context: Context): Boolean {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            val rm = context.getSystemService(android.app.role.RoleManager::class.java) ?: return false
-            rm.isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
-        } else {
-            android.provider.Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-        }
-    }
+    private fun isDefaultSmsAppSync(context: Context): Boolean =
+        com.nospam.nospam.core.telephony.DefaultSmsApp.isHeld(context)
 
     // Fake fallback: plain StateFlow, no Main dispatcher needed (tests/previews).
     private val all = fakeConversations()

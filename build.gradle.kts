@@ -77,4 +77,6 @@ dependencies {
     kover(project(":feature:thread"))
     kover(project(":feature:settings"))
     kover(project(":feature:onboarding"))
+    kover(project(":feature:export"))
+    kover(project(":feature:mldebug"))
 }

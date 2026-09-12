@@ -1,5 +1,6 @@
 package com.nospam.nospam.feature.settings
 
+import com.nospam.nospam.core.telephony.DefaultSmsApp
 import android.app.NotificationManager
 import android.app.role.RoleManager
 import android.content.Context
@@ -320,35 +321,15 @@ private fun applyLanguage(tag: String) {
     }
 }
 
-private fun isDefaultSmsApp(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val rm = context.getSystemService(RoleManager::class.java) ?: return false
-        rm.isRoleHeld(RoleManager.ROLE_SMS)
-    } else {
-        Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-    }
-}
+private fun isDefaultSmsApp(context: Context): Boolean = DefaultSmsApp.isHeld(context)
 
 private fun requestDefaultSmsRole(
     context: Context,
     launcher: androidx.activity.result.ActivityResultLauncher<Intent>
 ) {
-    try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val rm = context.getSystemService(RoleManager::class.java) ?: return
-            if (!rm.isRoleHeld(RoleManager.ROLE_SMS)) {
-                launcher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_SMS))
-            }
-        } else {
-            val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).apply {
-                putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
-            }
-            launcher.launch(intent)
-        }
-    } catch (_: Exception) {
-        // Role request can throw if the activity is not in a valid state; status
-        // refreshes on resume so the row stays truthful.
-    }
+    // Launch can still throw if the activity is not in a valid state; the status
+    // row refreshes on resume, so swallowing keeps it truthful either way.
+    runCatching { DefaultSmsApp.requestIntent(context)?.let(launcher::launch) }
 }
 
 private fun areNotificationsEnabled(context: Context): Boolean {
