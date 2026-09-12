@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -87,6 +88,10 @@ fun ConversationsScreen(
         ) { padding ->
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
+                // Scaffold's inner padding covers the system bars but not the FAB,
+                // which floats above the content — without this the last row sits
+                // under "Start chat" and its spam badge is unreadable.
+                contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 if (!isDefault) {
@@ -711,3 +716,6 @@ fun SpamPreview() {
         SpamScreen()
     }
 }
+
+/** FAB height plus its Scaffold margins, so the last row can scroll clear of it. */
+private val FAB_CLEARANCE = 88.dp
