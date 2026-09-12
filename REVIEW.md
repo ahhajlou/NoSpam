@@ -126,6 +126,8 @@ ViewModel init to the first populated list:
 | Main-thread IPC removed | 9223, 7536, 7169 ms |
 | Contacts + cursor walk fixed | 4406, 5585, 1686, 1831 ms |
 | Same code, **release** build | 2457, 909, 895, 946, 910 ms |
+| Release + app baseline profile, compiled | 427, 349, 375, 465 ms |
+| Control: same, app profile removed | 1043, 974, 876, 911 ms |
 
 The first launches after each install include dex/JIT compilation, which the
 trace showed as 2.5 s of `Compiling` slices; the later launches are the honest
@@ -142,9 +144,28 @@ So the 500 ms gate in `CLAUDE.md` §14 has been measured against the slower of
 the two builds all along, and the doc does not say which build type it means.
 It should. Against release the figure is ~910 ms, not ~1.75 s.
 
-Release already ships a baseline profile at `assets/dexopt/baseline.prof`,
-contributed by AndroidX and Compose and merged by AGP. What is absent is a
-profile covering NoSpam's own classes.
+Release already shipped a baseline profile at `assets/dexopt/baseline.prof`,
+contributed by AndroidX and Compose and merged by AGP. What was absent was a
+profile covering NoSpam's own classes. Generating one took the inbox from ~910 ms
+to ~400 ms, clearing the 500 ms gate for the first time.
+
+That attribution was controlled, not assumed. Forcing compilation is itself a
+change, so a control build with identical code and the app profile removed — the
+AndroidX/Compose profiles the APK always carried still present — was given the
+same forced compilation and stayed at 876-1043 ms. The win is the profile.
+
+Two things this exposed about how the profile actually reaches users:
+
+- **It does nothing until ART compiles it.** On API 28 `ProfileInstaller` writes
+  the profile and logs "Skipping profile installation", then compilation waits for
+  a background dexopt job that runs when the device is idle and charging. The
+  first measurement with the profile packaged was unchanged for exactly this
+  reason. Users get the benefit within a day or so, not at install.
+- **Generation needs a workaround on an emulator.** `startActivityAndWait()`
+  confirms a launch through `dumpsys gfxinfo framestats`, which a
+  software-rendered emulator leaves empty, so it fails with "Unable to confirm
+  activity launch completion []". The generator launches by shell and waits on the
+  UI instead; a profile records which code ran, not how fast, so nothing is lost.
 
 ### What is left, and one thing that did not work
 
