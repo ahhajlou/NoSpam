@@ -1,5 +1,6 @@
 package com.nospam.nospam.feature.onboarding
 
+import com.nospam.nospam.core.telephony.DefaultSmsApp
 import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
@@ -100,28 +101,11 @@ private fun hasRequiredPermissions(context: Context): Boolean {
     }
 }
 
-private fun isDefaultSmsApp(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val roleManager = context.getSystemService(RoleManager::class.java)
-        roleManager.isRoleHeld(RoleManager.ROLE_SMS)
-    } else {
-        Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-    }
-}
+private fun isDefaultSmsApp(context: Context): Boolean = DefaultSmsApp.isHeld(context)
 
 private fun requestDefaultSmsRole(
     context: Context,
     launcher: androidx.activity.result.ActivityResultLauncher<Intent>
 ) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val roleManager = context.getSystemService(RoleManager::class.java)
-        if (!roleManager.isRoleHeld(RoleManager.ROLE_SMS)) {
-            launcher.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_SMS))
-        }
-    } else {
-        val intent = Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).apply {
-            putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
-        }
-        launcher.launch(intent)
-    }
+    DefaultSmsApp.requestIntent(context)?.let(launcher::launch)
 }

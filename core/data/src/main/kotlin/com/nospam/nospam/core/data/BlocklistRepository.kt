@@ -78,16 +78,6 @@ class BlocklistRepository(
         return false
     }
 
-    private fun isDefaultSmsApp(ctx: Context): Boolean {
-        return try {
-            val pkg = ctx.packageName
-            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                val rm = ctx.getSystemService(android.app.role.RoleManager::class.java)
-                rm?.isRoleHeld(android.app.role.RoleManager.ROLE_SMS) == true
-            } else {
-                @Suppress("DEPRECATION")
-                android.provider.Telephony.Sms.getDefaultSmsPackage(ctx) == pkg
-            }
-        } catch (_: Exception) { false }
-    }
+    private fun isDefaultSmsApp(ctx: Context): Boolean =
+        com.nospam.nospam.core.telephony.DefaultSmsApp.isHeld(ctx)
 }

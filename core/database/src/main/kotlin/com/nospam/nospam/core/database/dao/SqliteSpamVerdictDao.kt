@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SqliteSpamVerdictDao(
@@ -14,6 +16,35 @@ class SqliteSpamVerdictDao(
 ) : SpamVerdictDao {
     private val flow = MutableStateFlow<List<SpamVerdictEntity>>(emptyList())
     private val initialized = AtomicBoolean(false)
+    // Serializes each mutate-then-refresh pair. Without it two writers
+    // could publish their snapshots out of order and strand the flow on
+    // a stale list until the next write to this table.
+    private val writeLock = Mutex()
+
+    /** True once [flow] holds a full snapshot. Guarded by [writeLock]. */
+    private var loaded = false
+
+    /** Reads the whole table. Caller must hold [writeLock]. */
+    private fun load() {
+        flow.value = readSpamSync()
+        loaded = true
+        initialized.set(true)
+    }
+
+    /**
+     * Publishes a write by applying [delta] to the current snapshot instead of
+     * re-reading the table, so the critical section stays O(1). Falls back to a
+     * full read while the flow has no snapshot to apply a delta to. Caller must
+     * hold [writeLock].
+     */
+    private fun publish(delta: (List<SpamVerdictEntity>) -> List<SpamVerdictEntity>) {
+        if (loaded) {
+            flow.value = delta(flow.value)
+            initialized.set(true)
+        } else {
+            load()
+        }
+    }
 
     private fun readSpamSync(): List<SpamVerdictEntity> {
         val list = mutableListOf<SpamVerdictEntity>()
@@ -44,11 +75,13 @@ class SqliteSpamVerdictDao(
 
     override fun observeSpam(): Flow<List<SpamVerdictEntity>> = flow.onStart {
         if (initialized.compareAndSet(false, true)) {
-            flow.value = withContext(Dispatchers.IO) { readSpamSync() }
+            withContext(Dispatchers.IO) {
+                writeLock.withLock { if (!loaded) load() }
+            }
         }
     }
 
-    override suspend fun upsert(entity: SpamVerdictEntity) = withContext(Dispatchers.IO) {
+    override suspend fun upsert(entity: SpamVerdictEntity) = withContext(Dispatchers.IO) { writeLock.withLock {
         val values = android.content.ContentValues().apply {
             put("threadId", entity.threadId)
             put("isSpam", if (entity.isSpam) 1 else 0)
@@ -59,32 +92,31 @@ class SqliteSpamVerdictDao(
         helper.writableDatabase.insertWithOnConflict(
             "spam_verdict", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE
         )
-        flow.value = readSpamSync()
-        initialized.set(true)
+        publish { it.withSpamVerdict(entity) }
         Unit
-    }
+    } }
 
     override suspend fun deleteByThread(threadId: Long) {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("spam_verdict", "threadId = ?", arrayOf(threadId.toString()))
-            flow.value = readSpamSync()
-        }
+            publish { it.withoutThread(threadId) }
+        } }
     }
 
     override suspend fun clearAutoSpam() {
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { writeLock.withLock {
             helper.writableDatabase.delete("spam_verdict", "isSpam = 1 AND isUserOverride = 0", null)
-            flow.value = readSpamSync()
-        }
+            publish { it.withoutAutoSpam() }
+        } }
     }
 
-    override suspend fun deleteAutoSpamOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO) {
+    override suspend fun deleteAutoSpamOlderThan(cutoffMillis: Long): Int = withContext(Dispatchers.IO) { writeLock.withLock {
         val removed = helper.writableDatabase.delete(
             "spam_verdict",
             "isSpam = 1 AND isUserOverride = 0 AND updatedAt < ?",
             arrayOf(cutoffMillis.toString())
         )
-        if (removed > 0) flow.value = readSpamSync()
+        if (removed > 0) publish { it.withoutAutoSpamBefore(cutoffMillis) }
         removed
-    }
+    } }
 }

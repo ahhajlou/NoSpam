@@ -56,7 +56,7 @@ class AppSmsReceiver : BroadcastReceiver() {
                 )
                 Log.d(TAG, "Prediction: ${if (result.isSpam) "spam" else "ham"} (Score: ${result.score}) state=${result.senderState} notif=${result.notificationDecision}")
                 if (result.notificationDecision == com.nospam.nospam.core.model.NotificationDecision.NORMAL && result.messageId != null) {
-                    postHamNotification(context.applicationContext, result, subscriptionId)
+                    postHamNotification(context.applicationContext, result, subscriptionId, timestamp)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "SMS ingress failed", e)
@@ -70,6 +70,7 @@ class AppSmsReceiver : BroadcastReceiver() {
         context: Context,
         result: com.nospam.nospam.core.data.SmsIngressUseCase.Result,
         subscriptionId: Int?,
+        timestamp: Long,
     ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         val notification = NotificationHelper.buildMessageNotification(
@@ -79,9 +80,10 @@ class AppSmsReceiver : BroadcastReceiver() {
             messageBody = result.body,
             isSpam = false,
             subscriptionId = subscriptionId,
+            timestamp = timestamp,
         )
         NotificationManagerCompat.from(context).notify(
-            result.threadId.value.toInt(),
+            NotificationHelper.notificationId(result.threadId.value),
             notification,
         )
     }

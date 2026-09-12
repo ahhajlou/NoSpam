@@ -261,6 +261,21 @@ class SpamBackfillUseCaseTest {
         assertNull(db.senderStateDao.getByAddress("+98999"))
     }
 
+    @Test fun `a cancel arriving while idle does not abort the next scan`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephony(messages = listOf(inbox(1, "+98912", "win prize now", recentAgo(60))))
+        val backfill = useCase(db, telephony, classifierWhere { true }, scope = this)
+
+        // Cancel with nothing running — a tap on a stale progress notification.
+        backfill.cancel()
+
+        backfill.ensureStarted()
+        advanceUntilIdle()
+
+        assertEquals(BackfillStatus.Done, backfill.status.value)
+        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
+    }
+
     @Test fun `security exception aborts as Failed`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val telephony = FakeTelephony(throwOnGetAll = true)

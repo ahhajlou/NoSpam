@@ -13,6 +13,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -58,7 +59,13 @@ class ConversationsViewModelTest {
     @After fun tearDown() { Dispatchers.resetMain() }
 
     private fun liveVm(vararg convs: Conversation): ConversationsViewModel {
-        val repo = ConversationsRepository(FakeTelephony(convs.toList()), NoSpamDatabase.inMemory())
+        // Pass the test scope so the repository's flag combine runs on the test
+        // dispatcher instead of hopping to IO, which advanceUntilIdle cannot see.
+        val repo = ConversationsRepository(
+            FakeTelephony(convs.toList()),
+            NoSpamDatabase.inMemory(),
+            CoroutineScope(testDispatcher),
+        )
         return ConversationsViewModel(repo)
     }
 

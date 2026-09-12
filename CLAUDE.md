@@ -450,8 +450,14 @@ Before publishing: `com.nospam.nospam` is the Android Studio template
 - **`build-logic` convention plugins** — worth it once you're hand-editing the same
   Compose/Kotlin block in 8+ `build.gradle.kts` files. Not worth the ceremony at 15
   modules of a solo project on day one.
-- **Baseline profiles / macrobenchmark module** — add once the app is feature-complete
-  and you're tuning cold-start, not before.
+- ~~**Baseline profiles / macrobenchmark module**~~ — **done.** `:baselineprofile`
+  (`com.android.test` + `androidx.baselineprofile`) generates
+  `app/src/release/generated/baselineProfiles/baseline-prof.txt`. Capture needs
+  API 33+ on an unrooted device, so generate on the API 36 emulator
+  (`ANDROID_SERIAL=emulator-5554 ./gradlew :app:generateBaselineProfile`) and
+  measure on the SM-A730F. Measured 910ms → ~400ms; a control build with only the
+  AndroidX/Compose profiles stayed at ~950ms, so the win is the app profile, not
+  the compilation step.
 - **Dynamic feature modules** — no on-demand delivery use case here.
 - **Room** — not actually deferred by choice; it's *blocked* by `AGP 9.0.0 +
   Kotlin 2.2.10` KSP incompatibility (`builtInKotlin` cast error) documented in
@@ -467,7 +473,27 @@ Before publishing: `com.nospam.nospam` is the Android Studio template
 ./gradlew build   # full project, all modules
 ```
 
-**Performance gates (SM-A730F, 269 threads):** `adb logcat -s NoSpamPerf` → `inbox loaded <500ms` cold, `<50ms` on `Inbox->Settings->Inbox` replay (was 3573ms); `Davey! <200ms`, `Skipped 0` (was 1936ms/109 frames). No `DiskReadViolation` at `Sqlite*Dao.<init>`.
+**Performance gates (SM-A730F):** measure a **release** build, not `debug` — the
+same commit measures ~1.75s debuggable and ~0.91s release, because a debuggable
+APK JITs far more (a trace showed 2646ms compiling + 3178ms code-cache support)
+and runs StrictMode with `penaltyLog`. Discard the first launch after an install
+and take the median of three; release launches land inside a ~50ms band, debug
+ones vary by hundreds of ms.
+
+`adb logcat -s NoSpamPerf` → `inbox loaded <500ms` cold, `<50ms` on
+`Inbox->Settings->Inbox` replay; `Davey! <200ms`, `Skipped 0`. No
+`DiskReadViolation` at `Sqlite*Dao.<init>`.
+
+The baseline profile only helps once ART has compiled it. On API 28 that happens
+in a background dexopt job when the device is idle and charging, not at install —
+`ProfileInstaller` logs "Skipping profile installation" and the numbers stay at
+the unprofiled level until then. To measure without waiting:
+`adb shell cmd package compile -f -m speed-profile com.nospam.nospam`.
+
+Release APKs are unsigned (no `signingConfig`), so to measure one, `zipalign`
+then `apksigner sign` it with `~/.android/debug.keystore` — that keeps the
+signature identical to the debug build, so it installs as an update and the
+existing `nospam.db` survives.
 
 ## 15. Spam/ham state model (v2 — see TASKS.md Phase 8)
 

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -39,7 +41,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +56,7 @@ import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun ConversationsScreen(
@@ -70,8 +72,8 @@ fun ConversationsScreen(
     onTogglePin: (Long) -> Unit = viewModel::togglePin,
     onToggleMute: (Long) -> Unit = viewModel::toggleMute,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val isDefault by viewModel.isDefaultSmsApp.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isDefault by viewModel.isDefaultSmsApp.collectAsStateWithLifecycle()
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -86,7 +88,17 @@ fun ConversationsScreen(
             }
         ) { padding ->
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize().consumeWindowInsets(padding),
+                // Insets go to contentPadding, not Modifier.padding: as padding they
+                // clip the list at the bars, whereas edge-to-edge wants rows to
+                // scroll behind them while first and last still come to rest clear.
+                // The extra bottom is the FAB, which floats and is not in `padding` —
+                // without it the last row sits under "Start chat" with its spam badge
+                // unreadable.
+                contentPadding = PaddingValues(
+                    top = padding.calculateTopPadding(),
+                    bottom = padding.calculateBottomPadding() + FAB_CLEARANCE,
+                ),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 if (!isDefault) {
@@ -414,14 +426,8 @@ private fun isCurrentYear(millis: Long): Boolean {
     return calNow.get(java.util.Calendar.YEAR) == calThen.get(java.util.Calendar.YEAR)
 }
 
-private fun isDefaultSmsApp(context: android.content.Context): Boolean {
-    return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-        val rm = context.getSystemService(android.app.role.RoleManager::class.java) ?: return false
-        rm.isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
-    } else {
-        android.provider.Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-    }
-}
+private fun isDefaultSmsApp(context: android.content.Context): Boolean =
+    com.nospam.nospam.core.telephony.DefaultSmsApp.isHeld(context)
 
 @Composable
 fun ArchivedScreen(
@@ -432,7 +438,7 @@ fun ArchivedScreen(
 ) {
     // Live data when a ViewModel is provided (empty until an archived-thread
     // store exists); fake seed for previews.
-    val live = viewModel?.conversations?.collectAsState()?.value
+    val live = viewModel?.conversations?.collectAsStateWithLifecycle()?.value
     var fakeArchived by androidx.compose.runtime.remember(viewModel) {
         mutableStateOf(
             if (viewModel == null) listOf(
@@ -540,7 +546,7 @@ fun SpamScreen(
     onDelete: (Long) -> Unit = {},
 ) {
     // Live verdicts when a ViewModel is provided; fake seed for previews/tests.
-    val live = viewModel?.conversations?.collectAsState()?.value
+    val live = viewModel?.conversations?.collectAsStateWithLifecycle()?.value
     val isLive = viewModel != null
     var fakeSpamList by androidx.compose.runtime.remember(viewModel) {
         mutableStateOf(
@@ -711,3 +717,6 @@ fun SpamPreview() {
         SpamScreen()
     }
 }
+
+/** FAB height plus its Scaffold margins, so the last row can scroll clear of it. */
+private val FAB_CLEARANCE = 88.dp

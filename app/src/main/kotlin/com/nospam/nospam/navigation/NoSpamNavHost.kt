@@ -74,13 +74,8 @@ private fun needsOnboarding(context: Context): Boolean {
     return !isDefaultSmsApp(context)
 }
 
-private fun isDefaultSmsApp(context: Context): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        context.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_SMS) == true
-    } else {
-        Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-    }
-}
+private fun isDefaultSmsApp(context: Context): Boolean =
+    com.nospam.nospam.core.telephony.DefaultSmsApp.isHeld(context)
 
 @Composable
 fun NoSpamNavHost(

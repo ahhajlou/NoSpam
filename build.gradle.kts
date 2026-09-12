@@ -8,6 +8,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.kapt) apply false
+    alias(libs.plugins.android.test) apply false
+    alias(libs.plugins.baselineprofile) apply false
     alias(libs.plugins.kover)
 }
 
@@ -75,4 +77,6 @@ dependencies {
     kover(project(":feature:thread"))
     kover(project(":feature:settings"))
     kover(project(":feature:onboarding"))
+    kover(project(":feature:export"))
+    kover(project(":feature:mldebug"))
 }

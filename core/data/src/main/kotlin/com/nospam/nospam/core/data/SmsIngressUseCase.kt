@@ -95,46 +95,58 @@ class SmsIngressUseCase(
             // Gather signals for policy
             val isContact = runCatching { telephony.lookupContact(sender)?.displayName != null }.getOrDefault(false)
             val hasOutbound = runCatching { telephony.hasOutboundMessages(threadId) }.getOrDefault(false)
-            val prevStateEntity = db.senderStateDao.getByAddress(normalized)
-            val prevSenderState = prevStateEntity?.let {
-                com.nospam.nospam.core.model.SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt)
-            }
-
-            val policyInput = PolicyInput(
-                prevState = prevSenderState,
-                isSpam = verdict.isSpam,
-                isContact = isContact,
-                hasOutbound = hasOutbound,
-                isBlocked = false,
-            )
-            var policyOut = ThreadSpamPolicy.decideWithAddress(normalized, policyInput)
-            // Spam protection off: short-circuit to CLEAN/NORMAL but still store verdict
+            // Read before taking the lock: a DataStore read should not be held
+            // across it, and the answer does not depend on sender state.
             val spamEnabled = runCatching { isSpamProtectionEnabled() }.getOrDefault(true)
-            if (!spamEnabled) {
-                policyOut = policyOut.copy(
-                    newState = policyOut.newState.copy(state = ThreadSpamState.CLEAN),
-                    notification = NotificationDecision.NORMAL
+
+            // Read → decide → write runs as one critical section. Reading the
+            // previous state outside the lock let two messages from the same
+            // sender both start from the same counters and lose one increment,
+            // which skews the ≥3/≥80% graduation rule (CLAUDE.md §15).
+            val policyOut = spamStateWriter.withSpamStateLock {
+                val current = db.senderStateDao.getByAddress(normalized)
+                val prevSenderState = current?.let {
+                    com.nospam.nospam.core.model.SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt)
+                }
+
+                val policyInput = PolicyInput(
+                    prevState = prevSenderState,
+                    isSpam = verdict.isSpam,
+                    isContact = isContact,
+                    hasOutbound = hasOutbound,
+                    isBlocked = false,
                 )
-            }
-            // Muted conversations are always silent — override spam policy
-            if (isMuted) {
-                policyOut = policyOut.copy(notification = NotificationDecision.NONE)
+                var out = ThreadSpamPolicy.decideWithAddress(normalized, policyInput)
+                // Spam protection off: short-circuit to CLEAN/NORMAL but still store verdict
+                if (!spamEnabled) {
+                    out = out.copy(
+                        newState = out.newState.copy(state = ThreadSpamState.CLEAN),
+                        notification = NotificationDecision.NORMAL
+                    )
+                }
+                // Muted conversations are always silent — override spam policy
+                if (isMuted) {
+                    out = out.copy(notification = NotificationDecision.NONE)
+                }
+                // A user override is never touched by ingress, but the decision is
+                // still computed so the READ/notification path below is unchanged.
+                if (current?.isUserOverride != true) {
+                    db.senderStateDao.upsert(
+                        SenderStateEntity(
+                            normalizedAddress = normalized,
+                            state = out.newState.state,
+                            spamCount = out.newState.spamCount,
+                            hamCount = out.newState.hamCount,
+                            isUserOverride = out.newState.isUserOverride,
+                            updatedAt = System.currentTimeMillis(),
+                        )
+                    )
+                }
+                out
             }
             newState = policyOut.newState.state
             notificationDecision = policyOut.notification
             isSpamForResult = verdict.isSpam
-
-            // Upsert SenderState only when not user override — atomic under the writer lock.
-            spamStateWriter.upsertIfNotOverridden(normalized) {
-                SenderStateEntity(
-                    normalizedAddress = normalized,
-                    state = policyOut.newState.state,
-                    spamCount = policyOut.newState.spamCount,
-                    hamCount = policyOut.newState.hamCount,
-                    isUserOverride = policyOut.newState.isUserOverride,
-                    updatedAt = System.currentTimeMillis(),
-                )
-            }
 
             // Store per-message verdict (immutable)
             if (messageId != null) {

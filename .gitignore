@@ -23,3 +23,10 @@ core/testing/bin/
 
 .agents/
 .kotlin/
+# Vendored third-party Claude Code skills: kept local, not part of the app.
+.claude/
+
+# Editor swap files
+*.swp
+*.swo
+*~

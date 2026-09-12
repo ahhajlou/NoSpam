@@ -42,8 +42,16 @@ object NotificationHelper {
         }
     }
 
+    /**
+     * Notification id for a thread. `toInt()` truncated the provider's `Long`
+     * thread id, so two threads could collide onto one notification; `hashCode()`
+     * folds the high bits in instead. Every notify/cancel must go through this so
+     * the ids stay in agreement.
+     */
+    fun notificationId(threadId: Long): Int = threadId.hashCode()
+
     fun cancelNotification(context: Context, threadId: Long) {
-        androidx.core.app.NotificationManagerCompat.from(context).cancel(threadId.toInt())
+        androidx.core.app.NotificationManagerCompat.from(context).cancel(notificationId(threadId))
     }
 
     /**
@@ -76,11 +84,13 @@ object NotificationHelper {
         messageBody: String,
         isSpam: Boolean = false,
         subscriptionId: Int? = null,
+        /** When the message was sent. Defaults to now for callers without one. */
+        timestamp: Long = System.currentTimeMillis(),
     ): android.app.Notification {
         val channelId = if (isSpam) CHANNEL_ID_SPAM else CHANNEL_ID_MESSAGES
         val person = Person.Builder().setName(sender).setKey(sender).build()
         val style = NotificationCompat.MessagingStyle(person)
-            .addMessage(messageBody, System.currentTimeMillis(), person)
+            .addMessage(messageBody, timestamp, person)
 
         val replyIntent = Intent(TelephonyConstants.ACTION_RESPOND_VIA_MESSAGE).apply {
             setClassName(context.packageName, "com.nospam.nospam.core.telephony.service.HeadlessSmsSendService")
@@ -89,7 +99,7 @@ object NotificationHelper {
             if (subscriptionId != null) putExtra("subscription_id", subscriptionId)
         }
         val replyPending = PendingIntent.getService(
-            context, REQUEST_CODE_REPLY + threadId.toInt(), replyIntent,
+            context, REQUEST_CODE_REPLY + notificationId(threadId), replyIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         )
         val remoteInput = RemoteInput.Builder(KEY_TEXT_REPLY).setLabel("Reply").build()
@@ -107,7 +117,7 @@ object NotificationHelper {
             putExtra("android.intent.extra.TEXT", messageBody)
         }
         val contentPending = PendingIntent.getActivity(
-            context, threadId.toInt(), contentIntent,
+            context, notificationId(threadId), contentIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -122,13 +132,12 @@ object NotificationHelper {
             androidx.core.content.pm.ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
         } catch (_: Exception) {}
 
-        val now = System.currentTimeMillis()
         return NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.sym_action_chat)
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setContentIntent(contentPending)
-            .setWhen(now)
+            .setWhen(timestamp)
             .setShowWhen(true)
             .setShortcutId("thread-$threadId")
             .addAction(replyAction)

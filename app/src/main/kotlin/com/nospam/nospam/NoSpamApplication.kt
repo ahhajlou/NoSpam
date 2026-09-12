@@ -56,12 +56,20 @@ class NoSpamApplication : Application() {
             BackfillProgressNotifier(this@NoSpamApplication, container.spamBackfill, appScope).start()
         }
         // Warm classifier off main thread so first SMS doesn't pay 1.2 MB JSON load.
-        CoroutineScope(Dispatchers.IO).launch {
+        appScope.launch {
             runCatching { container.classifier }
         }
         // Pre-warm database off main thread so lazy init does not block NavHost composition (Fix 2).
-        CoroutineScope(Dispatchers.IO).launch {
+        appScope.launch {
             runCatching { container.database }
+            // Country lookup binds the telephony service, which a trace measured
+            // at ~68ms per call. Warming it here was measured as neutral on inbox
+            // load (920-936ms vs 895-946ms without), so those calls are evidently
+            // not on the critical path — kept only because it is free and should
+            // help the very first launch, not as a proven win.
+            runCatching {
+                com.nospam.nospam.core.telephony.PhoneNumberNormalizer.warm(this@NoSpamApplication)
+            }
         }
         // History backfill is one-shot: it runs after SMS permission is granted
         // (onboarding) and resumes once on a later cold start only if the process

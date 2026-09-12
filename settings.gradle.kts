@@ -28,5 +28,6 @@ include(
     ":feature:conversations", ":feature:thread", ":feature:settings", ":feature:onboarding",
     ":feature:export",
     ":feature:mldebug",
+    ":baselineprofile",
 )
  

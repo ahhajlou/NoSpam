@@ -42,6 +42,13 @@ class RealTelephonyDataSource(
     private data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
     private data class SmsLatest(val address: String, val body: String, val date: Long)
 
+    /** One consistent read of the three cache fields, taken under the mutex. */
+    private data class CacheSnapshot(
+        val metas: List<ThreadMeta>?,
+        val conversations: List<Conversation>?,
+        val latest: Map<Long, SmsLatest>,
+    )
+
     /**
      * Emits the inbox on subscribe and re-emits on every provider change
      * (incoming SMS, sent message, read-state update). The ContentObserver
@@ -111,6 +118,7 @@ class RealTelephonyDataSource(
             }
         }
         val grouped = messages.groupBy { it.threadId }
+        contactLookup.warm()
         // Parallelize contact lookups
         return coroutineScope {
             grouped.map { (threadId, threadMessages) ->
@@ -146,14 +154,22 @@ class RealTelephonyDataSource(
             }
             if (metas.isEmpty()) return null
 
+            // The three cache fields are one generation and must be read as one.
+            // Reading them in separate critical sections let a concurrent writer
+            // install a new generation in between, so the validated metas and the
+            // returned conversations could come from different snapshots.
+            val snapshot = conversationCacheMutex.withLock {
+                CacheSnapshot(cachedMetas, cachedConversations, cachedLatestMap)
+            }
+            val cached = snapshot.metas
+
             // Cache check: if metas identical to cached, reuse cached conversations without Sms re-query
-            val cached = conversationCacheMutex.withLock { cachedMetas }
             if (cached != null && cached == metas) {
-                conversationCacheMutex.withLock { cachedConversations }?.let { return it }
+                snapshot.conversations?.let { return it }
             }
 
             // Determine which threadIds actually changed (DATE/count/read/snippet)
-            val cachedMap = conversationCacheMutex.withLock { cachedMetas?.associateBy { it.id } ?: emptyMap() }
+            val cachedMap = cached?.associateBy { it.id } ?: emptyMap()
             val changedIds = metas.filter { meta ->
                 val prev = cachedMap[meta.id]
                 prev == null || prev.date != meta.date || prev.count != meta.count || prev.read != meta.read || prev.snippet != meta.snippet
@@ -161,14 +177,14 @@ class RealTelephonyDataSource(
 
             // If all metas unchanged, reuse cache
             if (changedIds.isEmpty() && cached != null) {
-                return conversationCacheMutex.withLock { cachedConversations }
+                return snapshot.conversations
             }
 
             // Batch Sms lookup only for changed (or all if no cache) to get latest address/body/date
             val idsToQuery = if (cached == null) metas.map { it.id } else changedIds.toList()
             val latestMap = mutableMapOf<Long, SmsLatest>()
             // Also carry over previous latestMap for unchanged threads
-            conversationCacheMutex.withLock { cachedLatestMap }.let { prevLatest ->
+            snapshot.latest.let { prevLatest ->
                 for (id in metas.map { it.id }) {
                     if (id !in idsToQuery) {
                         prevLatest[id]?.let { latestMap[id] = it }
@@ -191,11 +207,18 @@ class RealTelephonyDataSource(
                             val rawDate = c.getLong(3)
                             val date = if (rawDate in 1 until 1_000_000_0000L) rawDate * 1000 else rawDate
                             latestMap[tid] = SmsLatest(addr, body, date)
+                            // Rows come back DATE DESC, so the first row seen for
+                            // a thread is already its newest. Once every thread has
+                            // one, the rest of the cursor is older messages we
+                            // discard anyway - on this inbox that was ~4000 extra
+                            // rows walked across the CursorWindow for nothing.
+                            if (latestMap.size >= metas.size) return@use
                         }
                     }
                 }
             }
             // Parallelize contact lookups + build
+            contactLookup.warm()
             val conversations = coroutineScope {
                 metas.mapNotNull { meta ->
                     val latest = latestMap[meta.id] ?: return@mapNotNull null
@@ -222,7 +245,16 @@ class RealTelephonyDataSource(
                 }
                 conversations
             }
-        } catch (_: Exception) { null }
+        } catch (e: SecurityException) {
+            // A revoked READ_SMS lands here. Returning null still falls through to
+            // the message-table path, which fails the same way, so the user sees an
+            // empty inbox either way — but the cause is no longer invisible.
+            Log.w(TAG, "Threads query denied by permissions", e)
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Threads query failed, falling back to message scan", e)
+            null
+        }
     }
 
     override suspend fun getMessages(

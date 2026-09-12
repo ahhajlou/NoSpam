@@ -29,6 +29,7 @@ android {
 dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
+    implementation(project(":core:telephony"))
     implementation(project(":core:common"))
     implementation(project(":core:i18n"))
     implementation(project(":core:data"))
@@ -41,6 +42,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
