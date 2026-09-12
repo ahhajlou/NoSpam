@@ -50,8 +50,12 @@ written, so the reasoning stays readable.
 | MED-2 stale cancel flag | fixed | yes, fails without the fix |
 | MED-3 no indexes | fixed | no, schema change needs a device |
 | MED-4 write amplification | fixed | yes, 19 tests on the delta transforms |
+| MED-1 telephony cache read | fixed | no, needs a content resolver |
+| MED-5 non-lifecycle collection | fixed | no, Compose UI test needs a device |
 
-Still open: MED-1, MED-5, MED-6, and all LOW items.
+Still open: MED-6 (broadcast completion budget, device-dependent and unverified),
+and the LOW items marked OPEN in the table below. L-1 was withdrawn on
+inspection and L-6 was examined and deliberately left alone.
 
 
 MED-4 became more pressing once HIGH-3 was fixed: putting the mutate and the
