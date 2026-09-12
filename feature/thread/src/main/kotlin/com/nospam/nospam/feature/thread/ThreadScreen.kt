@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -90,7 +91,11 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
             lazyState.animateScrollToItem(0)
         }
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+    // No Scaffold on this screen, so nothing was applying system-bar or IME
+    // insets: the compose bar sat under the navigation bar and the keyboard
+    // covered it. safeDrawing covers bars, cutout and IME together, and
+    // consuming it here means children need no further inset handling.
+    Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
         Column(modifier = Modifier.fillMaxSize()) {
             val grouped = remember(uiState.messages) {
                 uiState.messages.groupBy {
@@ -317,7 +322,8 @@ fun NewConversationScreen(
     fun submit() {
         resolveRecipientAddress(query)?.let { onAddressEntered(it) }
     }
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    // Recipient picker: same situation, its own text field and no Scaffold.
+    Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
         Text(stringResource(R.string.new_to), style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             value = query,

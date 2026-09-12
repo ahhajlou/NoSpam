@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -87,11 +88,17 @@ fun ConversationsScreen(
             }
         ) { padding ->
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                // Scaffold's inner padding covers the system bars but not the FAB,
-                // which floats above the content — without this the last row sits
-                // under "Start chat" and its spam badge is unreadable.
-                contentPadding = PaddingValues(bottom = FAB_CLEARANCE),
+                modifier = Modifier.fillMaxSize().consumeWindowInsets(padding),
+                // Insets go to contentPadding, not Modifier.padding: as padding they
+                // clip the list at the bars, whereas edge-to-edge wants rows to
+                // scroll behind them while first and last still come to rest clear.
+                // The extra bottom is the FAB, which floats and is not in `padding` —
+                // without it the last row sits under "Start chat" with its spam badge
+                // unreadable.
+                contentPadding = PaddingValues(
+                    top = padding.calculateTopPadding(),
+                    bottom = padding.calculateBottomPadding() + FAB_CLEARANCE,
+                ),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 if (!isDefault) {
