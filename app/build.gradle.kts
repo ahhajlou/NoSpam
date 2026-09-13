@@ -88,8 +88,8 @@ dependencies {
     implementation(project(":feature:thread"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:onboarding"))
-    implementation(project(":feature:export"))
-    implementation(project(":feature:mldebug"))
+    debugImplementation(project(":feature:export"))
+    debugImplementation(project(":feature:mldebug"))
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -112,7 +112,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-//    implementation("org.pytorch:pytorch_android_lite:2.1.0")
-//    implementation("org.pytorch:pytorch_android_torchvision:2.1.0") // Optional
-    implementation(libs.gson)
 }

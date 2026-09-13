@@ -3,6 +3,7 @@ package com.nospam.nospam
 import android.content.Context
 import com.nospam.nospam.core.data.BlocklistRepository
 import com.nospam.nospam.core.data.ConversationsRepository
+import com.nospam.nospam.core.data.ExportRepository
 import com.nospam.nospam.core.data.SmsIngressUseCase
 import com.nospam.nospam.core.data.SpamBackfillUseCase
 import com.nospam.nospam.core.data.SpamRepository
@@ -52,6 +53,12 @@ class AppContainer(private val context: Context) {
             normalizer = { PhoneNumberNormalizer.normalize(appContext, it) }
         )
     }
+
+    /**
+     * Read-only corpus access for the debug export tool, so `feature:export`
+     * goes through the repository layer like every other feature (CLAUDE.md §4).
+     */
+    val exportRepository: ExportRepository by lazy { ExportRepository(telephony, database) }
 
     val smsIngress: SmsIngressUseCase by lazy {
         SmsIngressUseCase(

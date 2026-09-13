@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="export_title">Export SMS</string>
-    <string name="export_description">Export all SMS messages to a JSONL file. Each line contains one message with hardware ID, date, sender and text.</string>
+    <string name="export_description">Export all SMS messages to a JSONL file. Each line contains one message with the per-install export ID, timestamp, sender and text.</string>
     <string name="export_button">Export all SMS</string>
     <string name="export_button_desc">Export messages to file</string>
     <string name="export_exporting">Exporting…</string>
@@ -10,7 +10,7 @@
     <string name="export_empty">No messages to export</string>
     <string name="export_permission_required">SMS permission is required to export messages</string>
     <string name="export_count">%1$d messages</string>
-    <string name="export_hwid_label">Hardware ID</string>
+    <string name="export_install_id_label">Export ID (per install)</string>
     <string name="export_include_labels">Include spam/ham labels</string>
     <string name="export_include_labels_desc">Adds a spam/ham label to each message from on-device classification.</string>
     <string name="export_file_hint">sms_export.jsonl</string>

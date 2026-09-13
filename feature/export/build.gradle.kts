@@ -34,8 +34,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:common"))
     implementation(project(":core:i18n"))
-    implementation(project(":core:telephony"))
-    implementation(project(":core:database"))
+    implementation(project(":core:data"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -51,6 +50,11 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Only for ExportViewModelTest.kt, a drifted duplicate of the production
+    // ViewModel that shadows it from the test source set. Drop both once that
+    // file is deleted.
+    testImplementation(project(":core:telephony"))
+    testImplementation(project(":core:database"))
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.junit)

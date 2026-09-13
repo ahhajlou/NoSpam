@@ -20,21 +20,6 @@ subprojects {
 
 kover {
     reports {
-        // Dead code under app/src/main/java, kept only until end-of-project
-        // cleanup per owner instruction: unregistered from the manifest
-        // (receivers/service) or unreferenced (ui/navigation/ml theme).
-        // Excluded so the gate measures shippable code.
-        filters {
-            excludes {
-                classes(
-                    "com.nospam.nospam.ui.*",
-                    "com.nospam.nospam.navigation.*",
-                    "com.nospam.nospam.receiver.*",
-                    "com.nospam.nospam.service.*",
-                    "com.nospam.nospam.ml.*",
-                )
-            }
-        }
         total {
             html {
                 onCheck = true
