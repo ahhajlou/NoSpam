@@ -11,6 +11,14 @@ base {
     archivesName = "NoSpam-$appVersionName"
 }
 
+tasks.withType<Test> {
+    // AppContainer wiring touches PhoneNumberNormalizer's and SpamPreferences'
+    // process-lifetime singleton caches (see core:telephony's and
+    // feature:settings' build.gradle.kts for the same fix/reasoning). One JVM
+    // fork per test class keeps that state from leaking between test classes.
+    forkEvery = 1
+}
+
 android {
     namespace = "com.nospam.nospam"
     compileSdk {
@@ -106,6 +114,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

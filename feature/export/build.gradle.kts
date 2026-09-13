@@ -50,11 +50,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    // Only for ExportViewModelTest.kt, a drifted duplicate of the production
-    // ViewModel that shadows it from the test source set. Drop both once that
-    // file is deleted.
-    testImplementation(project(":core:telephony"))
-    testImplementation(project(":core:database"))
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.junit)

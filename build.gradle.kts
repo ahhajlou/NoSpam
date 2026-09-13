@@ -31,13 +31,29 @@ kover {
             verify {
                 // Ratchet, not the 80% goal: JVM suites alone cannot cover
                 // Compose screens, NotificationCompat builders, or
-                // ContentResolver code (Robolectric broken on JDK 25, no
-                // emulator here). Device suites for exactly that code are
-                // written (AtomsTest, TelephonyMapperDeviceTest,
-                // TelephonyInstrumentedTest, feature UI tests) and raise this
-                // once an emulator runs them. Never lower this bound.
+                // ContentResolver code. Device suites for exactly that code
+                // are written (AtomsTest, TelephonyMapperDeviceTest,
+                // TelephonyInstrumentedTest, feature UI tests, plus Wave 2A's
+                // nine Sqlite*Dao + SqliteNoSpamOpenHelper androidTest suites)
+                // and raise this once an emulator runs them. Never lower this
+                // bound.
+                //
+                // Robolectric was previously believed broken on this
+                // environment's JDK 25 -- it was actually just pinned to
+                // 4.11.1, a version that predates JDK 21+ support. Wave 2A
+                // bumped it to 4.17, which works fine here, and used it to
+                // cover feature:settings' SpamPreferences, core:telephony's
+                // PhoneNumberNormalizer/DefaultSmsApp/SmsManagerCompat, and
+                // :app's AppContainer/AppSmsReceiver -- see each module's
+                // build.gradle.kts for the `forkEvery = 1` note those suites
+                // needed once real Robolectric runs surfaced a genuine
+                // cross-test static-singleton leak in SpamPreferences.
+                //
+                // Wave 2A raised merged line coverage from 31.1% (1457/4678)
+                // to 38.22% (1788/4678); ratchet moved from 29 to 37, just
+                // under the new actual number.
                 rule("Merged line-coverage ratchet") {
-                    minBound(29)
+                    minBound(37)
                 }
             }
         }

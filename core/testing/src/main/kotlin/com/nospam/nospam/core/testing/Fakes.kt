@@ -6,6 +6,7 @@ import com.nospam.nospam.core.model.*
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 
 class FakePermissionChecker(
     private val granted: Set<String> = emptySet()
@@ -23,7 +24,12 @@ class FakePermissionChecker(
  * the same lambda with an empty sender, so both entry points stay in agreement.
  */
 class FakeSpamClassifier(
-    private val verdictFor: (RawMessage) -> SpamVerdict = { SpamVerdict(SpamLabel.HAM, -1.0) }
+    private val verdictFor: (RawMessage) -> SpamVerdict = { SpamVerdict(SpamLabel.HAM, -1.0) },
+    /** Invoked on every `classify` call before the verdict is returned -- a seam
+     *  for tests that need to observe or act mid-classification (e.g. simulate
+     *  a concurrent write, or `yield`/cancel to make a scan's progress ticks
+     *  or cancellation deterministic). No-op by default. */
+    private val onClassify: suspend (RawMessage) -> Unit = {},
 ) : SpamClassifier {
     var lastMessage: RawMessage? = null
         private set
@@ -33,6 +39,7 @@ class FakeSpamClassifier(
     override suspend fun classify(message: RawMessage): SpamVerdict {
         lastMessage = message
         callCount++
+        onClassify(message)
         return verdictFor(message)
     }
 
@@ -40,12 +47,12 @@ class FakeSpamClassifier(
         classify(RawMessage(sender = "", body = text, timestamp = 0L))
 
     companion object {
-        fun alwaysSpam(score: Double = 1.0) = FakeSpamClassifier { SpamVerdict(SpamLabel.SPAM, score) }
-        fun alwaysHam(score: Double = -1.0) = FakeSpamClassifier { SpamVerdict(SpamLabel.HAM, score) }
+        fun alwaysSpam(score: Double = 1.0) = FakeSpamClassifier(verdictFor = { SpamVerdict(SpamLabel.SPAM, score) })
+        fun alwaysHam(score: Double = -1.0) = FakeSpamClassifier(verdictFor = { SpamVerdict(SpamLabel.HAM, score) })
         /** Spam when the body matches [predicate], ham otherwise. */
-        fun spamWhen(predicate: (String) -> Boolean) = FakeSpamClassifier {
+        fun spamWhen(predicate: (String) -> Boolean) = FakeSpamClassifier(verdictFor = {
             if (predicate(it.body)) SpamVerdict(SpamLabel.SPAM, 1.0) else SpamVerdict(SpamLabel.HAM, -1.0)
-        }
+        })
     }
 }
 
@@ -70,6 +77,10 @@ class FakeTelephonyDataSource(
     val insertedSent = mutableListOf<Pair<String, String>>()
     /** Thread ids passed to `deleteConversation`, in order. */
     val deletedThreadIds = mutableListOf<Long>()
+    /** Thread ids passed to `markAsRead`, in order (may contain duplicates). */
+    val markedReadThreadIds = mutableListOf<Long>()
+    /** Every `sendMessage` call, in order: address, body, subscriptionId. */
+    val sentMessages = mutableListOf<Triple<String, String, Int?>>()
     /** Messages returned by `getAllMessages`. */
     val allMessages = mutableListOf<Message>()
     /** Addresses reported by `getOutboundSenderAddresses`. */
@@ -78,10 +89,20 @@ class FakeTelephonyDataSource(
     val systemBlocked = mutableSetOf<String>()
     /** Contact rows returned by `lookupContact`, keyed by address. */
     val contacts = mutableMapOf<String, Participant>()
+    /** Every `updateMessageRead` call, in order: messageId, read flag. */
+    val updatedMessageReads = mutableListOf<Pair<Long, Boolean>>()
+    /** Contacts returned by `getContacts`, ignoring its limit/query arguments. */
+    val contactEntries = mutableListOf<ContactEntry>()
 
     var nextThreadId: Long = 42L
     var sendResult: Result<Unit> = Result.success(Unit)
     var subscriptions: List<TelephonyDataSource.SimInfo> = emptyList()
+    /** When true, `insertInboxMessage` returns null instead of an incrementing id
+     *  -- simulates a failed provider write (e.g. Result.messageId == null). */
+    var failInsertInbox: Boolean = false
+    /** When set, `getAllMessages` throws this instead of returning [allMessages]
+     *  -- simulates a permission failure during a history scan. */
+    var getAllMessagesError: Throwable? = null
 
     /** Replaces the conversation list and re-emits to `observeConversations`. */
     fun emitConversations(conversations: List<Conversation>) {
@@ -97,7 +118,14 @@ class FakeTelephonyDataSource(
 
     override fun observeConversations(): Flow<List<Conversation>> = conversationsFlow
 
-    override fun observeMessages(threadId: ThreadId): Flow<List<Message>> = flowFor(threadId.value)
+    /**
+     * Mirrors RealTelephonyDataSource: observeMessages always serves just the
+     * newest page (it's backed by `getMessages(threadId)` with no `beforeId`),
+     * never the full seeded history. Use [emitMessages] to seed/update the
+     * full store and [getMessages] with `beforeId` for older pages.
+     */
+    override fun observeMessages(threadId: ThreadId): Flow<List<Message>> =
+        flowFor(threadId.value).map { it.takeLast(TelephonyDataSource.MESSAGES_PAGE_SIZE) }
 
     override suspend fun getConversations(): List<Conversation> = conversationsFlow.value
 
@@ -107,9 +135,14 @@ class FakeTelephonyDataSource(
         return older.takeLast(limit)
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = sendResult
+    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> {
+        sentMessages.add(Triple(address, body, subscriptionId))
+        return sendResult
+    }
 
-    override suspend fun markAsRead(threadId: ThreadId) {}
+    override suspend fun markAsRead(threadId: ThreadId) {
+        markedReadThreadIds.add(threadId.value)
+    }
 
     override suspend fun markAsUnread(threadId: ThreadId) {}
 
@@ -121,7 +154,7 @@ class FakeTelephonyDataSource(
         address: String, body: String, date: Long, read: Boolean, subscriptionId: Int?
     ): Long? {
         insertedInbox.add(Triple(address, body, read))
-        return insertedInbox.size.toLong()
+        return if (failInsertInbox) null else insertedInbox.size.toLong()
     }
 
     override suspend fun insertSentMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? {
@@ -131,7 +164,9 @@ class FakeTelephonyDataSource(
 
     override suspend fun getOrCreateThreadId(address: String): Long = nextThreadId
 
-    override suspend fun updateMessageRead(messageId: Long, read: Boolean) {}
+    override suspend fun updateMessageRead(messageId: Long, read: Boolean) {
+        updatedMessageReads.add(messageId to read)
+    }
 
     override suspend fun isSystemBlocked(address: String): Boolean = address in systemBlocked
 
@@ -145,9 +180,12 @@ class FakeTelephonyDataSource(
 
     override suspend fun searchBodyMatch(query: String): Set<Long> = emptySet()
 
-    override suspend fun getContacts(limit: Int, query: String?): List<ContactEntry> = emptyList()
+    override suspend fun getContacts(limit: Int, query: String?): List<ContactEntry> = contactEntries
 
-    override suspend fun getAllMessages(): List<Message> = allMessages
+    override suspend fun getAllMessages(): List<Message> {
+        getAllMessagesError?.let { throw it }
+        return allMessages
+    }
 }
 
 object TestData {
