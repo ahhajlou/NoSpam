@@ -66,6 +66,32 @@ class ThreadSpamPolicyTest {
         assertEquals(NotificationDecision.SILENT, out.notification)
     }
 
+    /**
+     * Pins the boundary to the constants rather than to the literals 3 and 0.8,
+     * so changing the policy is a one-line change in one place and this test
+     * keeps asserting the rule instead of a number.
+     */
+    @Test fun `graduation needs one spam short of the minimum to still be MIXED`() {
+        val prev = senderState(
+            ThreadSpamState.MIXED,
+            spam = ThreadSpamPolicy.GRADUATION_MIN_SPAM - 2, // +1 below the bar
+            ham = 0,
+        )
+        val out = ThreadSpamPolicy.decideWithAddress("0912", PolicyInput(prev, isSpam = true))
+        assertEquals(ThreadSpamState.MIXED, out.newState.state)
+    }
+
+    @Test fun `graduation happens exactly at the minimum spam count and ratio`() {
+        val prev = senderState(
+            ThreadSpamState.MIXED,
+            spam = ThreadSpamPolicy.GRADUATION_MIN_SPAM - 1, // +1 reaches the bar
+            ham = 0,
+        )
+        val out = ThreadSpamPolicy.decideWithAddress("0912", PolicyInput(prev, isSpam = true))
+        assertEquals(ThreadSpamState.SPAM, out.newState.state)
+        assertTrue(out.newState.spamCount >= ThreadSpamPolicy.GRADUATION_MIN_SPAM)
+    }
+
     @Test fun `MIXED spam graduates at 3 and 0_8`() {
         val prev = senderState(ThreadSpamState.MIXED, spam = 2, ham = 0) // after +1 =3 spam, 3 total, ratio 1.0
         val out = ThreadSpamPolicy.decideWithAddress("0912", PolicyInput(prev, isSpam = true))

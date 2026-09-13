@@ -36,6 +36,20 @@ data class PolicyOutput(
 )
 
 object ThreadSpamPolicy {
+    /**
+     * Spam messages a MIXED sender must accumulate before it can graduate to
+     * SPAM. Below this, one bad message from an otherwise fine sender is never
+     * enough to hide the conversation.
+     */
+    const val GRADUATION_MIN_SPAM = 3
+
+    /**
+     * Share of a MIXED sender's messages that must be spam before it graduates.
+     * Guards the sender that mixes both — a bank sending OTPs and promos from
+     * one short code should stay in the inbox.
+     */
+    const val GRADUATION_MIN_SPAM_RATIO = 0.8
+
     fun decide(input: PolicyInput): PolicyOutput {
         val prev = input.prevState
 
@@ -115,7 +129,11 @@ object ThreadSpamPolicy {
                     val newSpam = prev.spamCount + 1
                     val total = newSpam + prev.hamCount
                     val ratio = if (total == 0) 0.0 else newSpam.toDouble() / total
-                    val shouldGraduate = !protectFromSpam && newSpam >= 3 && total >= 3 && ratio >= 0.8
+                    // `total >= GRADUATION_MIN_SPAM` needs no separate check: total is
+                    // newSpam + hamCount, so it is always at least newSpam.
+                    val shouldGraduate = !protectFromSpam &&
+                        newSpam >= GRADUATION_MIN_SPAM &&
+                        ratio >= GRADUATION_MIN_SPAM_RATIO
                     if (shouldGraduate) {
                         val ns = prev.copy(state = ThreadSpamState.SPAM, spamCount = newSpam, updatedAt = System.currentTimeMillis())
                         PolicyOutput(ns, NotificationDecision.NONE)
