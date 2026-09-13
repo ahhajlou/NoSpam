@@ -61,14 +61,22 @@ object ThreadSpamPolicy {
             return PolicyOutput(prev, NotificationDecision.NONE)
         }
 
+        // Contacts, and any sender the user has already replied to, are never
+        // auto-promoted to SPAM — at most MIXED. This is the strongest
+        // anti-false-positive signal available, so it is checked before the
+        // classifier's verdict is allowed to move a conversation to Spam.
+        val protectFromSpam = input.isContact || input.hasOutbound
+
         // New sender
         if (prev == null) {
             return if (!input.isSpam) {
                 val s = SenderState("", ThreadSpamState.CLEAN, spamCount = 0, hamCount = 1)
                 PolicyOutput(s, NotificationDecision.NORMAL)
             } else {
-                // spam from contact -> MIXED not SPAM
-                if (input.isContact) {
+                // Spam from a contact or a sender we have written to -> MIXED, not SPAM.
+                // `hasOutbound` matters here even with no prior SenderState row: texting a
+                // business first and getting a promotional reply is exactly this case.
+                if (protectFromSpam) {
                     val s = SenderState("", ThreadSpamState.MIXED, spamCount = 1, hamCount = 0)
                     PolicyOutput(s, NotificationDecision.SILENT)
                 } else {
@@ -79,9 +87,6 @@ object ThreadSpamPolicy {
         }
 
         // Existing CLEAN / MIXED — handle ham and spam
-        // Contacts / replied senders can never be auto-promoted to SPAM
-        val protectFromSpam = input.isContact || input.hasOutbound
-
         if (!input.isSpam) {
             // Ham: if MIXED, stay MIXED (spec: mixed never flaps back to clean on single ham)
             // If CLEAN, stay CLEAN. TRUSTED/BLOCKED/SPAM already returned.
@@ -100,13 +105,11 @@ object ThreadSpamPolicy {
             // Spam
             return when (prev.state) {
                 ThreadSpamState.CLEAN -> {
-                    if (protectFromSpam) {
-                        val ns = prev.copy(state = ThreadSpamState.MIXED, spamCount = prev.spamCount + 1, updatedAt = System.currentTimeMillis())
-                        PolicyOutput(ns, NotificationDecision.SILENT)
-                    } else {
-                        val ns = prev.copy(state = ThreadSpamState.MIXED, spamCount = prev.spamCount + 1, updatedAt = System.currentTimeMillis())
-                        PolicyOutput(ns, NotificationDecision.SILENT)
-                    }
+                    // A sender with ham history goes to MIXED on its first spam
+                    // whether protected or not; the protection only decides
+                    // whether MIXED can later graduate to SPAM, below.
+                    val ns = prev.copy(state = ThreadSpamState.MIXED, spamCount = prev.spamCount + 1, updatedAt = System.currentTimeMillis())
+                    PolicyOutput(ns, NotificationDecision.SILENT)
                 }
                 ThreadSpamState.MIXED -> {
                     val newSpam = prev.spamCount + 1

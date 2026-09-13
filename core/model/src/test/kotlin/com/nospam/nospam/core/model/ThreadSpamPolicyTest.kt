@@ -91,6 +91,25 @@ class ThreadSpamPolicyTest {
         assertEquals(ThreadSpamState.MIXED, out.newState.state)
     }
 
+    /**
+     * The anti-false-positive rule is that a sender the user has replied to is
+     * never auto-promoted to SPAM. `decide` honours that for a sender it has
+     * seen before, via `protectFromSpam = isContact || hasOutbound`, but the
+     * brand-new-sender branch checks `isContact` alone.
+     *
+     * Reachable in practice: text a business first, get a promotional reply.
+     * No `SenderState` row exists yet, so `prevState` is null and `hasOutbound`
+     * is true. The conversation lands in Spam with no notification.
+     */
+    @Test fun `new sender spam from a replied-to address is never auto spam`() {
+        val out = ThreadSpamPolicy.decideWithAddress(
+            "0912",
+            PolicyInput(prevState = null, isSpam = true, isContact = false, hasOutbound = true),
+        )
+        assertEquals(ThreadSpamState.MIXED, out.newState.state)
+        assertEquals(NotificationDecision.SILENT, out.notification)
+    }
+
     @Test fun `CLEAN ham stays CLEAN`() {
         val prev = senderState(ThreadSpamState.CLEAN, ham = 1)
         val out = ThreadSpamPolicy.decideWithAddress("0912", PolicyInput(prev, isSpam = false))
