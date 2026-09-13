@@ -62,8 +62,14 @@ object ThreadSpamPolicy {
             return PolicyOutput(s.copy(normalizedAddress = normalized, state = ThreadSpamState.BLOCKED), NotificationDecision.NONE)
         }
 
-        // TRUSTED override — never leaves
-        if (prev?.state == ThreadSpamState.TRUSTED && prev.isUserOverride) {
+        // TRUSTED never leaves. The check is on the state alone, not on
+        // isUserOverride: a TRUSTED sender whose override flag was false used to
+        // fall through every guard into the `else` arm of the ham and spam
+        // branches, returning unchanged but by accident rather than by rule.
+        // Nothing constructs that combination today, and if a system-derived
+        // allowlist is ever added (contacts, or a long clean history) it should
+        // be honoured here exactly like a user's own decision.
+        if (prev?.state == ThreadSpamState.TRUSTED) {
             return PolicyOutput(prev, NotificationDecision.NORMAL)
         }
         // SPAM sticky — never leaves automatically (only user action changes it, which would have flipped to TRUSTED)

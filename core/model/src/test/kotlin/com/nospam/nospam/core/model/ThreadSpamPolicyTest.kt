@@ -21,6 +21,23 @@ class ThreadSpamPolicyTest {
         assertEquals(NotificationDecision.NORMAL, out.notification)
     }
 
+    /**
+     * TRUSTED is honoured on the state alone. Previously the guard also required
+     * isUserOverride, so a TRUSTED sender without it fell through to a branch
+     * that happened to return the same thing for ham but reached it by accident,
+     * and answered SILENT rather than NORMAL for spam.
+     */
+    @Test fun `TRUSTED without the override flag is still trusted`() {
+        val prev = senderState(ThreadSpamState.TRUSTED, ham = 5, override = false)
+        val ham = ThreadSpamPolicy.decideWithAddress("0912", PolicyInput(prev, isSpam = false))
+        assertEquals(ThreadSpamState.TRUSTED, ham.newState.state)
+        assertEquals(NotificationDecision.NORMAL, ham.notification)
+
+        val spam = ThreadSpamPolicy.decideWithAddress("0912", PolicyInput(prev, isSpam = true))
+        assertEquals(ThreadSpamState.TRUSTED, spam.newState.state)
+        assertEquals(NotificationDecision.NORMAL, spam.notification)
+    }
+
     @Test fun `SPAM sticky ignores later ham`() {
         val prev = senderState(ThreadSpamState.SPAM, spam = 1)
         val out = ThreadSpamPolicy.decideWithAddress("0912", PolicyInput(prev, isSpam = false))
