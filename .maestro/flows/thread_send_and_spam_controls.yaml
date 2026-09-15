@@ -1,0 +1,115 @@
+appId: com.nospam.nospam
+tags:
+  - thread
+---
+# Requires tools/seed.sh seed. NSTEST_MIXED1 has one message with a stored
+# spam MessageVerdict (the "sale" message), so it must render the "Suspected
+# spam" chip and its per-message Not spam / Report spam row (CLAUDE.md §15 /
+# ThreadScreen.kt).
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MIXED1"
+    direction: DOWN
+- tapOn: "NSTEST_MIXED1"
+- extendedWaitUntil:
+    visible: "Suspected spam"
+    timeout: 8000
+- assertVisible: "Not spam"
+- assertVisible: "Report spam"
+# NSTEST_MIXED1 only has 3 messages, which fit on screen without scrolling —
+# a scrollUntilVisible here (tried both directions during hardening) overshoots
+# this short a list and leaves the row occluded rather than helping.
+#
+# Maestro text selectors are matched as a full (anchored) regex against the
+# element's whole text, not a substring search — a plain "Big summer sale"
+# never matches the full bubble text ("Big summer sale! 70% off everything,
+# click here now- http-//bit.ly/sale"). Wrap in .* on both sides.
+- assertVisible: ".*Big summer sale.*"
+
+# Long-press a bubble -> copy dialog. tools/seed.sh's sms_insert strips every
+# ':' from the body (the on-device `content` tool can't bind a colon-bearing
+# value), so the seeded text reads "http-//bit.ly/sale", not "http://..." —
+# match on a substring that doesn't depend on that transform (wrapped in .*
+# for the same full-match reason as above).
+- longPressOn: ".*Big summer sale.*"
+- assertVisible: "Message"
+- assertVisible: "Copy"
+# Tapping "Copy" already dismisses the dialog itself (ThreadScreen.kt sets
+# selected = null in the same onClick) — an extra `back` here has nothing
+# left to dismiss and instead pops the thread screen itself.
+- tapOn: "Copy"
+- extendedWaitUntil:
+    notVisible: "Message"
+    timeout: 3000
+
+# Compose and send a reply. The emulator's virtual modem accepts outbound SMS
+# to any address without a live recipient, so this exercises the real
+# SmsManager path end to end.
+#
+# Hardening note: tapping straight into the compose field right after the
+# Copy dialog closes reliably fails to focus it — verified extensively
+# on-device (uiautomator dumps show the EditText still focused="false" and
+# the typed text going nowhere), across every combination tried: the text
+# selector, a raw point tap at the field's exact coordinates, and a
+# retryTapIfNoChange point tap repeated 3x. A raw `adb shell input tap` at
+# the identical coordinate focuses it every time, so this is a Maestro/
+# Compose touch-injection interaction specific to tapping this field
+# immediately after an AlertDialog dismiss — not an app bug (a real user
+# tapping the field normally has no such problem). Leaving the thread and
+# re-entering it sidesteps the dialog-adjacent state entirely.
+- back
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MIXED1"
+    direction: DOWN
+- tapOn: "NSTEST_MIXED1"
+- extendedWaitUntil:
+    visible: "Suspected spam"
+    timeout: 8000
+- tapOn: "SMS message"
+- inputText: "Automated Maestro reply"
+# Typing shifts the compose bar's layout (IME insets), so tapping "Send
+# message" right away can resolve against stale, pre-shift bounds. Wait for
+# the compose field to actually show the typed text — i.e. for the shifted
+# layout to settle — before tapping Send. (hideKeyboard was tried here during
+# hardening: adb's `input text` never opens a real on-screen IME in this
+# environment, so hideKeyboard falls back to a back-press and exits the
+# thread screen entirely — do not reintroduce it in this spot.)
+- extendedWaitUntil:
+    visible: "Automated Maestro reply"
+    timeout: 5000
+- tapOn: "Send message"
+# Sending while the on-screen keyboard is open (it opened for real this
+# time, unlike the flaky pre-dialog-dismiss tap earlier in this flow) can
+# leave the just-sent bubble scrolled out of view: ThreadScreen only
+# auto-scrolls to the new message when lazyState was already exactly at
+# index 0 (`atBottom`), and the keyboard's own layout shift around the same
+# moment left it not there, surfacing the "jump to latest" FAB instead.
+# Verified on-device. Tap it if present before asserting on the bubble.
+- runFlow:
+    when:
+      visible: "Jump to latest"
+    commands:
+      - tapOn: "Jump to latest"
+- extendedWaitUntil:
+    visible: ".*Automated Maestro reply.*"
+    timeout: 8000
+- assertVisible: ".*Automated Maestro reply.*"
+- back
+
+# --- New conversation ---
+- tapOn: "Start chat"
+- assertVisible: "To:"
+- assertVisible: "Type a name, phone number, or email"
+- assertVisible: "Top contacts"
+- assertVisible: "All contacts"
+- inputText: "5559998888"
+- pressKey: Enter
+- assertVisible: "SMS message"
+- back
+- back

@@ -5,9 +5,6 @@
     <string name="drawer_inbox">Inbox</string>
     <string name="drawer_archived">Archived</string>
     <string name="drawer_spam_blocked">Spam &amp; blocked</string>
-    <string name="drawer_mark_all_read">Mark all as read</string>
-    <string name="drawer_export">Export SMS</string>
-    <string name="drawer_mldebug">Classifier test</string>
     <string name="drawer_settings">Settings</string>
     <string name="action_menu_desc">Menu</string>
 </resources>

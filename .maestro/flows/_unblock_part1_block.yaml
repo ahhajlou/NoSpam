@@ -1,0 +1,20 @@
+appId: com.nospam.nospam
+tags:
+  - persistence
+  - manual-only
+---
+# Part 1 of the block/unblock persistence regression check (commit 7256993).
+# Not meant to run standalone in `maestro test .maestro/` — driven by
+# tools/persistence_check.sh, which needs an `adb emu sms send` between this
+# and part 2 (Maestro cannot shell out to the emulator console itself).
+# Precondition: `adb emu sms send NSTEST_UNBLOCK1 <text>` has already delivered
+# one message, so the conversation exists in the inbox to long-press.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+- longPressOn: "NSTEST_UNBLOCK1"
+- assertVisible: "Block"
+- tapOn: "Block"
+- assertNotVisible: "NSTEST_UNBLOCK1"

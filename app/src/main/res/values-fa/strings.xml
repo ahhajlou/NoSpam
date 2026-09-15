@@ -5,9 +5,6 @@
     <string name="drawer_inbox">صندوق ورودی</string>
     <string name="drawer_archived">بایگانی</string>
     <string name="drawer_spam_blocked">هرزنامه و مسدودشده</string>
-    <string name="drawer_mark_all_read">علامت‌گذاری همه به‌عنوان خوانده‌شده</string>
-    <string name="drawer_export">خروجی پیامک‌ها</string>
-    <string name="drawer_mldebug">آزمایش طبقه‌بند</string>
     <string name="drawer_settings">تنظیمات</string>
     <string name="action_menu_desc">فهرست</string>
 </resources>
