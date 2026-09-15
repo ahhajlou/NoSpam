@@ -41,7 +41,7 @@ core:common, core:model, core:testing → leaves
 
 ```bash
 ./gradlew :app:assembleDebug
-./gradlew build          # all 15 modules: assemble + lint + unit tests
+./gradlew build          # every module: assemble + lint + unit tests
 ```
 
 Install and smoke-test:
@@ -145,7 +145,7 @@ maestro test .maestro/smoke_test.yaml
 
 ## Coverage (Kover)
 
-Merged report over all 15 modules (Kover `0.9.9`, root is the merging
+Merged report over every module (Kover `0.9.9`, root is the merging
 module via `kover(...)` deps):
 
 ```bash
