@@ -20,6 +20,16 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Skip the action's default package list. It asks for the legacy
+          # "tools" package, which Google deprecated in 2019 and removed from
+          # the SDK repository manifest on 2026-09-14, so sdkmanager exits 1
+          # with "Failed to find package 'tools'". Every project on this action
+          # broke the same day. An empty value still sets ANDROID_HOME and
+          # pre-accepts the licences; AGP provisions the platform and
+          # build-tools it needs. Upgrading to v4 does NOT fix this — v4 has
+          # the same default.
+          packages: ''
 
       - name: Build all modules (assembles APKs/AARs, runs lint + JVM unit tests)
         run: ./gradlew build --stacktrace
