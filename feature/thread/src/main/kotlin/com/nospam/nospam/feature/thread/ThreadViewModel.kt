@@ -90,7 +90,7 @@ class ThreadViewModel(
         }
         val dataSource = this.dataSource
         if (dataSource == null) {
-            _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages())
+            _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages(), draft = forwardBody ?: "")
             return
         }
         optimistic = emptyList()
