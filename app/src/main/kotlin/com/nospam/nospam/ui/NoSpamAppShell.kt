@@ -128,7 +128,7 @@ fun NoSpamAppShell() {
                 modifier = Modifier.fillMaxSize(),
                 topBar = {
                     TopAppBar(
-                        title = { Text("NoSpam SMS") },
+                        title = { Text(stringResource(R.string.app_name)) },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                 Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.action_menu_desc))

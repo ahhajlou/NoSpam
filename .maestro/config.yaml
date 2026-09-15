@@ -1,0 +1,26 @@
+# Maestro workspace config for NoSpam.
+# https://docs.maestro.dev/reference/workspace-configuration
+#
+# Run everything (needs tools/seed.sh seed fixtures + a debug build so the
+# `debug` flows resolve):
+#   maestro test .maestro/
+#
+# Run only what a release-shaped build can exercise:
+#   maestro test .maestro/ --exclude-tags=debug
+#
+# Run just the persistence-across-process-death checks (the highest-value flows,
+# see Wave 2B notes):
+#   maestro test .maestro/ --include-tags=persistence
+flows:
+  - "flows/**"
+# _unblock_part1_block.yaml / _unblock_part2_deliver_and_unblock.yaml are not
+# standalone flows — they're the two Maestro-drivable halves of
+# tools/persistence_check.sh's block/unblock regression check, split around an
+# `adb emu sms send` step Maestro itself cannot perform. Excluded from the
+# default suite; tools/persistence_check.sh calls them directly with
+# --include-tags=manual-only, which overrides this exclusion (CLI takes
+# precedence over config.yaml).
+excludeTags:
+  - manual-only
+executionOrder:
+  continueOnFailure: true

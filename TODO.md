@@ -3,6 +3,11 @@
 - [] Lists all SMS from other SMS apps before app is installed
 - [] Message orders are wrong in conversations after i installed the app on a phone with old messages
 
+  **Both root-caused on 2026-09-14 to one mechanism** — the thread pagination
+  cursor. See "Thread pagination strands older messages on imported history"
+  below. They are not two bugs; fixing the cursor should close both. Verify
+  against a real imported history before ticking either.
+
 ## Backfill (Phase 12) follow-ups — clear fixes
 - [] Progress UX: emit `Running(0, total)` when a scan starts — `statusProgress` only fires every 100 messages, so small scans / the first second of large scans show no banner
 - [] Replace public `forceScanForTesting()` on `SpamBackfillUseCase` with a properly-scoped `rescan()` API (Settings currently calls `ensureStarted()`; the test-named hook stays unused in prod)
@@ -46,6 +51,191 @@ when the items below are done, not before.
 
 `:feature:mldebug` is a different case and needs no such plan: it is a
 classifier console for development and stays debug-only permanently.
+
+## Spam routing — agreed model (2026-09-15), supersedes the ratio rule
+
+Decided after working through the mixed-sender case (a shop sending both OTPs
+and promos from one number). Replaces `GRADUATION_MIN_SPAM` /
+`GRADUATION_MIN_SPAM_RATIO`, which are to be removed.
+
+**Why the ratio rule goes.** It fires only on senders that have demonstrably
+sent ham, since that is the only way to reach MIXED in the first place. It also
+makes the outcome depend on arrival order: the same shop ends up hidden whether
+its first message was the OTP or the promo. And the two errors are not
+symmetric — a promo in the inbox costs a glance, a hidden OTP can lock someone
+out of an account — so thresholding on a symmetric frequency is the wrong tool.
+
+**Routing. Evaluate top to bottom, first match wins.**
+
+| # | Condition | Folder | Notification |
+|---|---|---|---|
+| 1 | User explicitly blocked the sender | Spam | none |
+| 2 | User explicitly marked the sender not-spam | Inbox | normal |
+| 3 | Sender is a contact, or the user has ever sent to them | Inbox | normal for ham; silent + labelled for spam |
+| 4 | Sender has ever sent at least one ham message | Inbox | normal for ham; silent + labelled for spam |
+| 5 | Only ever spam, exactly one message so far (probation) | Inbox | silent, labelled "Suspected spam" |
+| 6 | Only ever spam, two or more | Spam | none |
+| 7 | No spam at all | Inbox | normal |
+
+Rows 3 and 4 are the existing MIXED behaviour and are already correct. Nothing
+in this table hides a conversation that has ever produced a legitimate message.
+
+**Saved contacts bypass the classifier entirely.** No inference at ingress, no
+label, no routing effect. A contact's conversation moves only on an explicit
+user block or mute.
+
+This follows from row 1 and 2 of the table rather than being a separate policy:
+saving someone to contacts *is* user intent, expressed deliberately before any
+message arrives. Letting a heuristic second-guess it would mean "user intent
+outranks the classifier" is not actually the top rule. Apple enforces the same
+bypass at the platform level — a filter extension is never shown a message from
+a number in your contacts — which suggests it is not a close call in practice.
+
+The error costs are lopsided the same way as everywhere else in this model.
+Wrongly flagging a message from someone you chose to save is both incorrect and
+slightly insulting, and it teaches the user to distrust the label everywhere
+else; genuine spam from saved contacts is rare precisely because the user chose
+them. Bypass is also the reversible choice: adding an opt-in label later costs
+nothing, whereas withdrawing labels you have already shown people about their
+friends does not win the trust back.
+
+Bypass does not mean never classifiable. If the user reports a contact's
+message themselves, classify it then, on demand.
+
+**A saved contact and a replied-to sender are not the same signal.** Saving is
+deliberate; replying can be a single "STOP" to a spammer. The current code
+lumps them into one `protectFromSpam` flag. Split them:
+
+| Signal | Classified at ingress | Can be hidden |
+|---|---|---|
+| Saved contact | no | only by explicit user action |
+| Replied-to sender | yes | no — label only |
+
+Revisit only on evidence, not argument: if real users report wanting messages
+from saved contacts flagged, add the opt-in label toggle, which is safe because
+it can only add a warning and never hide anything.
+
+**What clears what.**
+
+- Explicit block or allow: cleared only by an explicit user action. Survives
+  thread deletion.
+- Automatic spam state: cleared by any ham message, by the user replying, or by
+  adding the sender to contacts.
+- **An implicit action must never undo an explicit one.** Replying "STOP" to a
+  spammer is common, so a reply must not clear a user's own block. Saving a
+  blocked number to contacts must not unblock them either.
+
+**Two codebase-specific notes.**
+
+- `ConversationsRepository.deleteConversation` already leaves `sender_state`
+  intact while deleting the thread's verdict rows. That is the correct
+  behaviour and must stay.
+- Because of that, the "has ever sent ham" test must read
+  `sender_state.hamCount`, which survives deletion, and never derive from
+  `message_verdict` rows, which are deleted with the thread. Getting this
+  backwards silently disarms the protection when a user tidies up.
+
+**Migration.** Existing `sender_state` rows that reached SPAM through
+graduation must be re-derived on upgrade, or those users keep a hidden
+conversation the new rules would never have hidden.
+
+- [] Remove the graduation constants and the ratio branch from `ThreadSpamPolicy`.
+- [] Add the probation state (row 5) — a first-ever message that classifies as
+  spam stays in the inbox, silent and labelled, instead of being hidden.
+- [] Make SPAM non-sticky against ham: a ham message from a SPAM sender moves it
+  back to the inbox as MIXED.
+- [] Add the "reply clears automatic spam state, never an explicit block" rule.
+- [] Re-derive graduated SPAM rows on upgrade.
+
+### Settings: what to expose, and the rule for deciding
+
+Every toggle multiplies the number of states that have to be reasoned about and
+tested, and in a spam filter the failure mode is a hidden message. So:
+
+**A setting may only ever make the filter hide less. Never more.** Any toggle
+that can cause a conversation to be hidden that otherwise would not be, is a new
+way to lose an OTP.
+
+Worth having:
+- [] **Manage blocked and allowed senders** — a real gap, not a preference.
+  Sticky rules are keyed to the sender and survive thread deletion, so today a
+  user can block a number, delete the thread, and have no way to find or undo
+  that rule. There is no such screen in `SettingsScreen.kt` today.
+- [] **"Warn about suspicious messages from contacts"** (default OFF, and only
+  if users ask for it). Contacts bypass the classifier by default, so this
+  toggle turns labelling on. Safe under the rule above because it can only add
+  a warning, never hide a message. Not worth building speculatively.
+- Master spam protection on/off — already exists (`SpamPreferences.isEnabled`).
+
+Deliberately not offering: sensitivity sliders or aggressive/balanced/relaxed
+presets. Users cannot reason about a threshold they cannot see the effect of,
+and each preset needs its own correctness argument and test matrix.
+
+## Found during the E2E wave (2026-09-14) — verified, not yet fixed
+
+### Thread pagination strands older messages on imported history  — user-visible
+
+This is the single mechanism behind both long-standing bugs at the top of this
+file: messages predating install not listed, and wrong ordering with existing
+history.
+
+`RealTelephonyDataSource.queryMessages` orders by `DATE DESC` but filters
+`_ID < beforeId`, and `ThreadViewModel.loadOlder` passes `min(_id)` of the
+loaded messages as that cursor. Row ids follow provider insertion order; dates
+follow when a message was sent. On organic traffic the two agree, which is why
+this never shows up on a fresh phone. The moment history is imported, restored
+or backfilled out of order, they diverge, and any message that is older but was
+inserted later carries a higher row id and is excluded permanently. It does not
+load slowly — it is unreachable.
+
+Reproduced on-device with a fixture of 200 recent messages inserted first and 10
+genuinely older ones inserted after: scrolling back stops dead, no spinner, no
+error.
+
+- [] Fix: make the cursor composite — `(date, _id)` with `_id` as tiebreaker —
+  so the pagination key matches the sort key. Touches `TelephonyDataSource`
+  (interface + KDoc), `RealTelephonyDataSource`, `ThreadViewModel`,
+  `FakeTelephonyDataSource` in `core:testing` (it mirrors the same `_id` contract
+  and would silently diverge from an impl-only fix), and their tests.
+
+### Bulk spam actions are irreversible and unconfirmed  — safety
+
+`ConversationsScreen`'s Spam & Blocked bulk row runs
+`spamList.forEach { onDelete(it.threadId.value) }`, which reaches
+`telephony.deleteConversation` — a hard delete from the system SMS provider. No
+confirmation, no undo, no tombstone.
+
+Three things make this worse than an ordinary delete button:
+- The banner directly above it promises spam is deleted automatically after 30
+  days. The screen contradicts its own stated retention policy.
+- The list is machine-generated, not user-curated. "Re-check all messages"
+  re-runs the classifier over all history and readily flags repetitive templated
+  text, so the set being deleted was never reviewed by anyone.
+- "Block all" writes to `BlockedNumberContract` while the app holds the default
+  SMS role, so it is system-wide, applies to calls, and survives uninstall.
+
+Observed for real: running a re-check and then a bulk action in one session
+destroyed most of the seeded test fixtures.
+
+- [] Confirmation dialog naming the count before Delete all.
+- [] Confirmation for Block all that states it also blocks calls and persists
+  after uninstall.
+- [] Consider an undo snackbar for Block, which is reversible. Delete is not, so
+  confirmation is the only guard available there.
+
+### Compose instrumented tests cannot run on API 37  — tooling
+
+All 20 Compose UI tests fail with
+`NoSuchMethodException: android.hardware.input.InputManager.getInstance`.
+Espresso's UI controller reflectively calls a method that no longer exists on
+API 37. Not app logic — the emulator is newer than the test libraries.
+
+The nine `Sqlite*Dao` suites and `SqliteNoSpamOpenHelper` are unaffected and
+pass 44/44 on the same device, so the storage layer is now verified.
+
+- [] Either bump Espresso and the Compose test artifacts, or keep a second AVD
+  on an older API for UI tests. Decide before writing the E2E runner script,
+  since the runner has to target whichever combination works.
 
 ## Project-wide
 - [] Fix pre-existing lint in `feature/export/ExportScreen.kt:214` (ViewModelConstructorInComposable) — blocks full `./gradlew build`

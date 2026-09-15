@@ -120,7 +120,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                     if (isSuspected) {
                         androidx.compose.material3.AssistChip(
                             onClick = { },
-                            label = { Text("Suspected spam") },
+                            label = { Text(stringResource(R.string.suspected_spam)) },
                             modifier = Modifier.padding(bottom = 2.dp)
                         )
                     }
@@ -181,7 +181,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                         val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         cm.setPrimaryClip(android.content.ClipData.newPlainText("sms", msg.body))
                         selected = null
-                    }) { Text("Copy") }
+                    }) { Text(stringResource(R.string.action_copy)) }
                 },
                 dismissButton = {
                     androidx.compose.material3.TextButton(onClick = { selected = null }) { Text("Close") }
@@ -227,7 +227,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.jump_to_latest_desc))
             }
         }
     }
