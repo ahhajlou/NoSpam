@@ -102,12 +102,6 @@ fun NoSpamAppShell() {
                         )
                     }
                     androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_mark_all_read)) },
-                        selected = false,
-                        onClick = { scope.launch { drawerState.close() } },
-                        icon = { Icon(Icons.Filled.Warning, null) }
-                    )
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
                     NavigationDrawerItem(
                         label = { Text(stringResource(R.string.drawer_settings)) },

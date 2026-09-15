@@ -237,8 +237,25 @@ pass 44/44 on the same device, so the storage layer is now verified.
   on an older API for UI tests. Decide before writing the E2E runner script,
   since the runner has to target whichever combination works.
 
+## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
+
+- [] **"Mark all as read"** — the drawer item was removed. Its `onClick` only
+  closed the drawer; it had never done anything. A menu item that silently does
+  nothing is worse than no menu item, so it is gone rather than left lying.
+  Re-add it when it is actually implemented. Note it is a bulk action over every
+  conversation with no natural undo, so it should follow whatever confirmation
+  rule the spam bulk actions settle on.
+
+- [] **`ACTION_SENDTO` handling is advertised but not implemented.** The
+  manifest claims `sms:`, `smsto:`, `mms:` and `mmsto:` so other apps can hand
+  off "compose SMS to X", and `MainActivity.handleSendToIntent()` normalizes the
+  address and then only logs it, under a comment claiming NavHost deep-linking
+  is wired. It is not. Left in place deliberately: removing the intent filter
+  would drop a real capability, and wiring the navigation is feature work rather
+  than cleanup. Until it is done, another app handing off to NoSpam gets a cold
+  inbox.
+
 ## Project-wide
-- [] Fix pre-existing lint in `feature/export/ExportScreen.kt:214` (ViewModelConstructorInComposable) — blocks full `./gradlew build`
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
 - [] Add instrumented tests for `core:telephony` provider query/write logic (off-device fake coverage is thin, per CLAUDE.md §5)
 - [] MMS: extend history scan to MMS when the MMS-parsing architecture is ready (currently SMS-only in backfill)

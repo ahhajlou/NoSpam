@@ -3,15 +3,12 @@
     <string name="export_title">خروجی پیامک‌ها</string>
     <string name="export_description">تمام پیامک‌ها را به یک فایل JSONL خروجی بگیرید. هر خط شامل یک پیام با شناسهٔ خروجیِ هر نصب، زمان، فرستنده و متن است.</string>
     <string name="export_button">خروجی همهٔ پیامک‌ها</string>
-    <string name="export_button_desc">خروجی پیام‌ها به فایل</string>
     <string name="export_exporting">در حال خروجی گرفتن…</string>
     <string name="export_success">%1$d پیام به %2$s صادر شد</string>
     <string name="export_failed">خروجی ناموفق بود: %1$s</string>
     <string name="export_empty">پیامی برای خروجی وجود ندارد</string>
     <string name="export_permission_required">برای خروجی گرفتن، مجوز پیامک لازم است</string>
-    <string name="export_count">%1$d پیام</string>
     <string name="export_install_id_label">شناسهٔ خروجی (به ازای هر نصب)</string>
     <string name="export_include_labels">شامل برچسب هرزنامه/عادی باشد</string>
     <string name="export_include_labels_desc">برای هر پیام، برچسب هرزنامه/عادی را از طبقه‌بند روی دستگاه اضافه می‌کند.</string>
-    <string name="export_file_hint">sms_export.jsonl</string>
 </resources>

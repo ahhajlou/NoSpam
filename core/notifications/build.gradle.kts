@@ -26,8 +26,6 @@ dependencies {
     implementation(project(":core:model"))
     implementation(libs.androidx.core.ktx)
     testImplementation(libs.junit)
-    testImplementation(libs.robolectric)
-    testImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
