@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.DrawerValue
@@ -33,8 +31,7 @@ import com.nospam.nospam.R
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.navigation.ArchivedRoute
 import com.nospam.nospam.navigation.ConversationsRoute
-import com.nospam.nospam.navigation.ExportRoute
-import com.nospam.nospam.navigation.MlDebugRoute
+import com.nospam.nospam.navigation.debugTools
 import com.nospam.nospam.navigation.NoSpamNavHost
 import com.nospam.nospam.navigation.SettingsRoute
 import com.nospam.nospam.navigation.SpamRoute
@@ -91,34 +88,20 @@ fun NoSpamAppShell() {
                         },
                         icon = { Icon(Icons.Filled.Warning, null) }
                     )
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_export)) },
-                        selected = currentRoute?.contains("Export") == true,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(ExportRoute) {
-                                launchSingleTop = true
-                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.Upload, null) }
-                    )
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_mldebug)) },
-                        selected = currentRoute?.contains("MlDebug") == true,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(MlDebugRoute) { launchSingleTop = true }
-                        },
-                        icon = { Icon(Icons.Filled.Science, null) }
-                    )
+                    // Developer tools. Empty in release: the feature modules are
+                    // debugImplementation, so nothing to show and nothing linked.
+                    debugTools.forEach { tool ->
+                        NavigationDrawerItem(
+                            label = { Text(stringResource(tool.labelRes)) },
+                            selected = currentRoute?.contains(tool.routeTag) == true,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                tool.navigate(navController)
+                            },
+                            icon = { Icon(tool.icon, null) }
+                        )
+                    }
                     androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_mark_all_read)) },
-                        selected = false,
-                        onClick = { scope.launch { drawerState.close() } },
-                        icon = { Icon(Icons.Filled.Warning, null) }
-                    )
                     androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
                     NavigationDrawerItem(
                         label = { Text(stringResource(R.string.drawer_settings)) },
@@ -139,7 +122,7 @@ fun NoSpamAppShell() {
                 modifier = Modifier.fillMaxSize(),
                 topBar = {
                     TopAppBar(
-                        title = { Text("NoSpam SMS") },
+                        title = { Text(stringResource(R.string.app_name)) },
                         navigationIcon = {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                 Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.action_menu_desc))

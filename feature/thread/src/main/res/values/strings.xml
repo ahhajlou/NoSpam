@@ -6,4 +6,7 @@
     <string name="new_hint">Type a name, phone number, or email</string>
     <string name="new_top">Top contacts</string>
     <string name="new_all">All contacts</string>
+    <string name="suspected_spam">Suspected spam</string>
+    <string name="jump_to_latest_desc">Jump to latest</string>
+    <string name="action_copy">Copy</string>
 </resources>

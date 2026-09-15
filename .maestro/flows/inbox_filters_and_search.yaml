@@ -1,0 +1,85 @@
+appId: com.nospam.nospam
+tags:
+  - inbox
+---
+# Requires tools/seed.sh seed to have been run first (NSTEST_* fixtures + the
+# +15551110001 contact conversation). tapOn/assertVisible only see the current
+# viewport in this Maestro version, so every row below the fold is reached
+# with an explicit scrollUntilVisible rather than assumed visible.
+#
+# ConversationFilter.entries are single-select (ConversationsViewModel.
+# onFilterSelected always *sets* the filter — there is no toggle-off), so every
+# section below returns to "All" explicitly rather than re-tapping the same chip.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+
+# --- All (default) ---
+- assertVisible: "All"
+- assertVisible: "NSTEST_PIN1"          # pinned section, always at the top
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MIXED1"
+    direction: DOWN
+- assertVisible: "Mixed"                 # badge on the mixed conversation row
+# Spam and archived conversations must never appear on the inbox list.
+# NSTEST_SPAM2 (not NSTEST_SPAM1) on purpose: NSTEST_SPAM1 is mutated to
+# not-spam by spam_notspam_and_bulk.yaml, and this flow must hold regardless
+# of what order the suite runs flows in.
+- assertNotVisible: "NSTEST_SPAM2"
+- assertNotVisible: "NSTEST_ARCHIVE1"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_PIN1"
+    direction: UP
+
+# --- Unread ---
+- tapOn: "Unread"
+- assertVisible: "+15551110001"          # seed_contact_clean's newest message is read:0
+- tapOn: "All"
+
+# --- Known ---
+- tapOn: "Known"
+# The seeded contact conversation should surface here by display name once
+# tools/seed.sh's contact insert succeeds on this device/build of `content`.
+- assertVisible:
+    text: "NoSpam QA Contact|\\+15551110001"
+    optional: true
+- tapOn: "All"
+
+# --- Unknown ---
+- tapOn: "Unknown"
+- assertVisible: "NSTEST_PIN1"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MIXED1"
+    direction: DOWN
+# The DOWN scroll above moved the filter-chip row itself out of the
+# viewport (chips are part of the same scrollable content, not a sticky
+# header) — scroll back up before tapping "All" or the tap has nothing to hit.
+- scrollUntilVisible:
+    element:
+        text: "All"
+    direction: UP
+- tapOn: "All"
+
+# --- Starred ---
+- scrollUntilVisible:
+    element:
+        text: "Starred"
+    direction: UP
+    optional: true
+- tapOn: "Starred"
+- assertVisible: "NSTEST_STAR1"
+- assertNotVisible: "NSTEST_PIN1"
+- tapOn: "All"
+
+# --- Search ---
+- tapOn: "Search conversations"
+- inputText: "NSTEST_LONG1"
+- assertVisible: "NSTEST_LONG1"
+- assertNotVisible: "NSTEST_PIN1"
+- eraseText
+- hideKeyboard

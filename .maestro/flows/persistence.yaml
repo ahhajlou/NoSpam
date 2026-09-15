@@ -1,0 +1,145 @@
+appId: com.nospam.nospam
+tags:
+  - persistence
+---
+# Persistence-across-process-death checks (Wave 2B, highest-value part).
+# Pattern per flag: act via the real UI, `stopApp` (Maestro's Android driver
+# force-stops the app the same way `adb shell am force-stop <pkg>` does —
+# there is no lighter-weight "kill" in the app itself to race against),
+# `launchApp` with clearState:false, then assert the flag held.
+#
+# Requires tools/seed.sh seed. The block/unblock regression from commit
+# 7256993 (unblock left sender_state=BLOCKED so the thread never returned to
+# the inbox) needs a live `adb emu sms send`, which Maestro cannot shell out
+# to — that specific check lives in tools/persistence_check.sh instead. This
+# flow covers every other flag: archived, starred, pinned, muted, spam
+# verdict (not-spam override) and per-thread draft.
+#
+# ConversationFilter chips are single-select with no toggle-off
+# (ConversationsViewModel.onFilterSelected always *sets* the filter), so every
+# section returns to "All" explicitly rather than re-tapping the same chip.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+
+# --- Starred ---
+- longPressOn: "NSTEST_STAR1"
+- tapOn: "Unstar"
+- longPressOn: "NSTEST_STAR1"
+- tapOn: "Star"
+- stopApp
+- launchApp:
+    clearState: false
+- tapOn: "Starred"
+- assertVisible: "NSTEST_STAR1"
+- tapOn: "All"
+
+# --- Pinned ---
+- longPressOn: "NSTEST_PIN1"
+- tapOn: "Unpin"
+- longPressOn: "NSTEST_PIN1"
+- tapOn: "Pin"
+- stopApp
+- launchApp:
+    clearState: false
+- assertVisible: "Pinned"
+- assertVisible: "NSTEST_PIN1"
+
+# --- Muted ---
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- tapOn: "Unmute"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- tapOn: "Mute"
+- stopApp
+- launchApp:
+    clearState: false
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- assertVisible: "Unmute"
+- back
+
+# --- Archived --- (NSTEST_ARCHIVE2 starts already archived, per tools/seed.sh;
+# a fixture dedicated to this flow, separate from NSTEST_ARCHIVE1 which
+# archived_unarchive.yaml round-trips, so the two never race each other)
+- tapOn: "Menu"
+- tapOn: "Archived"
+- assertVisible: "NSTEST_ARCHIVE2"
+- longPressOn: "NSTEST_ARCHIVE2"
+- tapOn: "Unarchive"
+- stopApp
+- launchApp:
+    clearState: false
+- assertVisible: "NSTEST_ARCHIVE2"           # back in the inbox, survived restart
+- longPressOn: "NSTEST_ARCHIVE2"
+- tapOn: "Archive"
+- stopApp
+- launchApp:
+    clearState: false
+- assertNotVisible: "NSTEST_ARCHIVE2"        # gone from inbox again
+- tapOn: "Menu"
+- tapOn: "Archived"
+- assertVisible: "NSTEST_ARCHIVE2"           # present in Archived, survived restart
+
+# --- Spam verdict override ("Not spam" sticks) --- NSTEST_SPAM3 is dedicated
+# to this flow (NSTEST_SPAM1 belongs to spam_notspam_and_bulk.yaml, NSTEST_SPAM2
+# is the never-mutated fixture inbox_filters_and_search.yaml checks against).
+- tapOn: "Menu"
+- tapOn: "Spam & blocked"
+- runFlow:
+    when:
+      visible: "NSTEST_SPAM3"
+    commands:
+      - swipe:
+          from: "NSTEST_SPAM3"
+          direction: RIGHT
+- stopApp
+- launchApp:
+    clearState: false
+- tapOn: "Menu"
+- tapOn: "Spam & blocked"
+- assertNotVisible: "NSTEST_SPAM3"          # spam tab: stays not-spam
+- tapOn: "Menu"
+- tapOn: "Inbox"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_SPAM3"
+    direction: DOWN
+    optional: true
+- assertVisible: "NSTEST_SPAM3"             # inbox: correction survived restart
+
+# --- Per-thread draft ---
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- tapOn: "NSTEST_MUTE1"
+- tapOn: "SMS message"
+- inputText: "Unsent draft persistence check"
+- stopApp
+- launchApp:
+    clearState: false
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- tapOn: "NSTEST_MUTE1"
+- assertVisible: "Unsent draft persistence check"
+- back

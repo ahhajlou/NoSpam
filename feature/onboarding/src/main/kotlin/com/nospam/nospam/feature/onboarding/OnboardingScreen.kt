@@ -60,14 +60,7 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
         Spacer(Modifier.height(32.dp))
         if (!hasPermissions) {
             Button(onClick = {
-                val perms = mutableListOf(
-                    android.Manifest.permission.READ_SMS,
-                    android.Manifest.permission.SEND_SMS,
-                    android.Manifest.permission.RECEIVE_SMS,
-                    android.Manifest.permission.READ_CONTACTS
-                )
-                if (Build.VERSION.SDK_INT >= 33) perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
-                permissionLauncher.launch(perms.toTypedArray())
+                permissionLauncher.launch(requiredPermissions().toTypedArray())
             }) { Text(stringResource(R.string.grant)) }
             Spacer(Modifier.height(12.dp))
         } else {
@@ -88,18 +81,30 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
     }
 }
 
-private fun hasRequiredPermissions(context: Context): Boolean {
-    val perms = mutableListOf(
-        android.Manifest.permission.READ_SMS,
-        android.Manifest.permission.SEND_SMS,
-        android.Manifest.permission.RECEIVE_SMS,
-        android.Manifest.permission.READ_CONTACTS
-    )
-    if (Build.VERSION.SDK_INT >= 33) perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
-    return perms.all {
+/**
+ * Permissions onboarding asks for, in one place.
+ *
+ * This list was previously written twice, once here and once inline in the
+ * grant button, which meant the API 33 notification entry could drift between
+ * what we request and what we check.
+ *
+ * [sdkInt] is a parameter rather than a read of [Build.VERSION.SDK_INT] so the
+ * version branch is testable off-device; callers pass the real value.
+ */
+internal fun requiredPermissions(sdkInt: Int = Build.VERSION.SDK_INT): List<String> = buildList {
+    add(android.Manifest.permission.READ_SMS)
+    add(android.Manifest.permission.SEND_SMS)
+    add(android.Manifest.permission.RECEIVE_SMS)
+    add(android.Manifest.permission.READ_CONTACTS)
+    // POST_NOTIFICATIONS only exists from Tiramisu; requesting it below 33 is a no-op
+    // that still shows up as "denied" on some OEM builds.
+    if (sdkInt >= Build.VERSION_CODES.TIRAMISU) add(android.Manifest.permission.POST_NOTIFICATIONS)
+}
+
+private fun hasRequiredPermissions(context: Context): Boolean =
+    requiredPermissions().all {
         ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
-}
 
 private fun isDefaultSmsApp(context: Context): Boolean = DefaultSmsApp.isHeld(context)
 

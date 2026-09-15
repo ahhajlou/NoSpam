@@ -1,0 +1,71 @@
+appId: com.nospam.nospam
+tags:
+  - inbox
+---
+# Long-press action dialog (ConversationActionsDialog, shared by Inbox/Archived/
+# Spam rows) on a disposable fixture, so this flow can freely mutate state
+# without corrupting fixtures other flows depend on. Requires tools/seed.sh seed.
+# NSTEST_MUTE1 is seeded fully read (read:1), so the toggle label is
+# "Mark as unread", not "Mark as read".
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- assertVisible: "NSTEST_MUTE1"           # dialog title
+- assertVisible: "Mark as unread"
+- assertVisible: "Star"
+- assertVisible: "Pin"
+- assertVisible: "Unmute"                 # seeded muted, so the toggle label is "Unmute"
+- assertVisible: "Archive"
+- assertVisible: "Report spam"
+- assertVisible: "Delete"
+- assertVisible: "Add to contacts"
+- assertVisible: "Call"
+
+# Exercise one non-destructive toggle end to end: Pin, then confirm the dialog
+# now offers "Unpin" and the row moved into the Pinned section.
+- tapOn: "Pin"
+- assertVisible: "Pinned"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- assertVisible: "Unpin"
+- tapOn: "Unpin"
+
+# Star toggle
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- tapOn: "Star"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- assertVisible: "Unstar"
+- tapOn: "Unstar"
+
+# Dismiss without acting (back button) leaves state untouched.
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_MUTE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_MUTE1"
+- back
+- assertVisible: "NSTEST_MUTE1"

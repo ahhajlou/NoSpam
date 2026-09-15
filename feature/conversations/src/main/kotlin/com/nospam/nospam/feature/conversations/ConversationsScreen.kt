@@ -109,7 +109,7 @@ fun ConversationsScreen(
                         ) {
                             Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
                             Spacer(Modifier.width(8.dp))
-                            Text("Not default SMS app — some features disabled", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(stringResource(R.string.not_default_sms_banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
                         }
                     }
                 }
@@ -288,9 +288,9 @@ private fun inboxActions(
             onClick = onToggleRead,
         )
     )
-    add(ConversationAction(label = if (conv.isStarred) "Unstar" else "Star", onClick = onToggleStar))
-    add(ConversationAction(label = if (conv.isPinned) "Unpin" else "Pin", onClick = onTogglePin))
-    add(ConversationAction(label = if (conv.isMuted) "Unmute" else "Mute", onClick = onToggleMute))
+    add(ConversationAction(label = stringResource(if (conv.isStarred) R.string.action_unstar else R.string.action_star), onClick = onToggleStar))
+    add(ConversationAction(label = stringResource(if (conv.isPinned) R.string.action_unpin else R.string.action_pin), onClick = onTogglePin))
+    add(ConversationAction(label = stringResource(if (conv.isMuted) R.string.action_unmute else R.string.action_mute), onClick = onToggleMute))
     add(
         ConversationAction(
             label = stringResource(R.string.menu_archive),
@@ -355,7 +355,7 @@ private fun ConversationRow(
                 if (conv.isMuted) { Icon(Icons.Filled.NotificationsOff, contentDescription = "Muted", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(4.dp)) }
                 if (conv.spamState == com.nospam.nospam.core.model.ThreadSpamState.MIXED) {
                     Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text("Mixed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                        Text(stringResource(R.string.badge_mixed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
                     }
                     Spacer(Modifier.width(6.dp))
                 }
@@ -584,11 +584,11 @@ fun SpamScreen(
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
                 androidx.compose.material3.TextButton(onClick = {
                     spamList.forEach { c -> c.participants.firstOrNull()?.address?.let(onBlock) }
-                }) { Text("Block all") }
+                }) { Text(stringResource(R.string.action_block_all)) }
                 androidx.compose.material3.TextButton(onClick = {
                     spamList.forEach { c -> onDelete(c.threadId.value) }
                     if (!isLive) fakeSpamList = emptyList()
-                }) { Text("Delete all") }
+                }) { Text(stringResource(R.string.action_delete_all)) }
                 if (!isLive) {
                     androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
                         Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
