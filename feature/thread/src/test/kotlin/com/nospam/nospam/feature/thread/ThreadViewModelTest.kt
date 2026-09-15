@@ -187,6 +187,23 @@ class ThreadViewModelTest {
         assertEquals(1, vm.uiState.value.messages.size)
     }
 
+    @Test fun `onDeleteMessage removes the row and records the id on the fake`() {
+        val telephony = telephonyWithThread9()
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        assertEquals(1, vm.uiState.value.messages.size)
+
+        vm.onDeleteMessage(1L)
+        assertEquals(listOf(1L), telephony.deletedMessageIds)
+        assertTrue(vm.uiState.value.messages.none { it.id.value == 1L })
+    }
+
+    @Test fun `loadThread with forwardBody pre-fills the draft`() {
+        val vm = ThreadViewModel(telephonyWithThread9())
+        vm.loadThread(9L, forwardBody = "fwd text")
+        assertEquals("fwd text", vm.uiState.value.draft)
+    }
+
     @Test fun `optimistic sent bubble survives before the provider reconciles it`() {
         // The optimistic row ThreadViewModel appends locally on send must stay
         // visible immediately, before any provider re-emission arrives.

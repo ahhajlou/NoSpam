@@ -23,6 +23,8 @@ interface TelephonyDataSource {
     suspend fun markAsRead(threadId: ThreadId)
     suspend fun markAsUnread(threadId: ThreadId)
     suspend fun deleteConversation(threadId: ThreadId)
+    /** Deletes a single message row. Best-effort: a no-op if it no longer exists. */
+    suspend fun deleteMessage(messageId: Long)
     /** Inserts an incoming message into the system inbox. Returns the row id, or null on failure. */
     suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean, subscriptionId: Int? = null): Long?
     /** Persists an outgoing message to the sent box (SmsManager never writes it). Null on failure. */

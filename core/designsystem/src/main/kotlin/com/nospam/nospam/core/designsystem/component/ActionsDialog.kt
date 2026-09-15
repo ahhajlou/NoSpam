@@ -1,4 +1,4 @@
-package com.nospam.nospam.feature.conversations
+package com.nospam.nospam.core.designsystem.component
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,21 +13,21 @@ import androidx.compose.ui.Modifier
  * One long-press action. [destructive] renders the label in the error color
  * (delete, report spam, block).
  */
-data class ConversationAction(
+data class ActionMenuItem(
     val label: String,
     val destructive: Boolean = false,
     val onClick: () -> Unit,
 )
 
 /**
- * Long-press menu shared by inbox, archived and spam rows. Plain dialog list
- * (no anchored DropdownMenu) so it works identically on every surface and
- * stays testable with straightforward text queries.
+ * Long-press menu shared by inbox, archived, spam and thread-message rows.
+ * Plain dialog list (no anchored DropdownMenu) so it works identically on
+ * every surface and stays testable with straightforward text queries.
  */
 @Composable
-fun ConversationActionsDialog(
+fun ActionMenuDialog(
     title: String,
-    actions: List<ConversationAction>,
+    actions: List<ActionMenuItem>,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(

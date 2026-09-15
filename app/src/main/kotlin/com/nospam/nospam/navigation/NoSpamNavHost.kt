@@ -51,8 +51,8 @@ import kotlinx.serialization.Serializable
 @Serializable object SpamRoute
 @Serializable object SettingsRoute
 @Serializable object OnboardingRoute
-@Serializable object NewConversationRoute
-@Serializable data class ThreadRoute(val threadId: Long, val address: String? = null)
+@Serializable data class NewConversationRoute(val forwardBody: String? = null)
+@Serializable data class ThreadRoute(val threadId: Long, val address: String? = null, val forwardBody: String? = null)
 
 
 /** First launch (or revoked state) lands on onboarding instead of an empty inbox. */
@@ -124,7 +124,7 @@ fun NoSpamNavHost(
             ConversationsScreen(
                 viewModel = conversationsVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
-                onNewMessage = { navController.navigate(NewConversationRoute) },
+                onNewMessage = { navController.navigate(NewConversationRoute()) },
                 onToggleRead = { id, read ->
                     scope.launch { container?.conversationsRepository?.setRead(ThreadId(id), read) }
                 },
@@ -191,13 +191,14 @@ fun NoSpamNavHost(
                 }
             )
         }
-        composable<NewConversationRoute> {
+        composable<NewConversationRoute> { backStackEntry ->
+            val args = backStackEntry.toRoute<NewConversationRoute>()
             val scope = rememberCoroutineScope()
             NewConversationScreen(
                 onAddressEntered = { address ->
                     scope.launch {
                         val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L
-                        navController.navigate(ThreadRoute(threadId, address))
+                        navController.navigate(ThreadRoute(threadId, address, args.forwardBody))
                     }
                 },
                 dataSource = container?.telephony
@@ -210,7 +211,13 @@ fun NoSpamNavHost(
                     container?.let { ThreadViewModel(it.telephony, args.address, it.spamRepository) } ?: ThreadViewModel()
                 }
             )
-            ThreadScreen(threadId = args.threadId, address = args.address, viewModel = vm)
+            ThreadScreen(
+                threadId = args.threadId,
+                address = args.address,
+                forwardBody = args.forwardBody,
+                onForward = { body -> navController.navigate(NewConversationRoute(forwardBody = body)) },
+                viewModel = vm,
+            )
         }
     }
 }
