@@ -13,9 +13,8 @@ import org.junit.Test
 class SpamScreenTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun `spam_banner_and_rows_are_shown`() {
+    @Test fun `spam_rows_are_shown`() {
         rule.setContent { SpamScreen() }
-        rule.onNodeWithText("Spam messages will be deleted automatically after 30 days.").assertIsDisplayed()
         rule.onNodeWithText("Win A Free Cruise!").assertIsDisplayed()
         rule.onNodeWithText("Empty Spam").assertIsDisplayed()
     }

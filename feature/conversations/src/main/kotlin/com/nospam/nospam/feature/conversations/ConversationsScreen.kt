@@ -571,30 +571,12 @@ fun SpamScreen(
     val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     Column(modifier = Modifier.fillMaxSize()) {
-        // Banner
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.spam_banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-        }
-        if (spamList.isNotEmpty()) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
-                androidx.compose.material3.TextButton(onClick = {
-                    spamList.forEach { c -> c.participants.firstOrNull()?.address?.let(onBlock) }
-                }) { Text(stringResource(R.string.action_block_all)) }
-                androidx.compose.material3.TextButton(onClick = {
-                    spamList.forEach { c -> onDelete(c.threadId.value) }
-                    if (!isLive) fakeSpamList = emptyList()
-                }) { Text(stringResource(R.string.action_delete_all)) }
-                if (!isLive) {
-                    androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
-                        Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.empty_spam))
-                    }
+        if (spamList.isNotEmpty() && !isLive) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
+                androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
+                    Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.empty_spam))
                 }
             }
         }
