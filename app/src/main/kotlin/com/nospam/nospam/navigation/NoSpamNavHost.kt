@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -28,6 +29,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.nospam.nospam.NoSpamApplication
+import com.nospam.nospam.R
 import com.nospam.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -70,7 +72,7 @@ private fun isDefaultSmsApp(context: Context): Boolean =
 fun NoSpamNavHost(
     navController: NavHostController,
     startDestination: Any? = null,
-    onDrawerClick: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val container = remember(context) {
@@ -122,6 +124,8 @@ fun NoSpamNavHost(
         composable<ConversationsRoute> {
             val scope = rememberCoroutineScope()
             ConversationsScreen(
+                title = stringResource(R.string.drawer_inbox),
+                onOpenDrawer = onOpenDrawer,
                 viewModel = conversationsVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNewMessage = { navController.navigate(NewConversationRoute()) },
@@ -145,6 +149,8 @@ fun NoSpamNavHost(
         composable<ArchivedRoute> {
             val scope = rememberCoroutineScope()
             ArchivedScreen(
+                title = stringResource(R.string.drawer_archived),
+                onOpenDrawer = onOpenDrawer,
                 viewModel = archivedVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onUnarchive = { id ->
@@ -158,6 +164,8 @@ fun NoSpamNavHost(
         composable<SpamRoute> {
             val scope = rememberCoroutineScope()
             SpamScreen(
+                title = stringResource(R.string.drawer_spam_blocked),
+                onOpenDrawer = onOpenDrawer,
                 viewModel = spamVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNotSpam = { id, address ->
@@ -173,9 +181,13 @@ fun NoSpamNavHost(
                 },
             )
         }
-        debugToolDestinations(container, context)
+        debugToolDestinations(container, context, onOpenDrawer)
         composable<SettingsRoute> {
-            SettingsScreen(onRecheck = { container?.spamBackfill?.rescanAll() })
+            SettingsScreen(
+                title = stringResource(R.string.drawer_settings),
+                onOpenDrawer = onOpenDrawer,
+                onRecheck = { container?.spamBackfill?.rescanAll() },
+            )
         }
         composable<OnboardingRoute> {
             val scope = rememberCoroutineScope()
@@ -195,6 +207,7 @@ fun NoSpamNavHost(
             val args = backStackEntry.toRoute<NewConversationRoute>()
             val scope = rememberCoroutineScope()
             NewConversationScreen(
+                onNavigateUp = { navController.navigateUp() },
                 onAddressEntered = { address ->
                     scope.launch {
                         val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L
@@ -216,6 +229,7 @@ fun NoSpamNavHost(
                 address = args.address,
                 forwardBody = args.forwardBody,
                 onForward = { body -> navController.navigate(NewConversationRoute(forwardBody = body)) },
+                onNavigateUp = { navController.navigateUp() },
                 viewModel = vm,
             )
         }

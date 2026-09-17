@@ -12,4 +12,4 @@ import com.nospam.nospam.AppContainer
 val debugTools: List<DebugTool> = emptyList()
 
 @Suppress("UNUSED_PARAMETER")
-fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Context) = Unit
+fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Context, onOpenDrawer: () -> Unit) = Unit

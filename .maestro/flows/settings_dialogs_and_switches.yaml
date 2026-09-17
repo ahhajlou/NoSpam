@@ -14,8 +14,8 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
-- tapOn: "Menu"
+- assertVisible: "Inbox"
+- tapOn: "Open navigation menu"
 - tapOn: "Settings"
 - assertVisible: "General"
 - assertVisible: "Notifications"
@@ -91,6 +91,12 @@ tags:
         text: "Version info"
     direction: DOWN
 - assertVisible: "Version info"
+# Terms is the row below Version info; whether it is already on screen depends
+# on the exact layout (it stopped being once Settings got its own top bar).
+- scrollUntilVisible:
+    element:
+        text: "Terms of service"
+    direction: DOWN
 - tapOn: "Terms of service"
 - assertVisible: "Terms are not published yet for this build."
 - tapOn: "Close"
@@ -108,4 +114,4 @@ tags:
 # not crash us, and we come back to a working app.
 - tapOn: "Notifications"
 - back
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Settings"                  # back on Settings, app still alive

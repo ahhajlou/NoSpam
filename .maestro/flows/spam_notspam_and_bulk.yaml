@@ -9,8 +9,8 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
-- tapOn: "Menu"
+- assertVisible: "Inbox"
+- tapOn: "Open navigation menu"
 - assertVisible: "Spam & blocked"
 - tapOn: "Spam & blocked"
 - assertVisible: "Spam messages will be deleted automatically after 30 days."
@@ -38,7 +38,7 @@ tags:
     optional: true
 
 # It must reappear in the inbox as a normal (non-spam) conversation.
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Inbox"
 - assertVisible: "NSTEST_SPAM1"
 
@@ -58,7 +58,7 @@ tags:
 # `settings_dialogs_and_switches` and this flow's bulk-action section back to
 # back against a fixture set you still need — re-seed after, or run this flow
 # in isolation (`maestro test .maestro/flows/spam_notspam_and_bulk.yaml`).
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Spam & blocked"
 - assertVisible: "NSTEST_BULK1"
 - assertVisible: "Block all"

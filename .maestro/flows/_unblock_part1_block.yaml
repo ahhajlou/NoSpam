@@ -13,7 +13,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 - longPressOn: "NSTEST_UNBLOCK1"
 - assertVisible: "Block"
 - tapOn: "Block"

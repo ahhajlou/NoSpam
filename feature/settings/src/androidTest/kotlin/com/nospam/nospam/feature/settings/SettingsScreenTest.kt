@@ -18,7 +18,7 @@ class SettingsScreenTest {
         rule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ToggleableState))
 
     @Test fun `sections_and_rows_are_shown`() {
-        rule.setContent { SettingsScreen() }
+        rule.setContent { SettingsScreen(title = "Settings") }
         rule.onNodeWithText("General").assertIsDisplayed()
         rule.onNodeWithText("Privacy & protection").assertIsDisplayed()
         rule.onNodeWithText("Spam protection").assertIsDisplayed()
@@ -26,7 +26,7 @@ class SettingsScreenTest {
     }
 
     @Test fun `spam_protection_switch_toggles_off_and_on`() {
-        rule.setContent { SettingsScreen() }
+        rule.setContent { SettingsScreen(title = "Settings") }
         // First switch in layout order is Spam protection (starts on).
         toggleables()[0].assertIsOn()
         toggleables()[0].performClick()
@@ -35,7 +35,7 @@ class SettingsScreenTest {
     }
 
     @Test fun `language_row_opens_picker_dialog`() {
-        rule.setContent { SettingsScreen() }
+        rule.setContent { SettingsScreen(title = "Settings") }
         rule.onNodeWithText("Language").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("System default").assertIsDisplayed()

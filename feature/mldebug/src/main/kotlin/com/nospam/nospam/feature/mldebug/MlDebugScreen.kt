@@ -45,141 +45,139 @@ fun MlDebugScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    NoSpamTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.mldebug_title),
+            style = MaterialTheme.typography.headlineMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            text = stringResource(R.string.mldebug_description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = uiState.input,
+            onValueChange = viewModel::onInputChanged,
+            placeholder = { Text(stringResource(R.string.mldebug_hint)) },
+            minLines = 3,
+            maxLines = 6,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        )
+
+        Button(
+            onClick = viewModel::classify,
+            enabled = !uiState.isClassifying && uiState.input.isNotBlank(),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = stringResource(R.string.mldebug_title),
-                style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                text = stringResource(R.string.mldebug_description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = uiState.input,
-                onValueChange = viewModel::onInputChanged,
-                placeholder = { Text(stringResource(R.string.mldebug_hint)) },
-                minLines = 3,
-                maxLines = 6,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            )
-
-            Button(
-                onClick = viewModel::classify,
-                enabled = !uiState.isClassifying && uiState.input.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (uiState.isClassifying) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Text(
-                        text = stringResource(R.string.mldebug_running),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                } else {
-                    Icon(Icons.Filled.Science, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(
-                        text = stringResource(R.string.mldebug_run),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
+            if (uiState.isClassifying) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Text(
+                    text = stringResource(R.string.mldebug_running),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            } else {
+                Icon(Icons.Filled.Science, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(
+                    text = stringResource(R.string.mldebug_run),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
             }
+        }
 
-            when (uiState.error) {
-                MlDebugError.CLASSIFIER_UNAVAILABLE -> {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = stringResource(R.string.mldebug_error_unavailable),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
-                }
-                MlDebugError.FAILED -> {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = stringResource(R.string.mldebug_error_failed),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
-                }
-                null -> Unit
-            }
-
-            uiState.result?.let { result ->
+        when (uiState.error) {
+            MlDebugError.CLASSIFIER_UNAVAILABLE -> {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (result.isSpam) {
-                                    MaterialTheme.colorScheme.errorContainer
-                                } else {
-                                    MaterialTheme.colorScheme.secondaryContainer
-                                }
-                            ) {
-                                Text(
-                                    text = stringResource(
-                                        if (result.isSpam) R.string.mldebug_label_spam
-                                        else R.string.mldebug_label_ham
-                                    ),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = if (result.isSpam) {
-                                        MaterialTheme.colorScheme.onErrorContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    },
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                                )
+                    Text(
+                        text = stringResource(R.string.mldebug_error_unavailable),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+            MlDebugError.FAILED -> {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.mldebug_error_failed),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+            null -> Unit
+        }
+
+        uiState.result?.let { result ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (result.isSpam) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
                             }
-                            Spacer(Modifier.width(12.dp))
+                        ) {
                             Text(
                                 text = stringResource(
-                                    R.string.mldebug_score,
-                                    String.format(Locale.US, "%.4f", result.score)
+                                    if (result.isSpam) R.string.mldebug_label_spam
+                                    else R.string.mldebug_label_ham
                                 ),
-                                style = MaterialTheme.typography.bodyLarge
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (result.isSpam) {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                             )
                         }
-                        Spacer(Modifier.height(12.dp))
-                        HorizontalDivider()
-                        Spacer(Modifier.height(12.dp))
-                        TraceRow(
-                            label = stringResource(R.string.mldebug_normalized),
-                            value = result.normalized
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        TraceRow(
-                            label = stringResource(R.string.mldebug_ngrams),
-                            value = result.ngramCount.toString()
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.mldebug_score,
+                                String.format(Locale.US, "%.4f", result.score)
+                            ),
+                            style = MaterialTheme.typography.bodyLarge
                         )
                     }
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider()
+                    Spacer(Modifier.height(12.dp))
+                    TraceRow(
+                        label = stringResource(R.string.mldebug_normalized),
+                        value = result.normalized
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TraceRow(
+                        label = stringResource(R.string.mldebug_ngrams),
+                        value = result.ngramCount.toString()
+                    )
                 }
             }
         }

@@ -11,7 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,11 +30,13 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,24 +49,28 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.designsystem.component.ActionMenuDialog
 import com.nospam.nospam.core.designsystem.component.ActionMenuItem
+import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
+import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeIncoming
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.nospam.nospam.core.model.MessageType
 import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ThreadScreen(
     threadId: Long,
     address: String? = null,
     forwardBody: String? = null,
     onForward: (String) -> Unit = {},
+    onNavigateUp: () -> Unit = {},
     viewModel: ThreadViewModel = viewModel(),
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -100,174 +107,191 @@ fun ThreadScreen(
             lazyState.animateScrollToItem(0)
         }
     }
-    // No Scaffold on this screen, so nothing was applying system-bar or IME
-    // insets: the compose bar sat under the navigation bar and the keyboard
-    // covered it. safeDrawing covers bars, cutout and IME together, and
-    // consuming it here means children need no further inset handling.
-    Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            val grouped = remember(uiState.messages) {
-                uiState.messages.groupBy {
-                    java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                }.toSortedMap()
-            }
-            // Reverse the grouped map so latest date group is at bottom (index 0)
-            val reversedGrouped = remember(grouped) { grouped.entries.reversed() }
-            LazyColumn(
-                state = lazyState,
-                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                reverseLayout = true
-            ) {
-                reversedGrouped.forEach { (date, msgs) ->
-                    // msgs are ASC; reverse within group so latest at bottom (index 0)
-                    val reversedMsgs = msgs.reversed()
-                    items(reversedMsgs, key = { it.id.value }) { msg ->
-                val isMe = msg.type == MessageType.SENT
-                val isSuspected = msg.id.value in uiState.spamMessageIds && !isMe
-                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
-                    if (isSuspected) {
-                        androidx.compose.material3.AssistChip(
-                            onClick = { },
-                            label = { Text(stringResource(R.string.suspected_spam)) },
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(if (isMe) MessageBubbleShapeOutgoing else MessageBubbleShapeIncoming)
-                                .background(if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .combinedClickable(onClick = {}, onLongClick = { selected = msg })
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                        ) {
-                            Text(
-                                msg.body,
-                                color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyLarge
+    val title = remember(uiState.messages, address) { threadTitle(uiState.messages, address) }
+    Scaffold(
+        topBar = {
+            NoSpamTopAppBar(title = title, navigation = TopBarNavigation.Back(onNavigateUp))
+        },
+    ) { padding ->
+        // Scaffold applies the bars' insets; the IME is not part of them, so it
+        // is added after consuming, which keeps the compose bar above the keyboard
+        // without double-counting the navigation bar underneath it.
+        Box(modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                val grouped = remember(uiState.messages) {
+                    uiState.messages.groupBy {
+                        java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    }.toSortedMap()
+                }
+                // Reverse the grouped map so latest date group is at bottom (index 0)
+                val reversedGrouped = remember(grouped) { grouped.entries.reversed() }
+                LazyColumn(
+                    state = lazyState,
+                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    reverseLayout = true
+                ) {
+                    reversedGrouped.forEach { (date, msgs) ->
+                        // msgs are ASC; reverse within group so latest at bottom (index 0)
+                        val reversedMsgs = msgs.reversed()
+                        items(reversedMsgs, key = { it.id.value }) { msg ->
+                    val isMe = msg.type == MessageType.SENT
+                    val isSuspected = msg.id.value in uiState.spamMessageIds && !isMe
+                    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
+                        if (isSuspected) {
+                            androidx.compose.material3.AssistChip(
+                                onClick = { },
+                                label = { Text(stringResource(R.string.suspected_spam)) },
+                                modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
-                    }
-                    if (isSuspected) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                            androidx.compose.material3.TextButton(onClick = { uiState.onMarkNotSpam?.invoke(msg.id.value) }) { Text("Not spam") }
-                            androidx.compose.material3.TextButton(onClick = { uiState.onReportSpam?.invoke(msg.id.value) }) { Text("Report spam") }
-                        }
-                    }
-                }
-            }
-                stickyHeader(key = date.toString()) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                        Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp)) {
-                            Text(formatDateHeader(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            // Backward-pagination sentinel at the oldest end: loads the next
-            // older page when it comes into view (reverseLayout => last slot).
-            if (uiState.hasMoreOlder || uiState.loadingOlder) {
-                item(key = "load-older") {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(if (uiState.loadingOlder) 40.dp else 1.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (uiState.loadingOlder) CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-        }
-        selected?.let { msg ->
-            val actionCopy = stringResource(R.string.action_copy)
-            val actionDelete = stringResource(R.string.action_delete)
-            val actionShare = stringResource(R.string.action_share)
-            val actionForward = stringResource(R.string.action_forward)
-            ActionMenuDialog(
-                title = msg.body,
-                actions = listOf(
-                    ActionMenuItem(label = actionCopy, onClick = {
-                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("sms", msg.body))
-                    }),
-                    ActionMenuItem(label = actionDelete, destructive = true, onClick = { pendingDelete = msg }),
-                    ActionMenuItem(label = actionShare, onClick = {
-                        try {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_TEXT, msg.body)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(if (isMe) MessageBubbleShapeOutgoing else MessageBubbleShapeIncoming)
+                                    .background(if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .combinedClickable(onClick = {}, onLongClick = { selected = msg })
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Text(
+                                    msg.body,
+                                    color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
                             }
-                            context.startActivity(android.content.Intent.createChooser(intent, null))
-                        } catch (_: Exception) {}
-                    }),
-                    ActionMenuItem(label = actionForward, onClick = { onForward(msg.body) }),
-                ),
-                onDismiss = { selected = null },
-            )
-        }
-        pendingDelete?.let { msg ->
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { pendingDelete = null },
-                title = { Text(stringResource(R.string.delete_message_title)) },
-                text = { Text(stringResource(R.string.delete_message_body)) },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
-                        viewModel.onDeleteMessage(msg.id.value)
-                        pendingDelete = null
-                        selected = null
-                    }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
-                }
-            )
-        }
-        // Compose bar
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(8.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = {}) { Icon(Icons.Default.AddCircle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            IconButton(onClick = {}) { Icon(Icons.Default.Face, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (uiState.sims.size > 1) {
-                var simMenu by remember { mutableStateOf(false) }
-                Box {
-                    androidx.compose.material3.TextButton(onClick = { simMenu = true }) {
-                        Text(uiState.sims.find { it.subscriptionId == uiState.selectedSimId }?.displayName ?: "SIM", style = MaterialTheme.typography.labelMedium)
+                        }
+                        if (isSuspected) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                                androidx.compose.material3.TextButton(onClick = { uiState.onMarkNotSpam?.invoke(msg.id.value) }) { Text("Not spam") }
+                                androidx.compose.material3.TextButton(onClick = { uiState.onReportSpam?.invoke(msg.id.value) }) { Text("Report spam") }
+                            }
+                        }
                     }
-                    androidx.compose.material3.DropdownMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
-                        uiState.sims.forEach { sim ->
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("${sim.displayName} ${sim.number ?: ""}") }, onClick = { viewModel.onSimSelected(sim.subscriptionId); simMenu = false })
+                }
+                    stickyHeader(key = date.toString()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                Text(formatDateHeader(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+                // Backward-pagination sentinel at the oldest end: loads the next
+                // older page when it comes into view (reverseLayout => last slot).
+                if (uiState.hasMoreOlder || uiState.loadingOlder) {
+                    item(key = "load-older") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(if (uiState.loadingOlder) 40.dp else 1.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (uiState.loadingOlder) CircularProgressIndicator(modifier = Modifier.size(20.dp))
                         }
                     }
                 }
             }
-            OutlinedTextField(
-                value = uiState.draft,
-                onValueChange = viewModel::onDraftChanged,
-                placeholder = { Text(stringResource(R.string.compose_hint)) },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
-            IconButton(onClick = viewModel::onSend) {
-                Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_message_desc), tint = MaterialTheme.colorScheme.primary)
+            selected?.let { msg ->
+                val actionCopy = stringResource(R.string.action_copy)
+                val actionDelete = stringResource(R.string.action_delete)
+                val actionShare = stringResource(R.string.action_share)
+                val actionForward = stringResource(R.string.action_forward)
+                ActionMenuDialog(
+                    title = msg.body,
+                    actions = listOf(
+                        ActionMenuItem(label = actionCopy, onClick = {
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("sms", msg.body))
+                        }),
+                        ActionMenuItem(label = actionDelete, destructive = true, onClick = { pendingDelete = msg }),
+                        ActionMenuItem(label = actionShare, onClick = {
+                            try {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_TEXT, msg.body)
+                                }
+                                context.startActivity(android.content.Intent.createChooser(intent, null))
+                            } catch (_: Exception) {}
+                        }),
+                        ActionMenuItem(label = actionForward, onClick = { onForward(msg.body) }),
+                    ),
+                    onDismiss = { selected = null },
+                )
             }
-        }
-        }
-        if (!atBottom) {
-            FloatingActionButton(
-                onClick = { scope.launch { lazyState.animateScrollToItem(0) } },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).padding(bottom = 72.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            pendingDelete?.let { msg ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { pendingDelete = null },
+                    title = { Text(stringResource(R.string.delete_message_title)) },
+                    text = { Text(stringResource(R.string.delete_message_body)) },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            viewModel.onDeleteMessage(msg.id.value)
+                            pendingDelete = null
+                            selected = null
+                        }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
+                    }
+                )
+            }
+            // Compose bar
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(8.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.jump_to_latest_desc))
+                IconButton(onClick = {}) { Icon(Icons.Default.AddCircle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                IconButton(onClick = {}) { Icon(Icons.Default.Face, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (uiState.sims.size > 1) {
+                    var simMenu by remember { mutableStateOf(false) }
+                    Box {
+                        androidx.compose.material3.TextButton(onClick = { simMenu = true }) {
+                            Text(uiState.sims.find { it.subscriptionId == uiState.selectedSimId }?.displayName ?: "SIM", style = MaterialTheme.typography.labelMedium)
+                        }
+                        androidx.compose.material3.DropdownMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
+                            uiState.sims.forEach { sim ->
+                                androidx.compose.material3.DropdownMenuItem(text = { Text("${sim.displayName} ${sim.number ?: ""}") }, onClick = { viewModel.onSimSelected(sim.subscriptionId); simMenu = false })
+                            }
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = uiState.draft,
+                    onValueChange = viewModel::onDraftChanged,
+                    placeholder = { Text(stringResource(R.string.compose_hint)) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                IconButton(onClick = viewModel::onSend) {
+                    Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_message_desc), tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            }
+            if (!atBottom) {
+                FloatingActionButton(
+                    onClick = { scope.launch { lazyState.animateScrollToItem(0) } },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).padding(bottom = 72.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.jump_to_latest_desc))
+                }
             }
         }
     }
 }
+
+/**
+ * Placeholder title until P1.4 brings the contact name: the other party's
+ * address, from the first incoming message, else any message, else the
+ * address the thread was opened with.
+ */
+internal fun threadTitle(messages: List<com.nospam.nospam.core.model.Message>, address: String?): String =
+    messages.firstOrNull { it.type == MessageType.INBOX }?.address
+        ?: messages.firstOrNull { it.type != MessageType.SENT }?.address
+        ?: address
+        ?: ""
 
 private fun formatDateHeader(date: java.time.LocalDate): String {
     val today = java.time.LocalDate.now()
@@ -310,8 +334,10 @@ internal fun resolveRecipientAddress(query: String, contacts: List<Contact> = fa
     return trimmed
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewConversationScreen(
+    onNavigateUp: () -> Unit = {},
     onAddressEntered: (String) -> Unit = {},
     dataSource: com.nospam.nospam.core.telephony.TelephonyDataSource? = null,
 ) {
@@ -358,86 +384,103 @@ fun NewConversationScreen(
     fun submit() {
         resolveRecipientAddress(query)?.let { onAddressEntered(it) }
     }
-    // Recipient picker: same situation, its own text field and no Scaffold.
-    Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
-        Text(stringResource(R.string.new_to), style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = { Text(stringResource(R.string.new_hint)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone,
-                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-            ),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                onDone = { submit() },
-            ),
-        )
-        if (!hasContactPerm && dataSource != null) {
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Contacts permission needed to show your contacts", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                androidx.compose.material3.TextButton(onClick = { permLauncher.launch(android.Manifest.permission.READ_CONTACTS) }) { Text("Allow") }
-            }
-        }
-        Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+    // Starting a conversation means typing a recipient, so the field takes focus
+    // and the keyboard opens on arrival. Without it nothing is focused, and a
+    // hardware Enter moves focus to the first focusable node — the up button —
+    // and activates it.
+    val recipientFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { recipientFocus.requestFocus() }
+    Scaffold(
+        topBar = {
+            NoSpamTopAppBar(
+                title = stringResource(R.string.new_conversation_title),
+                navigation = TopBarNavigation.Back(onNavigateUp),
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()
+                .padding(horizontal = 16.dp)
         ) {
-            contacts.take(5).forEach { contact ->
-                Column(
-                    modifier = Modifier.clickable { onAddressEntered(contact.phone) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(
-                        modifier = Modifier.size(56.dp).clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            contact.name.take(1).uppercase(),
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
-                    Text(
-                        contact.name.substringBefore(" "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                    )
+            Text(stringResource(R.string.new_to), style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(stringResource(R.string.new_hint)) },
+                modifier = Modifier.fillMaxWidth().focusRequester(recipientFocus),
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone,
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = { submit() },
+                ),
+            )
+            if (!hasContactPerm && dataSource != null) {
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Contacts permission needed to show your contacts", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                    androidx.compose.material3.TextButton(onClick = { permLauncher.launch(android.Manifest.permission.READ_CONTACTS) }) { Text("Allow") }
                 }
             }
-        }
-        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-        Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(filtered, key = { it.phone }) { contact ->
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable { onAddressEntered(contact.phone) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                        contentAlignment = Alignment.Center,
+            Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
+            Row(
+                modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                contacts.take(5).forEach { contact ->
+                    Column(
+                        modifier = Modifier.clickable { onAddressEntered(contact.phone) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        Box(
+                            modifier = Modifier.size(56.dp).clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                contact.name.take(1).uppercase(),
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
                         Text(
-                            contact.name.take(1).uppercase(),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            contact.name.substringBefore(" "),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
                         )
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(contact.name, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            contact.detail,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                }
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(filtered, key = { it.phone }) { contact ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .clickable { onAddressEntered(contact.phone) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp).clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.secondaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                contact.name.take(1).uppercase(),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(contact.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                contact.detail,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

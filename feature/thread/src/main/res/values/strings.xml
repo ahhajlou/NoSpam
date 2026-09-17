@@ -15,4 +15,5 @@
     <string name="delete_message_title">Delete message?</string>
     <string name="delete_message_body">This message will be permanently deleted.</string>
     <string name="cancel">Cancel</string>
+    <string name="new_conversation_title">New conversation</string>
 </resources>

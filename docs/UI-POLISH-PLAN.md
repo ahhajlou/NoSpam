@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.1 done 2026-09-17.** Next: P1.2 (shell: screens own their top bars).
+**P1.2 done 2026-09-17.** Next: P1.3 (Inbox/Archived/Spam: list items, selection mode).
 
 ## 1. Constraints
 
@@ -93,13 +93,33 @@ Order chosen so each step leaves the app building and usable.
         (the last two are already unused).
       - Carry to P1.2: when a forced LIGHT/DARK `ThemeMode` lands, `enableEdgeToEdge` must get matching
         system-bar styles, or status-bar icons follow the system instead of the app.
-- [ ] P1.2 Shell: screens own their `Scaffold`/top bar; drawer stays in shell and
+- [x] P1.2 Shell: screens own their `Scaffold`/top bar; drawer stays in shell and
       is opened through a callback; drawer icons and header fixed; top-level
       titles follow the active drawer item.
+      - Shell: no Scaffold. Drawer: "Messages" header, filled/outlined icon pairs (Inbox, Archive,
+        Report, Settings), debug tools grouped, Settings pinned bottom; gestures only on drawer
+        destinations; typed `hasRoute` matching instead of route substrings.
+      - Inbox/Settings: own Scaffold + `NoSpamTopAppBar` (Menu, drawer label title, pinned scroll).
+        Archived/Spam/debug tools: `DrawerDestinationScaffold` (designsystem, 2 consumers).
+        Thread: Back + address placeholder title, Scaffold + consumeWindowInsets + imePadding
+        (verified with keyboard open). New conversation: Back + "New conversation", recipient
+        field autofocuses (found via E2E: without focus, hardware Enter activated the up button).
+        Onboarding: safeDrawingPadding, no bar, no drawer.
+      - Screen APIs: `title` (required) + `onOpenDrawer` on Conversations/Archived/Spam/Settings;
+        `onNavigateUp` on Thread/NewConversation. Nested NoSpamTheme removed (Conversations, MlDebug).
+      - E2E: see progress log. `spam_notspam_and_bulk` left failing on purpose (asserts removed
+        bulk UI; rewritten with Spam selection mode in P1.3).
 - [ ] P1.3 Inbox/Archived/Spam: M3 list items, avatars, unread styling, search
       bar, icon-only FAB, long-press selection mode, contextual app bar, confirmations.
+      **Selection mode applies to all three lists** (user, 2026-09-17), not just Inbox:
+      Archived (Unarchive, Delete) and Spam & blocked (Not spam, Block/Unblock, Delete),
+      each with actions that adapt to the selection, replacing their ActionMenuDialogs.
+      **Selection bar shows 3 icons + ⋮** (user, 2026-09-17, matching Google Messages): change
+      `SelectionTopAppBar` to pass `maxInline = 3` (normal top bars keep 2) and update
+      `ComponentLogicTest`. No floating/centered action menu anywhere; the only menu is the ⋮
+      dropdown anchored in the top bar. Delete/Block confirm with a count.
 - [ ] P1.4 Thread: top app bar with contact name + call + overflow menu, message
-      selection mode, multi-line compose bar, emoji picker (`emoji2-emojipicker`), localized dates.
+      long-press selection mode (same bar: 3 icons + ⋮, e.g. Copy/Forward/Delete, Share in ⋮), multi-line compose bar, emoji picker (`emoji2-emojipicker`), localized dates.
 - [ ] P1.5 New conversation screen: own top bar, M3 list items.
 - [ ] P1.6 Settings: top level General / per-SIM / Spam protection / Advanced / About, sub-pages.
 - [ ] P1.7 Onboarding pass for consistency.
@@ -141,3 +161,25 @@ Order chosen so each step leaves the app building and usable.
 - 2026-09-17 — P1.1 done. Build, lint, kover, test APKs green; 257 unit tests (+11:
   avatar initial/palette, top-bar action partition, full type scale, dark tone order).
   Not visually checked on a device yet — do that at the start of P1.2.
+- 2026-09-17 — P1.2 in progress. Visual check of P1.1 on emulator-5556 (Medium Phone API 37.1):
+  light and dark inbox render correctly; only buttons (14sp) and the darker dark page changed.
+  Code done, not yet built/verified: shell has no Scaffold; drawer header + outlined/filled icons,
+  gestures only on drawer destinations; each screen owns its bar (Inbox/Archived/Spam/Settings: Menu +
+  drawer label as title; Thread: Back + address placeholder; New conversation: Back + title; debug tools
+  via `DrawerDestinationScaffold`, promoted to designsystem on its 2nd consumer); onboarding gets
+  safeDrawingPadding; nested NoSpamTheme removed from Conversations and MlDebug. Maestro anchors:
+  "NoSpam SMS" → "Inbox", "Menu" → "Open navigation menu". E2E baseline running on HEAD c833fed
+  from a worktree in the scratchpad before verifying.
+- 2026-09-17 — Baseline `persistence` failure diagnosed: flow asserted NSTEST_ARCHIVE2 in the inbox
+  without scrolling; the fixture is 10 days old and sorts below the fold. Flow fixed (scroll before
+  the positive check; search + unique snippet for the absence check, which was vacuous). Goes in the
+  P1.2 commit. User added: selection mode also in Archived and Spam & blocked (recorded in P1.3).
+- 2026-09-17 — P1.2 verified on emulator-5556: screenshots of every destination light/dark, keyboard
+  in thread. E2E baseline (c833fed) 6 pass / 4 fail, all four flow or runner defects:
+  persistence (no scroll to a 10-day-old fixture), thread_send (asserted dialog title removed in
+  656146c), spam_notspam_and_bulk (asserts UI removed in 6898a35), _unblock_part2 (manual-only
+  flow run by run-e2e.sh with a reseed between parts). Fixed in P1.2: persistence, thread_send
+  (+ Navigate up instead of back while IME open), settings_dialogs (Terms row now below fold;
+  final anchor is "Settings"), runner skips `manual-only`.
+- 2026-09-17 — P1.2 final E2E: 7 pass / 1 fail (spam_notspam_and_bulk, expected) vs baseline 6/4.
+  Build, 257 unit tests, kover, test APKs green.

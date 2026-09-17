@@ -1,143 +1,148 @@
 package com.nospam.nospam.ui
 
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Report
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nospam.nospam.R
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.navigation.ArchivedRoute
 import com.nospam.nospam.navigation.ConversationsRoute
-import com.nospam.nospam.navigation.debugTools
 import com.nospam.nospam.navigation.NoSpamNavHost
 import com.nospam.nospam.navigation.SettingsRoute
 import com.nospam.nospam.navigation.SpamRoute
+import com.nospam.nospam.navigation.debugTools
 import kotlinx.coroutines.launch
+import kotlin.reflect.KClass
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * App root: theme plus the navigation drawer. There is deliberately no
+ * Scaffold or top app bar here — every destination owns its own, so a screen
+ * can show its own title, a back button, an overflow menu or a selection bar.
+ */
 @Composable
 fun NoSpamAppShell() {
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val backStack by navController.currentBackStackEntryAsState()
-    val currentRoute = backStack?.destination?.route
+    val destination = backStack?.destination
 
     NoSpamTheme {
         ModalNavigationDrawer(
             drawerState = drawerState,
+            // Only drawer destinations can open it; a thread, the recipient
+            // picker and onboarding use back navigation instead.
+            gesturesEnabled = drawerState.isOpen || destination.isDrawerDestination(),
             drawerContent = {
                 ModalDrawerSheet {
-                    Text(stringResource(R.string.drawer_messages), modifier = Modifier.padding(all = 16.dp))
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_inbox)) },
-                        selected = currentRoute?.contains("Conversations") == true,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(ConversationsRoute) {
-                                launchSingleTop = true
-                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.Menu, null) }
+                    Text(
+                        stringResource(R.string.drawer_messages),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 16.dp),
                     )
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_archived)) },
-                        selected = currentRoute?.contains("Archived") == true,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(ArchivedRoute) {
-                                launchSingleTop = true
-                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.Delete, null) }
-                    )
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_spam_blocked)) },
-                        selected = currentRoute?.contains("Spam") == true,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(SpamRoute) {
-                                launchSingleTop = true
-                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.Warning, null) }
-                    )
+                    fun go(route: Any) {
+                        scope.launch { drawerState.close() }
+                        navController.navigateTopLevel(route)
+                    }
+                    TopLevelItem(R.string.drawer_inbox, Icons.Filled.Inbox, Icons.Outlined.Inbox,
+                        destination.isOn(ConversationsRoute::class)) { go(ConversationsRoute) }
+                    TopLevelItem(R.string.drawer_archived, Icons.Filled.Archive, Icons.Outlined.Archive,
+                        destination.isOn(ArchivedRoute::class)) { go(ArchivedRoute) }
+                    TopLevelItem(R.string.drawer_spam_blocked, Icons.Filled.Report, Icons.Outlined.Report,
+                        destination.isOn(SpamRoute::class)) { go(SpamRoute) }
                     // Developer tools. Empty in release: the feature modules are
                     // debugImplementation, so nothing to show and nothing linked.
-                    debugTools.forEach { tool ->
-                        NavigationDrawerItem(
-                            label = { Text(stringResource(tool.labelRes)) },
-                            selected = currentRoute?.contains(tool.routeTag) == true,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                tool.navigate(navController)
-                            },
-                            icon = { Icon(tool.icon, null) }
-                        )
+                    if (debugTools.isNotEmpty()) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
                     }
-                    androidx.compose.material3.HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
-                    NavigationDrawerItem(
-                        label = { Text(stringResource(R.string.drawer_settings)) },
-                        selected = currentRoute?.contains("Settings") == true,
-                        onClick = {
+                    debugTools.forEach { tool ->
+                        TopLevelItem(tool.labelRes, tool.icon, tool.icon,
+                            destination.isOnDebugTool(tool.routeTag)) {
                             scope.launch { drawerState.close() }
-                            navController.navigate(SettingsRoute) {
-                                launchSingleTop = true
-                                popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
-                            }
-                        },
-                        icon = { Icon(Icons.Filled.Settings, null) }
-                    )
+                            tool.navigate(navController)
+                        }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                    TopLevelItem(R.string.drawer_settings, Icons.Filled.Settings, Icons.Outlined.Settings,
+                        destination.isOn(SettingsRoute::class)) { go(SettingsRoute) }
+                    Spacer(modifier = Modifier.padding(bottom = 12.dp))
                 }
             }
         ) {
-            Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.app_name)) },
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.action_menu_desc))
-                            }
-                        }
-                    )
-                }
-            ) { innerPadding ->
-                androidx.compose.foundation.layout.Box(modifier = Modifier.padding(innerPadding)) {
-                    NoSpamNavHost(navController = navController)
-                }
-            }
+            NoSpamNavHost(
+                navController = navController,
+                onOpenDrawer = { scope.launch { drawerState.open() } },
+            )
         }
     }
 }
+
+@Composable
+private fun TopLevelItem(
+    labelRes: Int,
+    selectedIcon: ImageVector,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    NavigationDrawerItem(
+        label = { Text(stringResource(labelRes)) },
+        icon = { Icon(if (selected) selectedIcon else icon, contentDescription = null) },
+        selected = selected,
+        onClick = onClick,
+        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+    )
+}
+
+private fun NavHostController.navigateTopLevel(route: Any) = navigate(route) {
+    launchSingleTop = true
+    popUpTo(graph.findStartDestination().id) { inclusive = false }
+}
+
+private fun NavDestination?.isOn(route: KClass<*>): Boolean =
+    this?.hierarchy?.any { it.hasRoute(route) } == true
+
+// Debug routes live in the debug source set, so they are matched by name here.
+private fun NavDestination?.isOnDebugTool(routeTag: String): Boolean =
+    this?.route?.contains(routeTag) == true
+
+private fun NavDestination?.isDrawerDestination(): Boolean =
+    isOn(ConversationsRoute::class) || isOn(ArchivedRoute::class) || isOn(SpamRoute::class) ||
+        isOn(SettingsRoute::class) || debugTools.any { isOnDebugTool(it.routeTag) }
 
 // Preview
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Shell Light")

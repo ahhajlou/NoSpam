@@ -46,8 +46,10 @@ pass=0; fail=0; failed_flows=""
 for flow in .maestro/flows/*.yaml; do
     name=$(basename "$flow" .yaml)
     # Tagged flows are opt-in: `debug` needs a debug-only feature module,
-    # `destructive` rewrites global classifier state.
-    grep -qE "^\s+- (debug|destructive)$" "$flow" && { echo "-- skip $name (tagged)"; continue; }
+    # `destructive` rewrites global classifier state, and `manual-only` flows
+    # are driven by tools/persistence_check.sh, which injects SMS between their
+    # parts — reseeding between them here guaranteed part 2 failed.
+    grep -qE "^\s+- (debug|destructive|manual-only)$" "$flow" && { echo "-- skip $name (tagged)"; continue; }
 
     echo "-- reseed + $name"
     bash tools/seed.sh core >/dev/null 2>&1

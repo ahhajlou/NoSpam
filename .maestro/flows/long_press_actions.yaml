@@ -11,7 +11,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 
 - scrollUntilVisible:
     element:

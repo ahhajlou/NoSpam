@@ -10,7 +10,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 - scrollUntilVisible:
     element:
         text: "NSTEST_MIXED1"
@@ -37,14 +37,18 @@ tags:
 # match on a substring that doesn't depend on that transform (wrapped in .*
 # for the same full-match reason as above).
 - longPressOn: ".*Big summer sale.*"
-- assertVisible: "Message"
+# 656146c replaced the copy-only dialog titled "Message" with the message body
+# as title and four actions; asserting the old title failed on every run since.
 - assertVisible: "Copy"
+- assertVisible: "Delete"
+- assertVisible: "Share"
+- assertVisible: "Forward"
 # Tapping "Copy" already dismisses the dialog itself (ThreadScreen.kt sets
 # selected = null in the same onClick) — an extra `back` here has nothing
 # left to dismiss and instead pops the thread screen itself.
 - tapOn: "Copy"
 - extendedWaitUntil:
-    notVisible: "Message"
+    notVisible: "Forward"
     timeout: 3000
 
 # Compose and send a reply. The emulator's virtual modem accepts outbound SMS
@@ -100,7 +104,9 @@ tags:
     visible: ".*Automated Maestro reply.*"
     timeout: 8000
 - assertVisible: ".*Automated Maestro reply.*"
-- back
+# Not `back`: the keyboard is usually still open after sending, and back only
+# closes it. The top bar's up button leaves the thread either way.
+- tapOn: "Navigate up"
 
 # --- New conversation ---
 - tapOn: "Start chat"
@@ -111,5 +117,6 @@ tags:
 - inputText: "5559998888"
 - pressKey: Enter
 - assertVisible: "SMS message"
-- back
-- back
+- tapOn: "Navigate up"
+- tapOn: "Navigate up"
+- assertVisible: "Inbox"

@@ -14,14 +14,14 @@ class SpamScreenTest {
     @get:Rule val rule = createComposeRule()
 
     @Test fun `spam_rows_are_shown`() {
-        rule.setContent { SpamScreen() }
+        rule.setContent { SpamScreen(title = "Spam & blocked") }
         rule.onNodeWithText("Win A Free Cruise!").assertIsDisplayed()
         rule.onNodeWithText("Empty Spam").assertIsDisplayed()
     }
 
     @Test fun `not_spam_removes_row_and_reports_id`() {
         val reported = mutableListOf<Pair<Long, String>>()
-        rule.setContent { SpamScreen(onNotSpam = { id, addr -> reported.add(id to addr) }) }
+        rule.setContent { SpamScreen(title = "Spam & blocked", onNotSpam = { id, addr -> reported.add(id to addr) }) }
         assertEquals(3, rule.onAllNodesWithText("Not spam").fetchSemanticsNodes().size)
         rule.onAllNodesWithText("Not spam")[0].performClick()
         rule.waitForIdle()
@@ -30,7 +30,7 @@ class SpamScreenTest {
     }
 
     @Test fun `empty_spam_clears_list`() {
-        rule.setContent { SpamScreen() }
+        rule.setContent { SpamScreen(title = "Spam & blocked") }
         rule.onNodeWithText("Empty Spam").performClick()
         rule.waitForIdle()
         rule.onAllNodesWithText("Not spam").assertCountEquals(0)

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,13 +58,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.designsystem.component.ActionMenuDialog
 import com.nospam.nospam.core.designsystem.component.ActionMenuItem
-import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
+import com.nospam.nospam.core.designsystem.component.DrawerDestinationScaffold
+import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
+import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsScreen(
+    title: String,
+    onOpenDrawer: () -> Unit = {},
     viewModel: ConversationsViewModel = viewModel(),
     onConversationClick: (Long) -> Unit = {},
     onNewMessage: () -> Unit = {},
@@ -81,191 +89,198 @@ fun ConversationsScreen(
     androidx.compose.runtime.LaunchedEffect(Unit) {
         viewModel.checkDefaultSmsApp(context.applicationContext)
     }
-    NoSpamTheme {
-        Scaffold(
-            floatingActionButton = {
-                FloatingActionButton(onClick = onNewMessage, shape = RoundedCornerShape(16.dp)) {
-                    Text(stringResource(R.string.start_chat), modifier = Modifier.padding(horizontal = 16.dp))
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            NoSpamTopAppBar(
+                title = title,
+                navigation = TopBarNavigation.Menu(onOpenDrawer),
+                scrollBehavior = scrollBehavior,
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onNewMessage, shape = RoundedCornerShape(16.dp)) {
+                Text(stringResource(R.string.start_chat), modifier = Modifier.padding(horizontal = 16.dp))
+            }
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().consumeWindowInsets(padding),
+            // Insets go to contentPadding, not Modifier.padding: as padding they
+            // clip the list at the bars, whereas edge-to-edge wants rows to
+            // scroll behind them while first and last still come to rest clear.
+            // The extra bottom is the FAB, which floats and is not in `padding` —
+            // without it the last row sits under "Start chat" with its spam badge
+            // unreadable.
+            contentPadding = PaddingValues(
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + FAB_CLEARANCE,
+            ),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
+        ) {
+            if (!isDefault) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.not_default_sms_banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
                 }
             }
-        ) { padding ->
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().consumeWindowInsets(padding),
-                // Insets go to contentPadding, not Modifier.padding: as padding they
-                // clip the list at the bars, whereas edge-to-edge wants rows to
-                // scroll behind them while first and last still come to rest clear.
-                // The extra bottom is the FAB, which floats and is not in `padding` —
-                // without it the last row sits under "Start chat" with its spam badge
-                // unreadable.
-                contentPadding = PaddingValues(
-                    top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + FAB_CLEARANCE,
-                ),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {
-                if (!isDefault) {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.not_default_sms_banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                        }
-                    }
-                }
-                val backfill = uiState.backfillProgress
-                if (backfill is BackfillStatus.Running) {
-                    item {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .padding(12.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        stringResource(R.string.backfill_scanning),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        stringResource(R.string.backfill_count, backfill.processed, backfill.total),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                                TextButton(onClick = viewModel::cancelBackfill) {
-                                    Text(stringResource(R.string.backfill_cancel))
-                                }
-                            }
-                            val fraction = if (backfill.total == 0) 0f else backfill.processed.toFloat() / backfill.total
-                            LinearProgressIndicator(
-                                progress = { fraction },
-                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
+            val backfill = uiState.backfillProgress
+            if (backfill is BackfillStatus.Running) {
                 item {
-                    // Search bar
-                    OutlinedTextField(
-                        value = uiState.searchQuery,
-                        onValueChange = viewModel::onSearchQueryChanged,
-                        placeholder = { Text(stringResource(R.string.search_conversations)) },
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                        )
-                    )
-                }
-                item {
-                    // Filter chips
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .padding(12.dp)
                     ) {
-                        ConversationFilter.entries.forEach { filter ->
-                            val selected = uiState.filter == filter
-                            FilterChip(
-                                selected = selected,
-                                onClick = { viewModel.onFilterSelected(filter) },
-                                label = { Text(filterLabel(filter)) }
-                            )
-                        }
-                    }
-                }
-                if (uiState.isLoading && uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
-                    items(8) { SkeletonRow() }
-                } else {
-                    if (uiState.pinned.isNotEmpty()) {
-                        item {
-                            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.section_pinned), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.backfill_scanning),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    stringResource(R.string.backfill_count, backfill.processed, backfill.total),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                            TextButton(onClick = viewModel::cancelBackfill) {
+                                Text(stringResource(R.string.backfill_cancel))
                             }
                         }
-                        items(uiState.pinned, key = { it.threadId.value }) { conv ->
-                            ConversationRow(
-                                conv,
-                                onClick = { onConversationClick(conv.threadId.value) },
-                                onLongClick = { menuFor = conv },
-                            )
-                        }
-                        item { Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))) }
-                        item {
-                            Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        val fraction = if (backfill.total == 0) 0f else backfill.processed.toFloat() / backfill.total
+                        LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+            item {
+                // Search bar
+                OutlinedTextField(
+                    value = uiState.searchQuery,
+                    onValueChange = viewModel::onSearchQueryChanged,
+                    placeholder = { Text(stringResource(R.string.search_conversations)) },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
+                )
+            }
+            item {
+                // Filter chips
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ConversationFilter.entries.forEach { filter ->
+                        val selected = uiState.filter == filter
+                        FilterChip(
+                            selected = selected,
+                            onClick = { viewModel.onFilterSelected(filter) },
+                            label = { Text(filterLabel(filter)) }
+                        )
+                    }
+                }
+            }
+            if (uiState.isLoading && uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
+                items(8) { SkeletonRow() }
+            } else {
+                if (uiState.pinned.isNotEmpty()) {
+                    item {
+                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.section_pinned), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                         }
                     }
-                    items(uiState.conversations, key = { it.threadId.value }) { conv ->
+                    items(uiState.pinned, key = { it.threadId.value }) { conv ->
                         ConversationRow(
                             conv,
                             onClick = { onConversationClick(conv.threadId.value) },
                             onLongClick = { menuFor = conv },
                         )
                     }
-                    if (uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
-                        item {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(48.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    if (viewModel.isLive) stringResource(R.string.empty_title_live) else stringResource(R.string.empty_title),
-                                    style = MaterialTheme.typography.headlineMedium
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    if (viewModel.isLive) stringResource(R.string.empty_subtitle_live)
-                                    else stringResource(R.string.empty_subtitle_new),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                    item { Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))) }
+                    item {
+                        Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    }
+                }
+                items(uiState.conversations, key = { it.threadId.value }) { conv ->
+                    ConversationRow(
+                        conv,
+                        onClick = { onConversationClick(conv.threadId.value) },
+                        onLongClick = { menuFor = conv },
+                    )
+                }
+                if (uiState.pinned.isEmpty() && uiState.conversations.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                if (viewModel.isLive) stringResource(R.string.empty_title_live) else stringResource(R.string.empty_title),
+                                style = MaterialTheme.typography.headlineMedium
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                if (viewModel.isLive) stringResource(R.string.empty_subtitle_live)
+                                else stringResource(R.string.empty_subtitle_new),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
         }
-        menuFor?.let { conv ->
-            val address = conv.participants.firstOrNull()?.address
-            ActionMenuDialog(
-                title = conv.participants.firstOrNull()?.displayName ?: address
-                    ?: stringResource(R.string.unknown_sender),
-                actions = inboxActions(
-                    conv = conv,
-                    address = address,
-                    onToggleRead = { onToggleRead(conv.threadId.value, !conv.read) },
-                    onArchive = { onArchive(conv.threadId.value) },
-                    onReportSpam = { onReportSpam(conv.threadId.value, address ?: "") },
-                    onBlock = { address?.let(onBlock) },
-                    onDelete = { onDelete(conv.threadId.value) },
-                    onToggleStar = { onToggleStar(conv.threadId.value) },
-                    onTogglePin = { onTogglePin(conv.threadId.value) },
-                    onToggleMute = { onToggleMute(conv.threadId.value) },
-                ) + buildList {
-                    if (address != null) {
-                        add(ActionMenuItem(label = "Add to contacts", onClick = {
-                            try {
-                                val intent = android.content.Intent(android.content.Intent.ACTION_INSERT).apply {
-                                    type = android.provider.ContactsContract.Contacts.CONTENT_TYPE
-                                    putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, address)
-                                }
-                                context.startActivity(intent)
-                            } catch (_: Exception) {}
-                        }))
-                        add(ActionMenuItem(label = "Call", onClick = {
-                            try { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.fromParts("tel", address, null))) } catch (_: Exception) {}
-                        }))
-                    }
-                },
-                onDismiss = { menuFor = null },
-            )
-        }
+    }
+    menuFor?.let { conv ->
+        val address = conv.participants.firstOrNull()?.address
+        ActionMenuDialog(
+            title = conv.participants.firstOrNull()?.displayName ?: address
+                ?: stringResource(R.string.unknown_sender),
+            actions = inboxActions(
+                conv = conv,
+                address = address,
+                onToggleRead = { onToggleRead(conv.threadId.value, !conv.read) },
+                onArchive = { onArchive(conv.threadId.value) },
+                onReportSpam = { onReportSpam(conv.threadId.value, address ?: "") },
+                onBlock = { address?.let(onBlock) },
+                onDelete = { onDelete(conv.threadId.value) },
+                onToggleStar = { onToggleStar(conv.threadId.value) },
+                onTogglePin = { onTogglePin(conv.threadId.value) },
+                onToggleMute = { onToggleMute(conv.threadId.value) },
+            ) + buildList {
+                if (address != null) {
+                    add(ActionMenuItem(label = "Add to contacts", onClick = {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_INSERT).apply {
+                                type = android.provider.ContactsContract.Contacts.CONTENT_TYPE
+                                putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, address)
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }))
+                    add(ActionMenuItem(label = "Call", onClick = {
+                        try { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.fromParts("tel", address, null))) } catch (_: Exception) {}
+                    }))
+                }
+            },
+            onDismiss = { menuFor = null },
+        )
     }
 }
 
@@ -433,6 +448,8 @@ private fun isDefaultSmsApp(context: android.content.Context): Boolean =
 
 @Composable
 fun ArchivedScreen(
+    title: String,
+    onOpenDrawer: () -> Unit = {},
     viewModel: ArchivedViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
     onUnarchive: (Long) -> Unit = {},
@@ -450,90 +467,92 @@ fun ArchivedScreen(
         )
     }
     var archived = live ?: fakeArchived
-    if (archived.isEmpty()) {
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Box(
-                modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainer),
-                contentAlignment = Alignment.Center
+    DrawerDestinationScaffold(title = title, onOpenDrawer = onOpenDrawer) {
+        if (archived.isEmpty()) {
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.fillMaxSize().padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(48.dp))
-            }
-            Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.archive_empty_title), style = MaterialTheme.typography.headlineMedium)
-            Text(stringResource(R.string.archive_empty_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    } else {
-        var menuFor by remember { mutableStateOf<Conversation?>(null) }
-        fun unarchive(conv: Conversation) {
-            // Live mode persists via the archive store (flow removes the row);
-            // fake mode mutates its local seed.
-            if (viewModel == null) {
-                fakeArchived = fakeArchived.filterNot { it.threadId == conv.threadId }
-            }
-            onUnarchive(conv.threadId.value)
-        }
-        androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(archived, key = { it.threadId.value }) { conv ->
-                val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
-                    positionalThreshold = { it * 0.5f },
-                    confirmValueChange = { value ->
-                        if (value == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart || value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                            unarchive(conv)
-                            true
-                        } else false
-                    }
-                )
-                androidx.compose.material3.SwipeToDismissBox(
-                    state = dismissState,
-                    backgroundContent = {
-                        Box(
-                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onPrimary)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.unarchive), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-                    },
-                    enableDismissFromStartToEnd = true,
-                    enableDismissFromEndToStart = false
+                Box(
+                    modifier = Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainer),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
+                    Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(48.dp))
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.archive_empty_title), style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(R.string.archive_empty_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            var menuFor by remember { mutableStateOf<Conversation?>(null) }
+            fun unarchive(conv: Conversation) {
+                // Live mode persists via the archive store (flow removes the row);
+                // fake mode mutates its local seed.
+                if (viewModel == null) {
+                    fakeArchived = fakeArchived.filterNot { it.threadId == conv.threadId }
+                }
+                onUnarchive(conv.threadId.value)
+            }
+            androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(archived, key = { it.threadId.value }) { conv ->
+                    val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+                        positionalThreshold = { it * 0.5f },
+                        confirmValueChange = { value ->
+                            if (value == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart || value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                                unarchive(conv)
+                                true
+                            } else false
+                        }
+                    )
+                    androidx.compose.material3.SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            Box(
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary).padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onPrimary)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.unarchive), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        },
+                        enableDismissFromStartToEnd = true,
+                        enableDismissFromEndToStart = false
                     ) {
-                        ConversationRow(
-                            conv,
-                            onClick = { onConversationClick(conv.threadId.value) },
-                            onLongClick = { menuFor = conv },
-                        )
+                        Box(
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface)
+                        ) {
+                            ConversationRow(
+                                conv,
+                                onClick = { onConversationClick(conv.threadId.value) },
+                                onLongClick = { menuFor = conv },
+                            )
+                        }
                     }
                 }
             }
-        }
-        menuFor?.let { conv ->
-            ActionMenuDialog(
-                title = conv.participants.firstOrNull()?.displayName
-                    ?: conv.participants.firstOrNull()?.address
-                    ?: stringResource(R.string.unknown_sender),
-                actions = listOf(
-                    ActionMenuItem(
-                        label = stringResource(R.string.menu_unarchive),
-                        onClick = { unarchive(conv) },
+            menuFor?.let { conv ->
+                ActionMenuDialog(
+                    title = conv.participants.firstOrNull()?.displayName
+                        ?: conv.participants.firstOrNull()?.address
+                        ?: stringResource(R.string.unknown_sender),
+                    actions = listOf(
+                        ActionMenuItem(
+                            label = stringResource(R.string.menu_unarchive),
+                            onClick = { unarchive(conv) },
+                        ),
+                        ActionMenuItem(
+                            label = stringResource(R.string.menu_delete),
+                            destructive = true,
+                            onClick = { onDelete(conv.threadId.value) },
+                        ),
                     ),
-                    ActionMenuItem(
-                        label = stringResource(R.string.menu_delete),
-                        destructive = true,
-                        onClick = { onDelete(conv.threadId.value) },
-                    ),
-                ),
-                onDismiss = { menuFor = null },
-            )
+                    onDismiss = { menuFor = null },
+                )
+            }
         }
     }
 }
@@ -541,6 +560,8 @@ fun ArchivedScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SpamScreen(
+    title: String,
+    onOpenDrawer: () -> Unit = {},
     viewModel: SpamViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
     onNotSpam: (Long, String) -> Unit = { _, _ -> },
@@ -572,106 +593,108 @@ fun SpamScreen(
     }
     val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (spamList.isNotEmpty() && !isLive) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
-                androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
-                    Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.empty_spam))
-                }
-            }
-        }
-        androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(spamList, key = { it.threadId.value }) { conv ->
-                // Resolved here (composable scope): confirmValueChange/onClick
-                // lambdas below are not composable and can't call stringResource.
-                val notSpamMessage = stringResource(R.string.marked_as_not_spam, conv.participants.first().address)
-                val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
-                    confirmValueChange = { value ->
-                        if (value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
-                            markNotSpam(conv, notSpamMessage)
-                            true
-                        } else false
-                    }
-                )
-                androidx.compose.material3.SwipeToDismissBox(
-                    state = dismissState,
-                    backgroundContent = {
-                        Box(
-                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 16.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(stringResource(R.string.not_spam), color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.labelMedium)
-                        }
-                    },
-                    enableDismissFromStartToEnd = true,
-                    enableDismissFromEndToStart = false
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface)
-                            .combinedClickable(
-                                onClick = { onConversationClick(conv.threadId.value) },
-                                onLongClick = { menuFor = conv },
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onError, modifier = Modifier.size(20.dp))
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(conv.participants.first().address, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                    Text(formatTime(conv.date), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                Text(conv.snippet, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            androidx.compose.material3.TextButton(onClick = { markNotSpam(conv, notSpamMessage) }) { Text(stringResource(R.string.not_spam)) }
-                        }
+    DrawerDestinationScaffold(title = title, onOpenDrawer = onOpenDrawer) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            if (spamList.isNotEmpty() && !isLive) {
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
+                    androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
+                        Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(stringResource(R.string.empty_spam))
                     }
                 }
             }
-        }
-        showNotSpamSnack?.let {
-            androidx.compose.material3.Snackbar(modifier = Modifier.padding(16.dp)) { Text(it) }
-        }
-        menuFor?.let { conv ->
-            val address = conv.participants.firstOrNull()?.address
-            val notSpamMessage = stringResource(R.string.marked_as_not_spam, address.orEmpty())
-            ActionMenuDialog(
-                title = address ?: stringResource(R.string.unknown_sender),
-                actions = buildList {
-                    add(
-                        ActionMenuItem(
-                            label = stringResource(R.string.not_spam),
-                            onClick = { markNotSpam(conv, notSpamMessage) },
-                        )
+            androidx.compose.foundation.lazy.LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(spamList, key = { it.threadId.value }) { conv ->
+                    // Resolved here (composable scope): confirmValueChange/onClick
+                    // lambdas below are not composable and can't call stringResource.
+                    val notSpamMessage = stringResource(R.string.marked_as_not_spam, conv.participants.first().address)
+                    val dismissState = androidx.compose.material3.rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) {
+                                markNotSpam(conv, notSpamMessage)
+                                true
+                            } else false
+                        }
                     )
-                    if (address != null) {
+                    androidx.compose.material3.SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {
+                            Box(
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(stringResource(R.string.not_spam), color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.labelMedium)
+                            }
+                        },
+                        enableDismissFromStartToEnd = true,
+                        enableDismissFromEndToStart = false
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface)
+                                .combinedClickable(
+                                    onClick = { onConversationClick(conv.threadId.value) },
+                                    onLongClick = { menuFor = conv },
+                                )
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onError, modifier = Modifier.size(20.dp))
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(conv.participants.first().address, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                        Text(formatTime(conv.date), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Text(conv.snippet, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                androidx.compose.material3.TextButton(onClick = { markNotSpam(conv, notSpamMessage) }) { Text(stringResource(R.string.not_spam)) }
+                            }
+                        }
+                    }
+                }
+            }
+            showNotSpamSnack?.let {
+                androidx.compose.material3.Snackbar(modifier = Modifier.padding(16.dp)) { Text(it) }
+            }
+            menuFor?.let { conv ->
+                val address = conv.participants.firstOrNull()?.address
+                val notSpamMessage = stringResource(R.string.marked_as_not_spam, address.orEmpty())
+                ActionMenuDialog(
+                    title = address ?: stringResource(R.string.unknown_sender),
+                    actions = buildList {
                         add(
                             ActionMenuItem(
-                                label = stringResource(
-                                    if (conv.isBlocked) R.string.menu_unblock else R.string.menu_block
-                                ),
-                                destructive = !conv.isBlocked,
-                                onClick = { onBlock(address) },
+                                label = stringResource(R.string.not_spam),
+                                onClick = { markNotSpam(conv, notSpamMessage) },
                             )
                         )
-                    }
-                    add(
-                        ActionMenuItem(
-                            label = stringResource(R.string.menu_delete),
-                            destructive = true,
-                            onClick = { onDelete(conv.threadId.value) },
+                        if (address != null) {
+                            add(
+                                ActionMenuItem(
+                                    label = stringResource(
+                                        if (conv.isBlocked) R.string.menu_unblock else R.string.menu_block
+                                    ),
+                                    destructive = !conv.isBlocked,
+                                    onClick = { onBlock(address) },
+                                )
+                            )
+                        }
+                        add(
+                            ActionMenuItem(
+                                label = stringResource(R.string.menu_delete),
+                                destructive = true,
+                                onClick = { onDelete(conv.threadId.value) },
+                            )
                         )
-                    )
-                },
-                onDismiss = { menuFor = null },
-            )
+                    },
+                    onDismiss = { menuFor = null },
+                )
+            }
         }
     }
 }
@@ -682,7 +705,7 @@ fun SpamScreen(
 @Composable
 fun ConversationsScreenPreview() {
     com.nospam.nospam.core.designsystem.theme.NoSpamTheme {
-        ConversationsScreen()
+        ConversationsScreen(title = "Inbox")
     }
 }
 
@@ -690,7 +713,7 @@ fun ConversationsScreenPreview() {
 @Composable
 fun ArchivedEmptyPreview() {
     com.nospam.nospam.core.designsystem.theme.NoSpamTheme {
-        ArchivedScreen()
+        ArchivedScreen(title = "Archived")
     }
 }
 
@@ -698,7 +721,7 @@ fun ArchivedEmptyPreview() {
 @Composable
 fun SpamPreview() {
     com.nospam.nospam.core.designsystem.theme.NoSpamTheme {
-        SpamScreen()
+        SpamScreen(title = "Spam & blocked")
     }
 }
 

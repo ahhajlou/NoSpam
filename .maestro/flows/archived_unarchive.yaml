@@ -7,8 +7,8 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
-- tapOn: "Menu"
+- assertVisible: "Inbox"
+- tapOn: "Open navigation menu"
 - assertVisible: "Archived"
 - tapOn: "Archived"
 - assertVisible: "NSTEST_ARCHIVE1"
@@ -23,7 +23,7 @@ tags:
 # It must reappear in the inbox once unarchived. NSTEST_ARCHIVE1's message is
 # 10 days old (tools/seed.sh), so it sorts well below the fold among the
 # other, more recent fixtures — scroll to it rather than assuming it's visible.
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Inbox"
 - scrollUntilVisible:
     element:
@@ -41,7 +41,7 @@ tags:
 - assertVisible: "Archive"
 - tapOn: "Archive"
 - assertNotVisible: "NSTEST_ARCHIVE1"
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Archived"
 - assertVisible: "NSTEST_ARCHIVE1"
 

@@ -15,4 +15,5 @@
     <string name="delete_message_title">پیام حذف شود؟</string>
     <string name="delete_message_body">این پیام برای همیشه حذف خواهد شد.</string>
     <string name="cancel">لغو</string>
+    <string name="new_conversation_title">گفت‌وگوی جدید</string>
 </resources>

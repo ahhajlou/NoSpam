@@ -265,7 +265,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 | Unit | `src/test` across 16 modules | 238 tests, 38.63% line coverage |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
 | Instrumented, Compose UI | 5 modules | **cannot run on API 37** — see below |
-| End-to-end | `.maestro/flows` | 12 flows, 6 of 10 default ones passing |
+| End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), 7 passing on 2026-09-17 |
 
 Tests are written against behaviour, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.

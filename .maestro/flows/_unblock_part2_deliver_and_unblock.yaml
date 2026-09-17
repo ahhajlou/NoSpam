@@ -11,7 +11,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Spam & blocked"
 - assertVisible: "NSTEST_UNBLOCK1"
 - longPressOn: "NSTEST_UNBLOCK1"

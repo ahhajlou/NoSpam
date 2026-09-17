@@ -10,8 +10,8 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
-- tapOn: "Menu"
+- assertVisible: "Inbox"
+- tapOn: "Open navigation menu"
 - assertVisible: "Export SMS"
 - assertVisible: "Classifier test"
 
@@ -29,7 +29,7 @@ tags:
 - back
 
 # --- Export console: assert up to the file-save boundary and stop. ---
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Export SMS"
 - assertVisible: "Export SMS"
 - assertVisible: "Export all SMS messages to a JSONL file"

@@ -19,6 +19,7 @@ class ConversationsScreenTest {
         var newMessageClicked = false
         rule.setContent {
             ConversationsScreen(
+                title = "Inbox",
                 viewModel = ConversationsViewModel(),
                 onNewMessage = { newMessageClicked = true }
             )
@@ -31,13 +32,13 @@ class ConversationsScreenTest {
     }
 
     @Test fun `filter_chip_selection_changes`() {
-        rule.setContent { ConversationsScreen(viewModel = ConversationsViewModel()) }
+        rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel()) }
         rule.onNodeWithText("Starred").assertIsDisplayed().performClick()
         rule.onNodeWithText("Starred").assertIsSelected()
     }
 
     @Test fun `search_field_accepts_input`() {
-        rule.setContent { ConversationsScreen(viewModel = ConversationsViewModel()) }
+        rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel()) }
         rule.onNodeWithText("Search conversations").assertIsDisplayed().performClick()
         rule.onNodeWithText("Search conversations").performTextInput("alice")
         rule.onNodeWithText("alice", useUnmergedTree = true).assertIsDisplayed()
@@ -47,6 +48,7 @@ class ConversationsScreenTest {
         var clicked: Long? = null
         rule.setContent {
             ConversationsScreen(
+                title = "Inbox",
                 viewModel = ConversationsViewModel(),
                 onConversationClick = { clicked = it }
             )
@@ -56,7 +58,7 @@ class ConversationsScreenTest {
     }
 
     @Test fun `long_press_opens_inbox_actions`() {
-        rule.setContent { ConversationsScreen(viewModel = ConversationsViewModel()) }
+        rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel()) }
         rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
         rule.waitForIdle()
         // Thread 2 is read in the fake seed, so the toggle reads "unread".
@@ -70,6 +72,7 @@ class ConversationsScreenTest {
         var archived: Long? = null
         rule.setContent {
             ConversationsScreen(
+                title = "Inbox",
                 viewModel = ConversationsViewModel(),
                 onArchive = { archived = it }
             )

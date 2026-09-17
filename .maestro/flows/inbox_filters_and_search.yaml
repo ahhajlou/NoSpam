@@ -14,7 +14,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 
 # --- All (default) ---
 - assertVisible: "All"

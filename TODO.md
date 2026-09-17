@@ -213,8 +213,10 @@ multi-select in the UI polish work (`docs/UI-POLISH-PLAN.md`).
 
 - [] **`.maestro/flows/spam_notspam_and_bulk.yaml` is stale.** It still asserts
   the removed banner text and "Block all" / "Delete all", so it fails by
-  construction. `settings_dialogs_and_switches.yaml` carries a comment about the
-  same removed button. Update both.
+  construction — the only failing default flow as of 2026-09-17. Scheduled for
+  rewrite with Spam selection mode (`docs/UI-POLISH-PLAN.md` P1.3).
+  `settings_dialogs_and_switches.yaml` carries a comment about the same removed
+  button.
 - The "Empty Spam" button left in `SpamScreen` renders only in preview/fake mode
   (`!isLive`) and deletes nothing real. Not a finding, noted so it is not
   mistaken for a surviving bulk action.
