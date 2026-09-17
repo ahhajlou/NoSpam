@@ -15,7 +15,11 @@ jobs:
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          # JetBrains, not Temurin: gradle/gradle-daemon-jvm.properties requires
+          # a JETBRAINS 25 daemon JVM. With any other vendor installed, Gradle
+          # downloads one into ~/.gradle/jdks on every run, and setup-gradle
+          # doesn't cache that directory.
+          distribution: jetbrains
           java-version: "25"
 
       - name: Set up Android SDK
@@ -40,18 +44,31 @@ jobs:
           # the MIT-licensed provider, free forever, and caches the same
           # Gradle User Home content via actions/cache.
           cache-provider: basic
+          # By default only main writes the cache, so every PR run started cold
+          # until main had saved an entry. Writing on PRs too lets later pushes
+          # to the same PR reuse that PR's cache. PR-scoped entries can't be read
+          # by main, so this can't poison main's cache.
+          cache-read-only: false
 
-      # One invocation instead of three: configuring 18 modules three times
-      # per run was pure overhead on top of the missing caching.
+      # Debug only, plus a compile-only release check. `build` also packaged
+      # release, benchmarkRelease and nonMinifiedRelease APKs and ran release
+      # lintVital in every module: ~43% of the executed tasks, and nothing
+      # consumed any of it. :app:compileReleaseKotlin still catches breakage
+      # that only shows up in release (app/src/release, and the release
+      # classpath without feature:export / feature:mldebug). The Kover "ci"
+      # variant merges debug variants only; see the root build.gradle.kts.
       - name: Build, compile device-test suites, and check coverage ratchet
         run: >
-          ./gradlew build
+          ./gradlew assembleDebug testDebugUnitTest lintDebug
+          :core:model:test :core:common:test
+          :app:compileReleaseKotlin
+          :baselineprofile:compileNonMinifiedReleaseKotlin
           :feature:conversations:assembleDebugAndroidTest
           :feature:thread:assembleDebugAndroidTest
           :feature:settings:assembleDebugAndroidTest
           :core:telephony:assembleDebugAndroidTest
           :core:designsystem:assembleDebugAndroidTest
-          :koverXmlReport :koverVerify
+          :koverXmlReportCi :koverHtmlReportCi :koverVerifyCi
           --stacktrace
 
       - name: Upload merged coverage report
@@ -60,8 +77,8 @@ jobs:
         with:
           name: kover-merged-report
           path: |
-            build/reports/kover/html
-            build/reports/kover/report.xml
+            build/reports/kover/htmlCi
+            build/reports/kover/reportCi.xml
 
 # NOTE: connected tests (./gradlew connectedDebugAndroidTest) are intentionally
 # not run here — they need an emulator with NoSpam set as the default SMS app.

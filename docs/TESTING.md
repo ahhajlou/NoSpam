@@ -171,8 +171,17 @@ Two deliberate policies, both documented in the root `build.gradle.kts`:
 
 ## CI
 
-`.github/workflows/android.yml` (JDK 25 + Android SDK): `build` →
-test-APK assembly → `:koverXmlReport :koverVerify` → report upload.
+`.github/workflows/android.yml` (JDK 25 + Android SDK), one Gradle
+invocation: debug assemble + `testDebugUnitTest` + `lintDebug` (+ `test` for
+the two JVM modules) → compile-only release check (`:app:compileReleaseKotlin`,
+which covers `app/src/release` and the release classpath without
+`feature:export`/`feature:mldebug`, plus `:baselineprofile`) → test-APK
+assembly → `:koverXmlReportCi :koverVerifyCi` → report upload. The `ci` Kover
+variant merges debug variants only; `total` (`:koverXmlReport :koverVerify`)
+also merges release, which would compile the release graph again. Both
+use the same ratchet. CI deliberately does not run `build`: that also
+packages release, benchmarkRelease and nonMinifiedRelease APKs, which nothing
+consumes, and it made up about 43% of the executed tasks.
 Connected tests are intentionally excluded — they need an emulator with
 the default-SMS role; run them locally per §3 above before release.
 
