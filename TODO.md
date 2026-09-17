@@ -1,5 +1,9 @@
 # TODO List
 
+> Re-checked item by item against `main` at `c060f0c` on 2026-09-17. Items
+> ticked or rewritten in that pass say so inline; everything else was confirmed
+> still open in the code.
+
 - [] Lists all SMS from other SMS apps before app is installed
 - [] Message orders are wrong in conversations after i installed the app on a phone with old messages
 
@@ -9,8 +13,8 @@
   against a real imported history before ticking either.
 
 ## Backfill (Phase 12) follow-ups — clear fixes
-- [] Progress UX: emit `Running(0, total)` when a scan starts — `statusProgress` only fires every 100 messages, so small scans / the first second of large scans show no banner
-- [] Replace public `forceScanForTesting()` on `SpamBackfillUseCase` with a properly-scoped `rescan()` API (Settings currently calls `ensureStarted()`; the test-named hook stays unused in prod)
+- [x] Progress UX: emit `Running(0, total)` when a scan starts — done: `SpamBackfillUseCase.run()` announces `Running(0, total)` before the first batch, `statusProgress` adapts its step to history size, and `SpamBackfillProgressTest` asserts the start tick
+- [] Delete the unused `forceScanForTesting()` on `SpamBackfillUseCase`. The properly-scoped API it was waiting for exists: `rescanAll()`, which Settings' "Re-check all messages" already calls via `NoSpamNavHost`. Nothing in `src/` or tests calls the test-named hook any more
 - [] Align TASKS.md 12.5 with implementation: UiState exposes `BackfillStatus` directly, not a `BackfillProgress(processed, total)` data class
 - [] `insertAll` uses `CONFLICT_REPLACE`: a concurrent ingress verdict row for the same messageId gets overwritten mid-scan — skip-if-exists or accept deliberately
 - [] `flush()` writes `sender_state` then `message_verdict` in two transactions; wrap in a single transaction for atomicity
@@ -198,9 +202,24 @@ error.
   `FakeTelephonyDataSource` in `core:testing` (it mirrors the same `_id` contract
   and would silently diverge from an impl-only fix), and their tests.
 
-### Bulk spam actions are irreversible and unconfirmed  — safety
+### Bulk spam actions are irreversible and unconfirmed  — resolved by removal
 
-`ConversationsScreen`'s Spam & Blocked bulk row runs
+**Resolved 2026-09-15 in `6898a35` (PR #8):** the "Block all" / "Delete all"
+row and the "deleted automatically after 30 days" banner were removed from
+`SpamScreen`, so the unconfirmed hard delete no longer exists. Per-conversation
+Not spam / Block / Delete remain on swipe and long-press. The analysis below is
+kept because it is the rule any future bulk action must meet — including
+multi-select in the UI polish work (`docs/UI-POLISH-PLAN.md`).
+
+- [] **`.maestro/flows/spam_notspam_and_bulk.yaml` is stale.** It still asserts
+  the removed banner text and "Block all" / "Delete all", so it fails by
+  construction. `settings_dialogs_and_switches.yaml` carries a comment about the
+  same removed button. Update both.
+- The "Empty Spam" button left in `SpamScreen` renders only in preview/fake mode
+  (`!isLive`) and deletes nothing real. Not a finding, noted so it is not
+  mistaken for a surviving bulk action.
+
+Original finding, for the record — `ConversationsScreen`'s Spam & Blocked bulk row ran
 `spamList.forEach { onDelete(it.threadId.value) }`, which reaches
 `telephony.deleteConversation` — a hard delete from the system SMS provider. No
 confirmation, no undo, no tombstone.
@@ -217,10 +236,13 @@ Three things make this worse than an ordinary delete button:
 Observed for real: running a re-check and then a bulk action in one session
 destroyed most of the seeded test fixtures.
 
-- [] Confirmation dialog naming the count before Delete all.
-- [] Confirmation for Block all that states it also blocks calls and persists
+The fixes proposed here no longer have a button to attach to. They stand as the
+rule for any bulk action that is reintroduced (multi-select Delete / Block):
+
+- Confirmation dialog naming the count before a bulk delete.
+- Confirmation for a bulk block that states it also blocks calls and persists
   after uninstall.
-- [] Consider an undo snackbar for Block, which is reversible. Delete is not, so
+- Consider an undo snackbar for Block, which is reversible. Delete is not, so
   confirmation is the only guard available there.
 
 ### Compose instrumented tests cannot run on API 37  — tooling
@@ -243,8 +265,8 @@ pass 44/44 on the same device, so the storage layer is now verified.
   closed the drawer; it had never done anything. A menu item that silently does
   nothing is worse than no menu item, so it is gone rather than left lying.
   Re-add it when it is actually implemented. Note it is a bulk action over every
-  conversation with no natural undo, so it should follow whatever confirmation
-  rule the spam bulk actions settle on.
+  conversation with no natural undo, so it should follow the bulk-action
+  confirmation rule recorded under "Bulk spam actions" above.
 
 - [] **`ACTION_SENDTO` handling is advertised but not implemented.** The
   manifest claims `sms:`, `smsto:`, `mms:` and `mmsto:` so other apps can hand
@@ -296,6 +318,6 @@ first").
 
 ## Project-wide
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
-- [] Add instrumented tests for `core:telephony` provider query/write logic (off-device fake coverage is thin, per CLAUDE.md §5)
+- [] Add instrumented tests for `core:telephony` provider query/write logic. Two device suites exist (`TelephonyInstrumentedTest`: one SMS insert/query round trip plus a notification build; `TelephonyMapperDeviceTest`: two `ContentValues` mappers) but nothing covers pagination, delete, mark-read or the SIM path. The thread pagination cursor bug above is exactly the kind this would have caught
 - [] MMS: extend history scan to MMS when the MMS-parsing architecture is ready (currently SMS-only in backfill)
 - [] Rename `com.nospam.nospam` applicationId/package before publishing
