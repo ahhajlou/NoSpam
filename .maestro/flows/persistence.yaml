@@ -25,9 +25,12 @@ tags:
 - assertVisible: "Inbox"
 
 # --- Starred ---
+# Star and mute sit in the selection bar's overflow (⋮) menu; pin is an icon.
 - longPressOn: "NSTEST_STAR1"
+- tapOn: "More options"
 - tapOn: "Unstar"
 - longPressOn: "NSTEST_STAR1"
+- tapOn: "More options"
 - tapOn: "Star"
 - stopApp
 - launchApp:
@@ -54,6 +57,7 @@ tags:
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - tapOn: "Unmute"
 - scrollUntilVisible:
     element:
@@ -61,6 +65,7 @@ tags:
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - tapOn: "Mute"
 - stopApp
 - launchApp:
@@ -71,8 +76,10 @@ tags:
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - assertVisible: "Unmute"
-- back
+- back                                        # closes the menu
+- tapOn: "Clear selection"                  # leaves selection mode
 
 # --- Archived --- (NSTEST_ARCHIVE2 starts already archived, per tools/seed.sh;
 # a fixture dedicated to this flow, separate from NSTEST_ARCHIVE1 which

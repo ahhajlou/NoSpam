@@ -125,29 +125,41 @@ class ConversationsViewModel(
         onCancelBackfill()
     }
 
-    fun toggleStar(threadId: Long) {
-        val repo = repository ?: return
-        viewModelScope.launch { repo.toggleStar(ThreadId(threadId)) }
-        // Optimistic fake update
-        _fakeState.value = _fakeState.value.let { s ->
-            s.copy(
-                conversations = s.conversations.map { if (it.threadId.value == threadId) it.copy(isStarred = !it.isStarred) else it },
-                pinned = s.pinned.map { if (it.threadId.value == threadId) it.copy(isStarred = !it.isStarred) else it }
-            )
+    /**
+     * Explicit setters, not toggles: applied to a selection they must converge.
+     * Toggling a half-pinned selection would unpin the rows already pinned.
+     */
+    fun setStarred(threadIds: Collection<Long>, starred: Boolean) {
+        val repo = repository
+        if (repo != null) {
+            viewModelScope.launch { threadIds.forEach { repo.setStar(ThreadId(it), starred) } }
         }
+        updateFake(threadIds) { it.copy(isStarred = starred) }
     }
-    fun togglePin(threadId: Long) {
-        val repo = repository ?: return
-        viewModelScope.launch { repo.togglePin(ThreadId(threadId)) }
+
+    fun setPinned(threadIds: Collection<Long>, pinned: Boolean) {
+        val repo = repository
+        if (repo != null) {
+            viewModelScope.launch { threadIds.forEach { repo.setPin(ThreadId(it), pinned) } }
+        }
+        updateFake(threadIds) { it.copy(isPinned = pinned) }
+    }
+
+    fun setMuted(threadIds: Collection<Long>, muted: Boolean) {
+        val repo = repository
+        if (repo != null) {
+            viewModelScope.launch { threadIds.forEach { repo.setMute(ThreadId(it), muted) } }
+        }
+        updateFake(threadIds) { it.copy(isMuted = muted) }
+    }
+
+    /** Previews and tests without a repository: apply the change to the seed list. */
+    private fun updateFake(threadIds: Collection<Long>, change: (Conversation) -> Conversation) {
+        if (repository != null) return
         _fakeState.value = _fakeState.value.let { s ->
-            val all = (s.pinned + s.conversations)
-            val updated = all.map { if (it.threadId.value == threadId) it.copy(isPinned = !it.isPinned) else it }
+            val updated = (s.pinned + s.conversations).map { if (it.threadId.value in threadIds) change(it) else it }
             s.copy(pinned = updated.filter { it.isPinned }, conversations = updated.filterNot { it.isPinned })
         }
-    }
-    fun toggleMute(threadId: Long) {
-        val repo = repository ?: return
-        viewModelScope.launch { repo.toggleMute(ThreadId(threadId)) }
     }
 
     private fun matchesQuery(conversation: Conversation, query: String, bodySet: Set<Long> = emptySet()): Boolean {

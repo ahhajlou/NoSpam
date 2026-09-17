@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.2 done 2026-09-17.** Next: P1.3 (Inbox/Archived/Spam: list items, selection mode).
+**P1.3 done 2026-09-17.** Next: P1.4 (Thread).
 
 ## 1. Constraints
 
@@ -109,7 +109,7 @@ Order chosen so each step leaves the app building and usable.
         `onNavigateUp` on Thread/NewConversation. Nested NoSpamTheme removed (Conversations, MlDebug).
       - E2E: see progress log. `spam_notspam_and_bulk` left failing on purpose (asserts removed
         bulk UI; rewritten with Spam selection mode in P1.3).
-- [ ] P1.3 Inbox/Archived/Spam: M3 list items, avatars, unread styling, search
+- [x] P1.3 Inbox/Archived/Spam: M3 list items, avatars, unread styling, search
       bar, icon-only FAB, long-press selection mode, contextual app bar, confirmations.
       **Selection mode applies to all three lists** (user, 2026-09-17), not just Inbox:
       Archived (Unarchive, Delete) and Spam & blocked (Not spam, Block/Unblock, Delete),
@@ -118,6 +118,27 @@ Order chosen so each step leaves the app building and usable.
       `SelectionTopAppBar` to pass `maxInline = 3` (normal top bars keep 2) and update
       `ComponentLogicTest`. No floating/centered action menu anywhere; the only menu is the ⋮
       dropdown anchored in the top bar. Delete/Block confirm with a count.
+      Done 2026-09-17:
+      - Files: `ConversationsScreen.kt` (Inbox only), `ArchivedScreen.kt`, `SpamScreen.kt`,
+        `ConversationList.kt` (row, swipe row, skeleton, empty state, `ConversationListScaffold`,
+        confirm dialogs, dial/add-contact), `ConversationSelection.kt` (saveable selection, pruning,
+        pure `summarize`/`addressesOf`).
+      - Row: Avatar 48dp (letter/person icon, per-sender color, check when selected), bold name and
+        primary timestamp when unread (no red dot), Mixed/Blocked badges, pin/star/mute icons with
+        translated descriptions, secondaryContainer when selected, `semantics.selected`.
+      - Inbox bar: Pin/Unpin, Archive, Delete (confirm) + ⋮ Mark read/unread, Star, Mute, Add to
+        contacts and Call (single only), Report spam, Block (confirm) / Unblock. Archived: Unarchive,
+        Delete. Spam: Not spam, Block/Unblock, Delete. Swipe kept (Unarchive / Not spam), disabled
+        while selecting, migrated off deprecated `confirmValueChange` to `onDismiss`.
+      - Back clears selection (BackHandler; `activity-compose` added to the module).
+      - Search: `SearchBarDefaults.InputField` in a pill with a clear button, still filters inline.
+      - FAB: icon-only `AddComment`, content description "Start chat"; hidden while selecting.
+      - Empty states for Inbox, Archived (Archive icon, was Delete) and Spam (new).
+      - VM: `toggleStar/Pin/Mute` replaced by `setStarred/setPinned/setMuted(ids, value)` over the
+        existing `setStar/setPin/setMute`.
+      - Fixed on the way: "Unblock" in the old menus called `block()`; now `unblock()`.
+      - Removed: the preview-only "Empty Spam" button, the Spam row's inline "Not spam" button
+        (swipe + selection replace it), the ActionMenuDialog use on these three screens.
 - [ ] P1.4 Thread: top app bar with contact name + call + overflow menu, message
       long-press selection mode (same bar: 3 icons + ⋮, e.g. Copy/Forward/Delete, Share in ⋮), multi-line compose bar, emoji picker (`emoji2-emojipicker`), localized dates.
 - [ ] P1.5 New conversation screen: own top bar, M3 list items.
@@ -183,3 +204,8 @@ Order chosen so each step leaves the app building and usable.
   final anchor is "Settings"), runner skips `manual-only`.
 - 2026-09-17 — P1.2 final E2E: 7 pass / 1 fail (spam_notspam_and_bulk, expected) vs baseline 6/4.
   Build, 257 unit tests, kover, test APKs green.
+- 2026-09-17 — P1.3 verified: build, unit tests, kover, test APKs green; screenshots of selection mode
+  (copied to ~/Desktop/__CLAUDE__/images/p13/ at the user's request); E2E 8 pass / 0 fail. Flows
+  updated: long_press_actions (selection bar, ⋮, multi-select, cancelled delete, back exits),
+  spam_notspam_and_bulk (rewritten), persistence (star/mute via ⋮, Clear selection),
+  _unblock_part1 (⋮ Block + confirm).

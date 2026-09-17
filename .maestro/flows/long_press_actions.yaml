@@ -2,54 +2,66 @@ appId: com.nospam.nospam
 tags:
   - inbox
 ---
-# Long-press action dialog (ConversationActionsDialog, shared by Inbox/Archived/
-# Spam rows) on a disposable fixture, so this flow can freely mutate state
-# without corrupting fixtures other flows depend on. Requires tools/seed.sh seed.
-# NSTEST_MUTE1 is seeded fully read (read:1), so the toggle label is
-# "Mark as unread", not "Mark as read".
+# Long-press selection mode in the inbox, on a disposable fixture so this flow
+# can freely mutate state without corrupting fixtures other flows depend on.
+# Long-press replaces the top bar with a selection bar: three action icons
+# (Pin, Archive, Delete) plus a ⋮ menu for the rest. Nothing floats over the list.
+# NSTEST_MUTE1 is seeded read and muted, so the labels are "Mark as unread"
+# and "Unmute". Requires tools/seed.sh seed.
 - launchApp:
     clearState: false
     permissions:
       all: allow
 - assertVisible: "Inbox"
-
 - scrollUntilVisible:
     element:
         text: "NSTEST_MUTE1"
     direction: DOWN
     optional: true
+
+# --- Selection bar and its actions ---
 - longPressOn: "NSTEST_MUTE1"
-- assertVisible: "NSTEST_MUTE1"           # dialog title
+- assertVisible: "1 selected"
+- assertVisible: "Clear selection"
+- assertVisible: "Pin"
+- assertVisible: "Archive"
+- assertVisible: "Delete"
+- tapOn: "More options"
 - assertVisible: "Mark as unread"
 - assertVisible: "Star"
-- assertVisible: "Pin"
-- assertVisible: "Unmute"                 # seeded muted, so the toggle label is "Unmute"
-- assertVisible: "Archive"
-- assertVisible: "Report spam"
-- assertVisible: "Delete"
+- assertVisible: "Unmute"
 - assertVisible: "Add to contacts"
 - assertVisible: "Call"
+- assertVisible: "Report spam"
+- assertVisible: "Block"
+- back                                        # closes the menu, keeps the selection
+- assertVisible: "1 selected"
 
-# Exercise one non-destructive toggle end to end: Pin, then confirm the dialog
-# now offers "Unpin" and the row moved into the Pinned section.
+# --- Tapping another row while selecting adds it instead of opening it ---
+- tapOn: "NSTEST_STAR1"
+- assertVisible: "2 selected"
+- tapOn: "More options"
+- assertNotVisible: "Call"                    # single-item actions leave with a 2nd row
+- back
+- tapOn: "NSTEST_STAR1"
+- assertVisible: "1 selected"
+
+# --- Pin from the bar; the action ends selection mode ---
 - tapOn: "Pin"
+- assertVisible: "Inbox"
 - assertVisible: "Pinned"
-- scrollUntilVisible:
-    element:
-        text: "NSTEST_MUTE1"
-    direction: DOWN
-    optional: true
 - longPressOn: "NSTEST_MUTE1"
 - assertVisible: "Unpin"
 - tapOn: "Unpin"
 
-# Star toggle
+# --- Star from the overflow menu ---
 - scrollUntilVisible:
     element:
         text: "NSTEST_MUTE1"
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - tapOn: "Star"
 - scrollUntilVisible:
     element:
@@ -57,15 +69,23 @@ tags:
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - assertVisible: "Unstar"
 - tapOn: "Unstar"
 
-# Dismiss without acting (back button) leaves state untouched.
+# --- Delete is confirmed; cancelling leaves the row and the selection alone ---
 - scrollUntilVisible:
     element:
         text: "NSTEST_MUTE1"
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "Delete"
+- assertVisible: "Delete 1 conversation?"
+- tapOn: "Cancel"
+- assertVisible: "1 selected"
+
+# --- System back leaves selection mode without acting ---
 - back
+- assertVisible: "Inbox"
 - assertVisible: "NSTEST_MUTE1"

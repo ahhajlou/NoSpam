@@ -129,7 +129,7 @@ fun NoSpamNavHost(
                 viewModel = conversationsVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNewMessage = { navController.navigate(NewConversationRoute()) },
-                onToggleRead = { id, read ->
+                onSetRead = { id, read ->
                     scope.launch { container?.conversationsRepository?.setRead(ThreadId(id), read) }
                 },
                 onArchive = { id ->
@@ -140,6 +140,9 @@ fun NoSpamNavHost(
                 },
                 onBlock = { address ->
                     scope.launch { container?.blocklistRepository?.block(address) }
+                },
+                onUnblock = { address ->
+                    scope.launch { container?.blocklistRepository?.unblock(address) }
                 },
                 onDelete = { id ->
                     scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
@@ -175,6 +178,9 @@ fun NoSpamNavHost(
                 },
                 onBlock = { address ->
                     scope.launch { container?.blocklistRepository?.block(address) }
+                },
+                onUnblock = { address ->
+                    scope.launch { container?.blocklistRepository?.unblock(address) }
                 },
                 onDelete = { id ->
                     scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }

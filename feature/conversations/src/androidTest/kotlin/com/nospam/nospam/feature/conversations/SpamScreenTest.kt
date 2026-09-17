@@ -1,11 +1,12 @@
 package com.nospam.nospam.feature.conversations
 
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -16,23 +17,26 @@ class SpamScreenTest {
     @Test fun `spam_rows_are_shown`() {
         rule.setContent { SpamScreen(title = "Spam & blocked") }
         rule.onNodeWithText("Win A Free Cruise!").assertIsDisplayed()
-        rule.onNodeWithText("Empty Spam").assertIsDisplayed()
+        rule.onNodeWithText("Blocked").assertIsDisplayed()
     }
 
-    @Test fun `not_spam_removes_row_and_reports_id`() {
+    @Test fun `not_spam_from_selection_removes_row_and_reports_id`() {
         val reported = mutableListOf<Pair<Long, String>>()
         rule.setContent { SpamScreen(title = "Spam & blocked", onNotSpam = { id, addr -> reported.add(id to addr) }) }
-        assertEquals(3, rule.onAllNodesWithText("Not spam").fetchSemanticsNodes().size)
-        rule.onAllNodesWithText("Not spam")[0].performClick()
+        rule.onNodeWithText("Win A Free Cruise!").performTouchInput { longClick() }
+        rule.onNodeWithContentDescription("Not spam").performClick()
         rule.waitForIdle()
         assertEquals(listOf(201L to "Win A Free Cruise!"), reported)
-        assertEquals(2, rule.onAllNodesWithText("Not spam").fetchSemanticsNodes().size)
+        rule.onNodeWithText("Win A Free Cruise!").assertDoesNotExist()
     }
 
-    @Test fun `empty_spam_clears_list`() {
-        rule.setContent { SpamScreen(title = "Spam & blocked") }
-        rule.onNodeWithText("Empty Spam").performClick()
+    @Test fun `block_asks_for_confirmation_first`() {
+        val blocked = mutableListOf<String>()
+        rule.setContent { SpamScreen(title = "Spam & blocked", onBlock = { blocked.add(it) }) }
+        rule.onNodeWithText("Win A Free Cruise!").performTouchInput { longClick() }
+        rule.onNodeWithContentDescription("Block").performClick()
         rule.waitForIdle()
-        rule.onAllNodesWithText("Not spam").assertCountEquals(0)
+        assertTrue(blocked.isEmpty())
+        rule.onNodeWithText("Block 1 sender?").assertIsDisplayed()
     }
 }

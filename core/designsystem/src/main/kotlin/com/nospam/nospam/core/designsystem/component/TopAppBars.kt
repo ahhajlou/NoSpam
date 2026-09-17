@@ -45,7 +45,7 @@ sealed interface TopBarNavigation {
 }
 
 /**
- * One action in a top app bar. The first [TopBarActions]'s `maxInline` actions
+ * One action in a top app bar. The first `maxInline` actions of [TopBarActions]
  * render as icon buttons (label becomes the tooltip and content description);
  * the rest go to the overflow menu, where [icon] is optional.
  */
@@ -113,6 +113,7 @@ fun SelectionTopAppBar(
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
     actions: List<TopBarAction> = emptyList(),
+    maxInlineActions: Int = 2,
 ) {
     val resources = LocalResources.current
     TopAppBar(
@@ -129,7 +130,7 @@ fun SelectionTopAppBar(
                 onClick = onClearSelection,
             )
         },
-        actions = { TopBarActions(actions) },
+        actions = { TopBarActions(actions, maxInline = maxInlineActions) },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

@@ -3,11 +3,12 @@ package com.nospam.nospam.feature.conversations
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.longClick
-import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -24,10 +25,12 @@ class ConversationsScreenTest {
                 onNewMessage = { newMessageClicked = true }
             )
         }
+        rule.onNodeWithText("Inbox").assertIsDisplayed()
         rule.onNodeWithText("Alice Smith").assertIsDisplayed()
         rule.onNodeWithText("Pinned").assertIsDisplayed()
         rule.onNodeWithText("Recent").assertIsDisplayed()
-        rule.onNodeWithText("Start chat").assertIsDisplayed().performClick()
+        // Icon-only FAB: its label is the content description.
+        rule.onNodeWithContentDescription("Start chat").assertIsDisplayed().performClick()
         assertTrue(newMessageClicked)
     }
 
@@ -57,18 +60,33 @@ class ConversationsScreenTest {
         assertEquals(2L, clicked)
     }
 
-    @Test fun `long_press_opens_inbox_actions`() {
+    @Test fun `long_press_enters_selection_with_actions_in_the_top_bar`() {
         rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel()) }
         rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
         rule.waitForIdle()
-        // Thread 2 is read in the fake seed, so the toggle reads "unread".
+        rule.onNodeWithText("1 selected").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Pin").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Archive").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Delete").assertIsDisplayed()
+        rule.onNodeWithContentDescription("More options").performClick()
+        // Thread 2 is read in the fake seed, so the read action reads "unread".
         rule.onNodeWithText("Mark as unread").assertIsDisplayed()
-        rule.onNodeWithText("Archive").assertIsDisplayed()
         rule.onNodeWithText("Report spam").assertIsDisplayed()
-        rule.onNodeWithText("Delete").assertIsDisplayed()
     }
 
-    @Test fun `long_press_archive_action_reports_id`() {
+    @Test fun `tap_while_selecting_adds_to_the_selection_instead_of_opening`() {
+        var clicked: Long? = null
+        rule.setContent {
+            ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(), onConversationClick = { clicked = it })
+        }
+        rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
+        rule.onNodeWithText("Delivery Driver").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("2 selected").assertIsDisplayed()
+        assertNull(clicked)
+    }
+
+    @Test fun `archive_action_reports_id_and_ends_selection`() {
         var archived: Long? = null
         rule.setContent {
             ConversationsScreen(
@@ -78,9 +96,24 @@ class ConversationsScreenTest {
             )
         }
         rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
-        rule.waitForIdle()
-        rule.onNodeWithText("Archive").performClick()
+        rule.onNodeWithContentDescription("Archive").performClick()
         rule.waitForIdle()
         assertEquals(2L, archived)
+        rule.onNodeWithText("Inbox").assertIsDisplayed()
+    }
+
+    @Test fun `delete_asks_for_confirmation_first`() {
+        var deleted: Long? = null
+        rule.setContent {
+            ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(), onDelete = { deleted = it })
+        }
+        rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
+        rule.onNodeWithContentDescription("Delete").performClick()
+        rule.waitForIdle()
+        assertNull(deleted)
+        rule.onNodeWithText("Delete 1 conversation?").assertIsDisplayed()
+        rule.onNodeWithText("Delete").performClick()
+        rule.waitForIdle()
+        assertEquals(2L, deleted)
     }
 }

@@ -68,4 +68,11 @@ class ComponentLogicTest {
         assertTrue(inline.isEmpty())
         assertTrue(overflow.isEmpty())
     }
+
+    @Test fun `selection bar with three inline slots overflows from the fourth action`() {
+        val actions = listOf(action("pin"), action("archive"), action("delete"), action("read"), action("star"))
+        val (inline, overflow) = partitionTopBarActions(actions, maxInline = 3)
+        assertEquals(listOf("pin", "archive", "delete"), inline.map { it.label })
+        assertEquals(listOf("read", "star"), overflow.map { it.label })
+    }
 }

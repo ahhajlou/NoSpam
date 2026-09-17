@@ -211,12 +211,14 @@ Not spam / Block / Delete remain on swipe and long-press. The analysis below is
 kept because it is the rule any future bulk action must meet — including
 multi-select in the UI polish work (`docs/UI-POLISH-PLAN.md`).
 
-- [] **`.maestro/flows/spam_notspam_and_bulk.yaml` is stale.** It still asserts
-  the removed banner text and "Block all" / "Delete all", so it fails by
-  construction — the only failing default flow as of 2026-09-17. Scheduled for
-  rewrite with Spam selection mode (`docs/UI-POLISH-PLAN.md` P1.3).
-  `settings_dialogs_and_switches.yaml` carries a comment about the same removed
-  button.
+- [x] **`.maestro/flows/spam_notspam_and_bulk.yaml` was stale** — rewritten
+  2026-09-17 with Spam selection mode (`docs/UI-POLISH-PLAN.md` P1.3): it now
+  asserts the bulk row is gone, a confirmed Delete, swipe to Not spam and a
+  two-row Not spam. Passing. `settings_dialogs_and_switches.yaml` still carries
+  a comment mentioning the removed button; harmless.
+- The confirmation rule below is now implemented for multi-select Delete and
+  Block in Inbox, Archived and Spam & blocked (count in the title; Block states
+  that it reaches the system blocked-numbers list and calls).
 - The "Empty Spam" button left in `SpamScreen` renders only in preview/fake mode
   (`!isLive`) and deletes nothing real. Not a finding, noted so it is not
   mistaken for a surviving bulk action.
