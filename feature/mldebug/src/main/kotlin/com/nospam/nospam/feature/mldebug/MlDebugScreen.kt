@@ -149,7 +149,7 @@ fun MlDebugScreen(
                                         if (result.isSpam) R.string.mldebug_label_spam
                                         else R.string.mldebug_label_ham
                                     ),
-                                    style = MaterialTheme.typography.labelLarge,
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = if (result.isSpam) {
                                         MaterialTheme.colorScheme.onErrorContainer
                                     } else {
@@ -189,7 +189,7 @@ fun MlDebugScreen(
 @Composable
 private fun TraceRow(label: String, value: String) {
     Column {
-        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }

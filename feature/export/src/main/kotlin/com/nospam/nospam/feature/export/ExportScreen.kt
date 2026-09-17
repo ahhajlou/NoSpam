@@ -148,7 +148,7 @@ fun ExportScreen(
                 ) {
                     Text(
                         text = stringResource(R.string.export_install_id_label),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(

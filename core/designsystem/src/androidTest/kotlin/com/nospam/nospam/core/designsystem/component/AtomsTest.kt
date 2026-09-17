@@ -13,9 +13,11 @@ import org.junit.Test
 class AtomsTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun avatar_shows_initial() {
-        rule.setContent { NoSpamTheme { Avatar(label = "Alice") } }
-        rule.onNodeWithText("A").assertIsDisplayed()
+    @Test fun avatar_is_decorative() {
+        // The row beside the avatar announces the name; the letter must not be
+        // read a second time. Initial/color logic is unit-tested in ComponentLogicTest.
+        rule.setContent { NoSpamTheme { Avatar(name = "Alice", colorKey = "alice") } }
+        rule.onNodeWithText("A").assertDoesNotExist()
     }
 
     @Test fun pill_chip_reports_click_and_selection() {

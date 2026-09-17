@@ -248,7 +248,10 @@ Typography → `androidx.compose.material3.Typography`:
 | `headline-lg-mobile` | Hanken Grotesk | 24/32, 600 | `headlineLarge` (compact window class) |
 | `body-lg` | Inter | 16/24, 400, 0.5sp | `bodyLarge` |
 | `body-md` | Inter | 14/20, 400, 0.25sp | `bodyMedium` |
-| `label-lg` | Inter | 12/16, 500, 0.1sp | `labelLarge` |
+| `label-lg` | Inter | 12/16, 500, 0.1sp | `labelMedium` (M3 `labelLarge` is the 14/20 button role) |
+
+Roles DESIGN.md does not name use the M3 baseline scale, but are still defined
+explicitly in `Type.kt` so a font swap reaches every role.
 
 Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp,
 `lg`=16dp (message bubbles, sharp corner on the sender-side per the export), `xl`=24dp

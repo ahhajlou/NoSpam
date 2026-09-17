@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.0 done 2026-09-17.** Next: P1.1 (design system).
+**P1.1 done 2026-09-17.** Next: P1.2 (shell: screens own their top bars).
 
 ## 1. Constraints
 
@@ -77,9 +77,22 @@ Order chosen so each step leaves the app building and usable.
       `assembleDebugAndroidTest` compiles. Instrumented tests not run (no device).
       Carried into P1.3: `rememberSwipeToDismissBoxState(confirmValueChange=…)` is now
       deprecated (Archived and Spam rows).
-- [ ] P1.1 Design system: fix type scale slots, shapes via tokens, theme entry
-      (brand default, dynamic color toggle, theme picker), shared components (`NoSpamTopAppBar`,
-      `SelectionTopAppBar`, `Avatar`, `SettingsListItem`, section header).
+- [x] P1.1 Design system (`core:designsystem` only, plus 14 mechanical `labelLarge`→`labelMedium` call sites):
+      - `Type.kt`: all 15 roles explicit; DESIGN `label-lg` moved to `labelMedium`, `labelLarge` = 14/20 (buttons).
+      - `Color.kt`: dark surface/background/surfaceDim tone 10 → 6, surfaceBright 24, inverseOnSurface 20.
+      - `Theme.kt`: `NoSpamTheme(darkTheme, dynamicColor = false)`, `ThemeMode { SYSTEM, LIGHT, DARK }` + `isDark()`,
+        `isDynamicColorSupported`. Nothing persists these yet (§3).
+      - Components: `NoSpamTopAppBar` (+ `TopBarNavigation` None/Menu/Back), `SelectionTopAppBar`,
+        `TopBarAction` + `TopBarActions` (≤2 inline + overflow, all 3 inline if no overflow), `TooltipIconButton`,
+        `Avatar(name, colorKey, size, selected)` (letter or person icon, stable 6-color palette, check when selected,
+        decorative semantics), `SettingsSectionHeader` / `SettingsGroup` / `SettingsItem` / `SettingsSwitchItem`
+        (ListItem, grouped rounded card, `enabled=false` for unbacked settings), `ConfirmationDialog`.
+      - Strings in `core/designsystem/src/main/res` (en + fa).
+      - Visible now: button labels 12sp → 14sp (spec); darker dark-mode page. Everything else unchanged until screens adopt.
+      - `ActionMenuDialog`, `PillChip`, `SearchBarPlaceholder` still exist; remove when P1.3/P1.4 stop using them
+        (the last two are already unused).
+      - Carry to P1.2: when a forced LIGHT/DARK `ThemeMode` lands, `enableEdgeToEdge` must get matching
+        system-bar styles, or status-bar icons follow the system instead of the app.
 - [ ] P1.2 Shell: screens own their `Scaffold`/top bar; drawer stays in shell and
       is opened through a callback; drawer icons and header fixed; top-level
       titles follow the active drawer item.
@@ -125,3 +138,6 @@ Order chosen so each step leaves the app building and usable.
 - 2026-09-17 — Toolchain finished: user's AGP/Gradle/KSP bump committed, compileSdk 37 +
   BOM 2026.09.00. Build, 246 unit tests (85 UI re-run), kover, test APKs all green.
   Next: P1.1.
+- 2026-09-17 — P1.1 done. Build, lint, kover, test APKs green; 257 unit tests (+11:
+  avatar initial/palette, top-bar action partition, full type scale, dark tone order).
+  Not visually checked on a device yet — do that at the start of P1.2.

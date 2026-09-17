@@ -235,7 +235,7 @@ fun ThreadScreen(
                 var simMenu by remember { mutableStateOf(false) }
                 Box {
                     androidx.compose.material3.TextButton(onClick = { simMenu = true }) {
-                        Text(uiState.sims.find { it.subscriptionId == uiState.selectedSimId }?.displayName ?: "SIM", style = MaterialTheme.typography.labelLarge)
+                        Text(uiState.sims.find { it.subscriptionId == uiState.selectedSimId }?.displayName ?: "SIM", style = MaterialTheme.typography.labelMedium)
                     }
                     androidx.compose.material3.DropdownMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
                         uiState.sims.forEach { sim ->
@@ -381,7 +381,7 @@ fun NewConversationScreen(
                 androidx.compose.material3.TextButton(onClick = { permLauncher.launch(android.Manifest.permission.READ_CONTACTS) }) { Text("Allow") }
             }
         }
-        Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
+        Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
         Row(
             modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -411,7 +411,7 @@ fun NewConversationScreen(
             }
         }
         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-        Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(filtered, key = { it.phone }) { contact ->
                 Row(

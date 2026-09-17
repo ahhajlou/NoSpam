@@ -128,7 +128,7 @@ fun ConversationsScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text(
                                         stringResource(R.string.backfill_scanning),
-                                        style = MaterialTheme.typography.labelLarge,
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
                                     Text(
@@ -186,7 +186,7 @@ fun ConversationsScreen(
                     if (uiState.pinned.isNotEmpty()) {
                         item {
                             Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.section_pinned), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                                Text(stringResource(R.string.section_pinned), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                         items(uiState.pinned, key = { it.threadId.value }) { conv ->
@@ -198,7 +198,7 @@ fun ConversationsScreen(
                         }
                         item { Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))) }
                         item {
-                            Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                            Text(stringResource(R.string.section_recent), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                         }
                     }
                     items(uiState.conversations, key = { it.threadId.value }) { conv ->
@@ -361,7 +361,7 @@ private fun ConversationRow(
                     }
                     Spacer(Modifier.width(6.dp))
                 }
-                Text(formatTime(conv.date), style = MaterialTheme.typography.labelLarge, color = if (!conv.read) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatTime(conv.date), style = MaterialTheme.typography.labelMedium, color = if (!conv.read) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(conv.snippet, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -497,7 +497,7 @@ fun ArchivedScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Delete, null, tint = MaterialTheme.colorScheme.onPrimary)
                                 Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.unarchive), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                                Text(stringResource(R.string.unarchive), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     },
@@ -602,7 +602,7 @@ fun SpamScreen(
                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.tertiaryContainer).padding(horizontal = 16.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            Text(stringResource(R.string.not_spam), color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.labelLarge)
+                            Text(stringResource(R.string.not_spam), color = MaterialTheme.colorScheme.onTertiaryContainer, style = MaterialTheme.typography.labelMedium)
                         }
                     },
                     enableDismissFromStartToEnd = true,
@@ -624,7 +624,7 @@ fun SpamScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text(conv.participants.first().address, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                    Text(formatTime(conv.date), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(formatTime(conv.date), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Text(conv.snippet, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
