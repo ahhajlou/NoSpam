@@ -16,9 +16,23 @@ plugins {
 // Kover is applied to the root so merged reports cover every module.
 subprojects {
     apply(plugin = "org.jetbrains.kotlinx.kover")
+
+    // "ci": debug-only coverage variant, merged in the root. The default "total"
+    // variant also pulls in every Android module's release variant, which made
+    // CI compile the whole release graph a second time just to count lines.
+    fun ciVariant(source: String) =
+        extensions.configure<kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension> {
+            currentProject { createVariant("ci") { add(source) } }
+        }
+    plugins.withId("com.android.application") { ciVariant("debug") }
+    plugins.withId("com.android.library") { ciVariant("debug") }
+    plugins.withId("org.jetbrains.kotlin.jvm") { ciVariant("jvm") }
 }
 
 kover {
+    currentProject {
+        createVariant("ci") {}
+    }
     reports {
         total {
             html {
@@ -28,33 +42,40 @@ kover {
             xml {
                 onCheck = true
             }
-            verify {
-                // Ratchet, not the 80% goal: JVM suites alone cannot cover
-                // Compose screens, NotificationCompat builders, or
-                // ContentResolver code. Device suites for exactly that code
-                // are written (AtomsTest, TelephonyMapperDeviceTest,
-                // TelephonyInstrumentedTest, feature UI tests, plus Wave 2A's
-                // nine Sqlite*Dao + SqliteNoSpamOpenHelper androidTest suites)
-                // and raise this once an emulator runs them. Never lower this
-                // bound.
-                //
-                // Robolectric was previously believed broken on this
-                // environment's JDK 25 -- it was actually just pinned to
-                // 4.11.1, a version that predates JDK 21+ support. Wave 2A
-                // bumped it to 4.17, which works fine here, and used it to
-                // cover feature:settings' SpamPreferences, core:telephony's
-                // PhoneNumberNormalizer/DefaultSmsApp/SmsManagerCompat, and
-                // :app's AppContainer/AppSmsReceiver -- see each module's
-                // build.gradle.kts for the `forkEvery = 1` note those suites
-                // needed once real Robolectric runs surfaced a genuine
-                // cross-test static-singleton leak in SpamPreferences.
-                //
-                // Wave 2A raised merged line coverage from 31.1% (1457/4678)
-                // to 38.22% (1788/4678); ratchet moved from 29 to 37, just
-                // under the new actual number.
-                rule("Merged line-coverage ratchet") {
-                    minBound(37)
-                }
+        }
+        variant("ci") {
+            html {
+                title = "NoSpam merged coverage (debug)"
+            }
+        }
+        // Common to every report variant, so the ratchet gates both the local
+        // `:koverVerify` (total) and CI's `:koverVerifyCi` (debug only).
+        verify {
+            // Ratchet, not the 80% goal: JVM suites alone cannot cover
+            // Compose screens, NotificationCompat builders, or
+            // ContentResolver code. Device suites for exactly that code
+            // are written (AtomsTest, TelephonyMapperDeviceTest,
+            // TelephonyInstrumentedTest, feature UI tests, plus Wave 2A's
+            // nine Sqlite*Dao + SqliteNoSpamOpenHelper androidTest suites)
+            // and raise this once an emulator runs them. Never lower this
+            // bound.
+            //
+            // Robolectric was previously believed broken on this
+            // environment's JDK 25 -- it was actually just pinned to
+            // 4.11.1, a version that predates JDK 21+ support. Wave 2A
+            // bumped it to 4.17, which works fine here, and used it to
+            // cover feature:settings' SpamPreferences, core:telephony's
+            // PhoneNumberNormalizer/DefaultSmsApp/SmsManagerCompat, and
+            // :app's AppContainer/AppSmsReceiver -- see each module's
+            // build.gradle.kts for the `forkEvery = 1` note those suites
+            // needed once real Robolectric runs surfaced a genuine
+            // cross-test static-singleton leak in SpamPreferences.
+            //
+            // Wave 2A raised merged line coverage from 31.1% (1457/4678)
+            // to 38.22% (1788/4678); ratchet moved from 29 to 37, just
+            // under the new actual number.
+            rule("Merged line-coverage ratchet") {
+                minBound(37)
             }
         }
     }
