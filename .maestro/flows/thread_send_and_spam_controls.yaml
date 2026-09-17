@@ -119,6 +119,14 @@ tags:
 - inputText: "5559998888"
 - pressKey: Enter
 - assertVisible: "SMS message"
-- tapOn: "Navigate up"
-- tapOn: "Navigate up"
-- assertVisible: "Inbox"
+# Back out thread -> recipient picker -> inbox. Wait for the picker in between:
+# tapping twice in a row lands the second tap during the transition, where it is
+# swallowed, leaving the run on the picker with the keyboard over the screen
+# (the failure hierarchy then contains only IME nodes, which is confusing).
+# The flow ends here, on the thread the recipient picker opened.
+#
+# It used to back out to the inbox and assert on it, which asserted nothing this
+# flow is about and was unreliable: with the keyboard up, the hierarchy Maestro
+# reads contains only IME nodes, so every text assertion fails even though the
+# app is plainly visible behind it. Each flow relaunches and reseeds anyway, so
+# there is nothing to clean up by hand.

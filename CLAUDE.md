@@ -143,7 +143,37 @@ self-contained:
   launched via the Activity Result API. There is no public intent action to
   build by hand. Pre-Q, fall back to `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT`
   with `EXTRA_PACKAGE_NAME`.
-- Multi-SIM: resolve `SmsManager` through `SubscriptionManager`.
+- Multi-SIM: resolve `SmsManager` through `SubscriptionManager`. Enumerating
+  subscriptions needs `READ_PHONE_STATE` (and `READ_PHONE_NUMBERS` from API 33
+  for a SIM's own number). Without them `getActiveSubscriptionInfoList` throws
+  `SecurityException`, `RealTelephonyDataSource` returns an empty list, and the
+  per-SIM settings pages and the SIM picker silently disappear — that was the
+  state until 2026-09-17, when the permissions were added.
+
+**Permission gate.** `requiredPermissions()` in `feature:onboarding` is the one
+list: SMS (read/send/receive), contacts, and phone (`READ_PHONE_STATE`, plus
+`READ_PHONE_NUMBERS` from API 30 — gating on it below that is unsatisfiable and
+would strand onboarding forever). `NoSpamNavHost` routes to onboarding whenever
+that list is not fully granted, on cold start *and* on resume, because a process
+that survives a revocation would otherwise sit in the inbox with contact and SIM
+lookups silently returning nothing. Checking only `READ_SMS` was not enough:
+holding the default-SMS role auto-grants the SMS permissions, so the gate never
+fired for contacts or phone.
+
+Contacts is required because the spam policy depends on it, not for cosmetics:
+saved contacts bypass the classifier (§5, `TODO.md`), and without the permission
+`lookupContact` returns nothing, so a contact's message can be classified as
+spam and hidden.
+
+`POST_NOTIFICATIONS` is requested (`optionalPermissions()`) but never required:
+an SMS app works with notifications off, Google Messages runs that way too, and
+gating on it would bounce anyone who turns notifications off back to onboarding.
+
+Verified 2026-09-17 on the emulator: Google Messages gates on SMS, contacts and
+phone individually — denying any one leaves it on its "You're almost done"
+screen. Its Phone permission carries `GRANTED_BY_DEFAULT` as a preinstalled app,
+so a re-request is auto-granted with no dialog; that masked the gate on a first
+look. Ours is user-granted and revocable, hence the resume check.
 
 Note for tests and scripts: the role constant is `android.app.role.SMS`,
 uppercase. Lowercase silently fails with "Unknown role".

@@ -36,7 +36,7 @@ echo "== installing debug build"
 
 echo "== granting the SMS role and permissions"
 adb shell cmd role add-role-holder android.app.role.SMS com.nospam.nospam >/dev/null 2>&1
-for p in READ_SMS SEND_SMS RECEIVE_SMS READ_CONTACTS POST_NOTIFICATIONS; do
+for p in READ_SMS SEND_SMS RECEIVE_SMS READ_CONTACTS READ_PHONE_STATE READ_PHONE_NUMBERS POST_NOTIFICATIONS; do
     adb shell pm grant com.nospam.nospam "android.permission.$p" >/dev/null 2>&1
 done
 role=$(adb shell cmd role get-role-holders android.app.role.SMS 2>/dev/null | tr -d '\r')
@@ -50,6 +50,12 @@ for flow in .maestro/flows/*.yaml; do
     # are driven by tools/persistence_check.sh, which injects SMS between their
     # parts — reseeding between them here guaranteed part 2 failed.
     grep -qE "^\s+- (debug|destructive|manual-only)$" "$flow" && { echo "-- skip $name (tagged)"; continue; }
+    # tools/permission_gate_check.sh revokes permissions to assert the onboarding
+    # gate and restores them at the end; if it was interrupted, every flow here
+    # would strand on onboarding. Re-granting is cheap insurance against that.
+    for p in READ_SMS SEND_SMS RECEIVE_SMS READ_CONTACTS READ_PHONE_STATE READ_PHONE_NUMBERS; do
+        adb shell pm grant com.nospam.nospam "android.permission.$p" >/dev/null 2>&1
+    done
 
     echo "-- reseed + $name"
     bash tools/seed.sh core >/dev/null 2>&1

@@ -249,6 +249,20 @@ Order chosen so each step leaves the app building and usable.
   (p14-*.png). Two defects found by the screenshots: 4 icons in the selection bar (partition
   rule) and the emoji picker unreadable in light mode (app XML theme was the dark AppCompat).
 - 2026-09-17 — P1.5/P1.6/counter: build green, 311 unit tests, coverage 54.88% (ratchet 49 → 54),
-  settings flows rewritten for the sub-pages. Note: the emulator reports no active SIM, so the
-  per-SIM pages are unverified on-device; they are covered by the ViewModel path only.
+  settings flows rewritten for the sub-pages. The per-SIM pages first showed nothing on-device:
+  the emulator does have a SIM (T-Mobile, LOADED), but the app never declared READ_PHONE_STATE,
+  so `getActiveSubscriptionInfoList` threw SecurityException and the telephony source swallowed
+  it. Same root cause as the dual-SIM send picker never appearing — pre-existing, not new.
 - 2026-09-17 — E2E after the settings restructure: 8 pass / 0 fail.
+- 2026-09-17 — Phone permissions added at the user's direction (privacy stance unchanged: the
+  data never leaves the device). READ_PHONE_STATE + READ_PHONE_NUMBERS in the manifest and in
+  onboarding's request, but NOT in the list that gates onboarding: denying them leaves a working
+  single-SIM app. Verified on-device: Settings now lists "T-Mobile / +15551234567" and its page.
+- 2026-09-18 — Permission gate settled with the user after testing Google Messages on the
+  emulator one permission at a time: it gates on SMS, contacts and phone individually (an
+  earlier "it tolerates denial" reading was wrong — its preinstalled GRANTED_BY_DEFAULT flag
+  silently re-granted phone on request). So: phone moved into `requiredPermissions()`,
+  notifications moved out into `optionalPermissions()` (still requested), and `needsOnboarding`
+  now checks the whole required list on cold start and on resume. Contacts stays required
+  because the contact bypass in the spam policy depends on it. Phase 2: reply on the
+  conversation's own subscription id (TODO.md, Project-wide).

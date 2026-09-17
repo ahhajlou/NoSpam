@@ -38,8 +38,10 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        hasPermissions = result.values.all { it }
+    ) { _ ->
+        // Checked against the required list, not the result: denying an optional
+        // permission must not strand the user on this screen.
+        hasPermissions = hasRequiredPermissions(context)
         if (hasPermissions && isDefaultSms) onComplete()
     }
 
@@ -62,7 +64,7 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
         Spacer(Modifier.height(32.dp))
         if (!hasPermissions) {
             Button(onClick = {
-                permissionLauncher.launch(requiredPermissions().toTypedArray())
+                permissionLauncher.launch(requestedPermissions().toTypedArray())
             }) { Text(stringResource(R.string.grant)) }
             Spacer(Modifier.height(12.dp))
         } else {
@@ -84,7 +86,7 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
 }
 
 /**
- * Permissions onboarding asks for, in one place.
+ * Permissions the app cannot work without, and which therefore gate onboarding.
  *
  * This list was previously written twice, once here and once inline in the
  * grant button, which meant the API 33 notification entry could drift between
@@ -98,12 +100,37 @@ internal fun requiredPermissions(sdkInt: Int = Build.VERSION.SDK_INT): List<Stri
     add(android.Manifest.permission.SEND_SMS)
     add(android.Manifest.permission.RECEIVE_SMS)
     add(android.Manifest.permission.READ_CONTACTS)
-    // POST_NOTIFICATIONS only exists from Tiramisu; requesting it below 33 is a no-op
-    // that still shows up as "denied" on some OEM builds.
+    // Phone: enumerating SIMs (SubscriptionManager.getActiveSubscriptionInfoList)
+    // needs READ_PHONE_STATE, and a SIM's own number needs READ_PHONE_NUMBERS from
+    // API 33. Verified 2026-09-17 that Google Messages gates on these too: denying
+    // Phone alone leaves it stuck on its "You're almost done" screen.
+    add(android.Manifest.permission.READ_PHONE_STATE)
+    // READ_PHONE_NUMBERS only exists from API 30. Gating on it below that would be
+    // unsatisfiable — checkSelfPermission returns DENIED for a permission the
+    // manifest cannot hold, stranding the user on onboarding forever.
+    if (sdkInt >= Build.VERSION_CODES.R) add(android.Manifest.permission.READ_PHONE_NUMBERS)
+}
+
+/**
+ * Requested with the rest, but not required: an SMS app is perfectly usable
+ * with notifications off, the user simply is not alerted. Google Messages runs
+ * with them denied too. Gating on this would also trap anyone who turns
+ * notifications off later, since [requiredPermissions] decides whether the app
+ * returns to onboarding.
+ *
+ * POST_NOTIFICATIONS only exists from Tiramisu; requesting it below 33 is a
+ * no-op that still shows up as "denied" on some OEM builds.
+ */
+internal fun optionalPermissions(sdkInt: Int = Build.VERSION.SDK_INT): List<String> = buildList {
     if (sdkInt >= Build.VERSION_CODES.TIRAMISU) add(android.Manifest.permission.POST_NOTIFICATIONS)
 }
 
-private fun hasRequiredPermissions(context: Context): Boolean =
+/** Everything the grant button asks for: required first, then optional. */
+internal fun requestedPermissions(sdkInt: Int = Build.VERSION.SDK_INT): List<String> =
+    requiredPermissions(sdkInt) + optionalPermissions(sdkInt)
+
+/** True when every permission the app cannot work without is granted. */
+fun hasRequiredPermissions(context: Context): Boolean =
     requiredPermissions().all {
         ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }

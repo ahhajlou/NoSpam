@@ -12,6 +12,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -22,10 +23,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.nospam.nospam.NoSpamApplication
@@ -41,6 +46,7 @@ import com.nospam.nospam.feature.conversations.ConversationsViewModel
 import com.nospam.nospam.feature.conversations.SpamScreen
 import com.nospam.nospam.feature.conversations.SpamViewModel
 import com.nospam.nospam.feature.onboarding.OnboardingScreen
+import com.nospam.nospam.feature.onboarding.hasRequiredPermissions
 import com.nospam.nospam.feature.settings.AboutSettingsScreen
 import com.nospam.nospam.feature.settings.AdvancedSettingsScreen
 import com.nospam.nospam.feature.settings.GeneralSettingsScreen
@@ -68,11 +74,18 @@ import kotlinx.serialization.Serializable
 @Serializable data class ThreadRoute(val threadId: Long, val address: String? = null, val forwardBody: String? = null)
 
 
-/** First launch (or revoked state) lands on onboarding instead of an empty inbox. */
+/**
+ * First launch, or a revoked permission, lands on onboarding instead of an
+ * empty inbox.
+ *
+ * Checks the whole required list, not just READ_SMS: holding the default-SMS
+ * role auto-grants the SMS permissions, so a READ_SMS-only check passed even
+ * when contacts or phone had been denied, and the gate never appeared.
+ * Notifications are deliberately not in that list, so turning them off does
+ * not send anyone back here.
+ */
 private fun needsOnboarding(context: Context): Boolean {
-    val smsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
-        PackageManager.PERMISSION_GRANTED
-    if (!smsGranted) return true
+    if (!hasRequiredPermissions(context)) return true
     return !isDefaultSmsApp(context)
 }
 
@@ -100,6 +113,37 @@ fun NoSpamNavHost(
             resolvedStart = if (onboarding) OnboardingRoute else ConversationsRoute
         }
     }
+    // Permissions can be revoked while the app is in the background. Android
+    // usually kills the process, so the cold-start check above catches it — but
+    // not always, and a surviving process would sit in the inbox with contacts
+    // or SIM lookups silently returning nothing. Re-checking on resume closes
+    // that, and also catches the default-SMS role being handed to another app.
+    // Re-check the gate on every resume, and again once the graph exists.
+    //
+    // Resume alone is not enough. Revoking a permission kills the process; when
+    // the user reopens the app the task is restored, the NavHost restores its
+    // saved back stack (the inbox) rather than honouring `resolvedStart`, and at
+    // that first resume `currentBackStackEntry` is still null, so a resume-only
+    // check skips and never runs again. That left the app on the inbox with a
+    // required permission missing — caught by tools/permission_gate_check.sh.
+    var resumeTick by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        resumeTick++
+        onPauseOrDispose { }
+    }
+    val currentEntry by navController.currentBackStackEntryAsState()
+    LaunchedEffect(currentEntry, resumeTick) {
+        val destination = currentEntry?.destination ?: return@LaunchedEffect
+        if (destination.hasRoute(OnboardingRoute::class)) return@LaunchedEffect
+        if (!needsOnboarding(context)) return@LaunchedEffect
+        navController.navigate(OnboardingRoute) {
+            // Nothing behind it: the inbox must not be reachable by back while a
+            // required permission is missing.
+            popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
+
     val start = resolvedStart
     if (start == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

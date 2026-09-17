@@ -2,7 +2,7 @@
 <resources>
     <string name="welcome">Welcome to NoSpam</string>
     <string name="tagline">On-device spam filtering — no server.</string>
-    <string name="grant">Grant SMS &amp; Contacts permissions</string>
+    <string name="grant">Grant SMS, Contacts &amp; Phone permissions</string>
     <string name="granted">✓ Permissions granted</string>
     <string name="set_default">Set as default SMS app</string>
     <string name="is_default">✓ Default SMS app</string>

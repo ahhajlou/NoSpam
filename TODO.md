@@ -324,7 +324,38 @@ first").
   `forwardBody` nor a persisted `DraftStore` entry exists for the
   newly-opened thread. `feature/thread/src/main/kotlin/com/nospam/nospam/feature/thread/ThreadViewModel.kt`, `loadThread()`.
 
+## Drafts in the inbox — agreed model (2026-09-18)
+
+Today a draft is invisible outside its own thread: `DraftStore` is a DataStore
+in `feature:thread` keyed by thread id, the inbox shows no sign of it, and
+`Conversation.hasDraft` exists but is never set or rendered.
+
+**Verified on the emulator (Google Messages 20260331, as default SMS app):**
+typing a draft and leaving the thread moves that conversation to the **top** of
+the inbox, above the newest received message, and its preview reads
+`You: <draft text>` with a **"Draft"** label. Notably, `content://sms` has **no
+`type=3` (draft) rows** afterwards — Messages keeps drafts in its own database,
+not the system store. So the ordering and the label are the app's own doing, and
+we can match the behaviour without writing to the provider.
+
+Agreed for a later phase:
+- [] Show a "Draft" marker and the draft text as the preview in the inbox row.
+- [] Sort a conversation with a draft by when the draft was saved, so it rises
+  to the top like Messages does. A half-written message is the conversation the
+  user is most likely to return to.
+- [] Set `Conversation.hasDraft` from the draft store rather than leaving the
+  field unused.
+- [] Needs a home the inbox can read: `DraftStore` lives in `feature:thread`,
+  and `feature:conversations` must not depend on it. Move it to `core:data` (or
+  `core:database`) when this is built — that is also where the draft-carryover
+  bug below gets fixed.
+- [] Decide then whether to also write drafts to the provider as `type=3`. It
+  would make drafts visible to other SMS apps and survive a reinstall, which
+  Messages does not bother with; weigh that against a second source of truth,
+  which CLAUDE.md §4 warns about.
+
 ## Project-wide
+- [] Reply on the conversation's own SIM. `ThreadViewModel` only knows a subscription id when the SIM list loaded, so with phone permission missing (or a single-SIM device) `sendMessage` passes none and `resolveSmsManager` falls back to the system default SIM — on a dual-SIM phone, replying to a conversation that arrived on SIM 2 can go out on SIM 1. The provider records the subscription per message, and reading it needs no permission, so this is fixable independently of the permission gate
 - [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
 - [] Add instrumented tests for `core:telephony` provider query/write logic. Two device suites exist (`TelephonyInstrumentedTest`: one SMS insert/query round trip plus a notification build; `TelephonyMapperDeviceTest`: two `ContentValues` mappers) but nothing covers pagination, delete, mark-read or the SIM path. The thread pagination cursor bug above is exactly the kind this would have caught

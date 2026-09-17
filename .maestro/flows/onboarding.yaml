@@ -25,8 +25,8 @@ tags:
       visible: "Welcome to NoSpam"
     commands:
       - assertVisible: "On-device spam filtering — no server."
-      - assertVisible: "Grant SMS & Contacts permissions"
-      - tapOn: "Grant SMS & Contacts permissions"
+      - assertVisible: "Grant SMS, Contacts & Phone permissions"
+      - tapOn: "Grant SMS, Contacts & Phone permissions"
       - assertVisible: "✓ Permissions granted"
       - assertVisible: "Set as default SMS app"
       - tapOn: "Set as default SMS app"
