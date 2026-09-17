@@ -1,0 +1,20 @@
+appId: com.nospam.nospam
+tags:
+  - persistence
+  - manual-only
+---
+# Part 2: after tools/persistence_check.sh has run
+# `adb emu sms send NSTEST_UNBLOCK1 <text>` a second time (proving an inbound
+# message from a still-blocked sender is absorbed rather than surfaced),
+# unblock from the Spam & blocked screen.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- tapOn: "Menu"
+- tapOn: "Spam & blocked"
+- assertVisible: "NSTEST_UNBLOCK1"
+- longPressOn: "NSTEST_UNBLOCK1"
+- assertVisible: "Unblock"
+- tapOn: "Unblock"
+- assertNotVisible: "NSTEST_UNBLOCK1"

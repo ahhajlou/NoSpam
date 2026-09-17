@@ -378,6 +378,19 @@ class RealTelephonyDataSource(
         Unit
     }
 
+    override suspend fun deleteMessage(messageId: Long) = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.delete(
+                Telephony.Sms.CONTENT_URI,
+                "${Telephony.Sms._ID} = ?",
+                arrayOf(messageId.toString())
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "deleteMessage failed", e)
+        }
+        Unit
+    }
+
     override suspend fun insertInboxMessage(address: String, body: String, date: Long, read: Boolean, subscriptionId: Int?): Long? =
         withContext(Dispatchers.IO) {
             try {

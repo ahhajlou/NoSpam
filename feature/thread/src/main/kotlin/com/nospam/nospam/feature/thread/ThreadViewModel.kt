@@ -64,19 +64,24 @@ class ThreadViewModel(
         private const val TAG = "ThreadViewModel"
     }
 
-    fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null) {
+    fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null, forwardBody: String? = null) {
         if (address != null) pendingAddress = address
         if (context != null) lastContext = context.applicationContext
         // Cancel notification for this thread when user opens it (no core:notifications dep)
         context?.let { ctx ->
             runCatching { androidx.core.app.NotificationManagerCompat.from(ctx).cancel(id.toInt()) }
         }
-        // Load draft (DataStore) — best effort
-        if (context != null) {
+        // A forwarded message's body wins over any previously-saved draft for
+        // this thread; skip the DataStore load so it doesn't get overwritten.
+        if (forwardBody != null) {
+            _uiState.value = _uiState.value.copy(draft = forwardBody)
+        } else if (context != null) {
             viewModelScope.launch {
                 val draft = runCatching { DraftStore.load(context, id) }.getOrNull()
                 if (draft != null) _uiState.value = _uiState.value.copy(draft = draft)
             }
+        }
+        if (context != null) {
             // Load SIMs for dual-SIM picker
             viewModelScope.launch {
                 val sims = dataSource?.getActiveSubscriptions() ?: emptyList()
@@ -85,7 +90,7 @@ class ThreadViewModel(
         }
         val dataSource = this.dataSource
         if (dataSource == null) {
-            _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages())
+            _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages(), draft = forwardBody ?: "")
             return
         }
         optimistic = emptyList()
@@ -178,6 +183,18 @@ class ThreadViewModel(
 
     fun onSimSelected(subId: Int) {
         _uiState.value = _uiState.value.copy(selectedSimId = subId)
+    }
+
+    fun onDeleteMessage(messageId: Long) {
+        val dataSource = this.dataSource
+        if (dataSource == null) {
+            _uiState.value = _uiState.value.copy(
+                messages = _uiState.value.messages.filterNot { it.id.value == messageId }
+            )
+            return
+        }
+        // No manual reload: the provider observer re-emits and reconciles.
+        viewModelScope.launch { dataSource.deleteMessage(messageId) }
     }
 
     fun onSend() {

@@ -1,0 +1,54 @@
+appId: com.nospam.nospam
+tags:
+  - archived
+---
+# Requires tools/seed.sh seed (NSTEST_ARCHIVE1 is pre-flagged archived).
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+- tapOn: "Menu"
+- assertVisible: "Archived"
+- tapOn: "Archived"
+- assertVisible: "NSTEST_ARCHIVE1"
+- assertVisible: "Your package has been delivered."
+
+# Swipe-to-unarchive (SwipeToDismissBox, StartToEnd only).
+- swipe:
+    from: "NSTEST_ARCHIVE1"
+    direction: RIGHT
+- assertNotVisible: "NSTEST_ARCHIVE1"
+
+# It must reappear in the inbox once unarchived. NSTEST_ARCHIVE1's message is
+# 10 days old (tools/seed.sh), so it sorts well below the fold among the
+# other, more recent fixtures — scroll to it rather than assuming it's visible.
+- tapOn: "Menu"
+- tapOn: "Inbox"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_ARCHIVE1"
+    direction: DOWN
+- assertVisible: "NSTEST_ARCHIVE1"
+
+# Put it back for other flows / re-runs, via the long-press menu this time.
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_ARCHIVE1"
+    direction: DOWN
+    optional: true
+- longPressOn: "NSTEST_ARCHIVE1"
+- assertVisible: "Archive"
+- tapOn: "Archive"
+- assertNotVisible: "NSTEST_ARCHIVE1"
+- tapOn: "Menu"
+- tapOn: "Archived"
+- assertVisible: "NSTEST_ARCHIVE1"
+
+# Archived empty-state copy, asserted without depending on it actually being
+# empty (skipped unless the fixture set is torn down).
+- runFlow:
+    when:
+      visible: "Archive is empty"
+    commands:
+      - assertVisible: "Messages you archive will appear here."

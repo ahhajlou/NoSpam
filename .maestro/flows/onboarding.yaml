@@ -1,0 +1,39 @@
+appId: com.nospam.nospam
+tags:
+  - onboarding
+---
+# The emulator this suite normally runs against already holds the SMS role and
+# all five runtime permissions (verified out of band — see tools/seed.sh's own
+# precondition check), so a plain launchApp lands directly on the inbox and the
+# onboarding screen never appears. That is itself the thing worth asserting:
+# a fully-provisioned install must not get stuck on, or bounce back to,
+# onboarding. The permissions block below is declarative documentation of what
+# this app needs (per the Maestro permissions doc) and a no-op re-grant if the
+# harness ever resets it; it does not itself flip the SMS role.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+- assertNotVisible: "Welcome to NoSpam"
+
+# Belt-and-braces: if a future test run genuinely starts from a clean install
+# (no role, no permissions), walk the real onboarding screen instead of failing
+# opaquely on the assertion above.
+- runFlow:
+    when:
+      visible: "Welcome to NoSpam"
+    commands:
+      - assertVisible: "On-device spam filtering — no server."
+      - assertVisible: "Grant SMS & Contacts permissions"
+      - tapOn: "Grant SMS & Contacts permissions"
+      - assertVisible: "✓ Permissions granted"
+      - assertVisible: "Set as default SMS app"
+      - tapOn: "Set as default SMS app"
+      # This opens the system role-request dialog, which is not a NoSpam view —
+      # assert up to the boundary and let the user complete it once, by hand.
+      - extendedWaitUntil:
+          visible: "Continue"
+          timeout: 15000
+      - tapOn: "Continue"
+      - assertVisible: "NoSpam SMS"

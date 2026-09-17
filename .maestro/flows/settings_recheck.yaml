@@ -1,0 +1,26 @@
+appId: com.nospam.nospam
+tags:
+  - destructive
+---
+# Re-classification of the entire message history.
+#
+# Excluded from the default suite on purpose. It recomputes sender_state for
+# every sender, so it resets the seeded MIXED/SPAM fixtures to CLEAN and breaks
+# any flow that runs after it and depends on them. Run it on its own, and
+# re-seed afterwards:
+#
+#   maestro test .maestro/flows/settings_recheck.yaml --include-tags=destructive
+#   bash tools/seed.sh core
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "NoSpam SMS"
+- tapOn: "Menu"
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element:
+        text: "Re-check all messages"
+    direction: DOWN
+- tapOn: "Re-check all messages"
+- assertVisible: "Re-check started in the background"

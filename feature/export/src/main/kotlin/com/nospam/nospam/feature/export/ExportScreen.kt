@@ -66,6 +66,8 @@ fun ExportScreen(
         else stringResource(R.string.export_failed, msg)
     }
 
+    LaunchedEffect(Unit) { viewModel.loadInstallId() }
+
     LaunchedEffect(successMessage) {
         if (successMessage != null) {
             snackbarHostState.showSnackbar(successMessage)
@@ -144,17 +146,12 @@ fun ExportScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = stringResource(R.string.export_hwid_label),
+                        text = stringResource(R.string.export_install_id_label),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = runCatching {
-                            android.provider.Settings.Secure.getString(
-                                context.contentResolver,
-                                android.provider.Settings.Secure.ANDROID_ID
-                            ) ?: "unknown"
-                        }.getOrElse { "unknown" },
+                        text = uiState.installId.ifEmpty { "\u2026" },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )

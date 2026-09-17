@@ -3,6 +3,18 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+tasks.withType<Test> {
+    // SpamPreferences' `Context.spamDataStore` is a classloader-wide DataStore
+    // singleton (one `by preferencesDataStore(...)` delegate for the whole
+    // file): once any test resolves it, every other Context reuses the same
+    // underlying file for the rest of that JVM's life. Robolectric reuses one
+    // JVM/classloader across test classes by default, so SpamPreferencesTest's
+    // working DataStore was leaking into SpamPreferencesFailureTest and
+    // silently defeating its forced-failure Contexts. One JVM fork per test
+    // class keeps each class's first DataStore access genuinely first.
+    forkEvery = 1
+}
+
 android {
     namespace = "com.nospam.nospam.feature.settings"
     compileSdk = 36
@@ -46,6 +58,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

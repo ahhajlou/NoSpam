@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Drawer labels for the developer tools. Debug-only, matching the
+     debugImplementation wiring of :feature:export and :feature:mldebug. -->
+<resources>
+    <string name="drawer_export">Export SMS</string>
+    <string name="drawer_mldebug">Classifier test</string>
+</resources>

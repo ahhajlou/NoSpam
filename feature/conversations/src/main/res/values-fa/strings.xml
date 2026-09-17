@@ -19,7 +19,6 @@
     <string name="archive_empty_title">بایگانی خالی است</string>
     <string name="archive_empty_subtitle">پیام‌هایی که بایگانی می‌کنید اینجا نمایش داده می‌شوند.</string>
     <string name="unarchive">خارج کردن از بایگانی</string>
-    <string name="spam_banner">پیام‌های هرزنامه پس از ۳۰ روز به‌طور خودکار حذف می‌شوند.</string>
     <string name="empty_spam">خالی‌کردن هرزنامه</string>
     <string name="not_spam">هرزنامه نیست</string>
     <string name="marked_as_not_spam">%1$s هرزنامه نیست</string>
@@ -34,4 +33,12 @@
     <string name="backfill_scanning">در حال بررسی پیام‌های قدیمی برای هرزنامه</string>
     <string name="backfill_count">%1$d از %2$d پیام بررسی شد</string>
     <string name="backfill_cancel">لغو</string>
+    <string name="not_default_sms_banner">برنامه پیش‌فرض پیامک نیست — برخی امکانات غیرفعال است</string>
+    <string name="action_star">ستاره</string>
+    <string name="action_unstar">حذف ستاره</string>
+    <string name="action_pin">سنجاق کردن</string>
+    <string name="action_unpin">حذف سنجاق</string>
+    <string name="action_mute">بی‌صدا کردن</string>
+    <string name="action_unmute">فعال کردن صدا</string>
+    <string name="badge_mixed">ترکیبی</string>
 </resources>

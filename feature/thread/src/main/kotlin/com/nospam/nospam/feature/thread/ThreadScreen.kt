@@ -49,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nospam.nospam.core.designsystem.component.ActionMenuDialog
+import com.nospam.nospam.core.designsystem.component.ActionMenuItem
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeIncoming
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.nospam.nospam.core.model.MessageType
@@ -57,10 +59,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewModel = viewModel()) {
+fun ThreadScreen(
+    threadId: Long,
+    address: String? = null,
+    forwardBody: String? = null,
+    onForward: (String) -> Unit = {},
+    viewModel: ThreadViewModel = viewModel(),
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(threadId, address) { viewModel.loadThread(threadId, address, context) }
+    LaunchedEffect(threadId, address, forwardBody) { viewModel.loadThread(threadId, address, context, forwardBody) }
     var selected by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
+    var pendingDelete by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lazyState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -120,7 +129,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                     if (isSuspected) {
                         androidx.compose.material3.AssistChip(
                             onClick = { },
-                            label = { Text("Suspected spam") },
+                            label = { Text(stringResource(R.string.suspected_spam)) },
                             modifier = Modifier.padding(bottom = 2.dp)
                         )
                     }
@@ -172,19 +181,46 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
             }
         }
         selected?.let { msg ->
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { selected = null },
-                title = { Text("Message") },
-                text = { Text(msg.body) },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
+            val actionCopy = stringResource(R.string.action_copy)
+            val actionDelete = stringResource(R.string.action_delete)
+            val actionShare = stringResource(R.string.action_share)
+            val actionForward = stringResource(R.string.action_forward)
+            ActionMenuDialog(
+                title = msg.body,
+                actions = listOf(
+                    ActionMenuItem(label = actionCopy, onClick = {
                         val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                         cm.setPrimaryClip(android.content.ClipData.newPlainText("sms", msg.body))
+                    }),
+                    ActionMenuItem(label = actionDelete, destructive = true, onClick = { pendingDelete = msg }),
+                    ActionMenuItem(label = actionShare, onClick = {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, msg.body)
+                            }
+                            context.startActivity(android.content.Intent.createChooser(intent, null))
+                        } catch (_: Exception) {}
+                    }),
+                    ActionMenuItem(label = actionForward, onClick = { onForward(msg.body) }),
+                ),
+                onDismiss = { selected = null },
+            )
+        }
+        pendingDelete?.let { msg ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { pendingDelete = null },
+                title = { Text(stringResource(R.string.delete_message_title)) },
+                text = { Text(stringResource(R.string.delete_message_body)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        viewModel.onDeleteMessage(msg.id.value)
+                        pendingDelete = null
                         selected = null
-                    }) { Text("Copy") }
+                    }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
                 },
                 dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { selected = null }) { Text("Close") }
+                    androidx.compose.material3.TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
                 }
             )
         }
@@ -227,7 +263,7 @@ fun ThreadScreen(threadId: Long, address: String? = null, viewModel: ThreadViewM
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             ) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Jump to latest")
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.jump_to_latest_desc))
             }
         }
     }

@@ -6,4 +6,13 @@
     <string name="new_hint">نام، شماره یا ایمیل را تایپ کنید</string>
     <string name="new_top">مخاطبان پرتکرار</string>
     <string name="new_all">همهٔ مخاطبان</string>
+    <string name="suspected_spam">هرزنامه مشکوک</string>
+    <string name="jump_to_latest_desc">رفتن به آخرین پیام</string>
+    <string name="action_copy">کپی</string>
+    <string name="action_delete">حذف</string>
+    <string name="action_share">اشتراک‌گذاری</string>
+    <string name="action_forward">ارسال به بعد</string>
+    <string name="delete_message_title">پیام حذف شود؟</string>
+    <string name="delete_message_body">این پیام برای همیشه حذف خواهد شد.</string>
+    <string name="cancel">لغو</string>
 </resources>
