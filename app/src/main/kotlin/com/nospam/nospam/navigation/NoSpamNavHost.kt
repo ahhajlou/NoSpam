@@ -230,12 +230,22 @@ fun NoSpamNavHost(
                     container?.let { ThreadViewModel(it.telephony, args.address, it.spamRepository) } ?: ThreadViewModel()
                 }
             )
+            val scope = rememberCoroutineScope()
             ThreadScreen(
                 threadId = args.threadId,
                 address = args.address,
                 forwardBody = args.forwardBody,
                 onForward = { body -> navController.navigate(NewConversationRoute(forwardBody = body)) },
                 onNavigateUp = { navController.navigateUp() },
+                onArchive = { id ->
+                    scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }
+                },
+                onBlock = { address ->
+                    scope.launch { container?.blocklistRepository?.block(address) }
+                },
+                onDeleteConversation = { id ->
+                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                },
                 viewModel = vm,
             )
         }

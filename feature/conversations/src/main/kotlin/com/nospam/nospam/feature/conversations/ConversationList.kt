@@ -49,8 +49,11 @@ import androidx.compose.ui.unit.dp
 import com.nospam.nospam.core.designsystem.component.Avatar
 import com.nospam.nospam.core.designsystem.component.ConfirmationDialog
 import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
+import com.nospam.nospam.core.designsystem.component.SelectionState
 import com.nospam.nospam.core.designsystem.component.SelectionTopAppBar
+import com.nospam.nospam.core.designsystem.component.PruneSelection
 import com.nospam.nospam.core.designsystem.component.TopBarAction
+import com.nospam.nospam.core.designsystem.component.rememberSelectionState
 import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ThreadSpamState
@@ -69,7 +72,7 @@ private const val SELECTION_INLINE_ACTIONS = 3
 internal fun ConversationListScaffold(
     title: String,
     onOpenDrawer: () -> Unit,
-    selection: ConversationSelection,
+    selection: SelectionState,
     selectionActions: List<TopBarAction>,
     modifier: Modifier = Modifier,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },

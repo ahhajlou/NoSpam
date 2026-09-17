@@ -62,7 +62,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.data.BackfillStatus
+import com.nospam.nospam.core.designsystem.component.PruneSelection
+import com.nospam.nospam.core.designsystem.component.SelectionState
 import com.nospam.nospam.core.designsystem.component.TopBarAction
+import com.nospam.nospam.core.designsystem.component.rememberSelectionState
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.ConversationFilter
 
@@ -88,10 +91,10 @@ fun ConversationsScreen(
     val context = LocalContext.current
     LaunchedEffect(Unit) { viewModel.checkDefaultSmsApp(context.applicationContext) }
 
-    val selection = rememberConversationSelection()
+    val selection = rememberSelectionState()
     val all = uiState.pinned + uiState.conversations
     // While loading the list is empty for reasons unrelated to the selection.
-    if (!uiState.isLoading) PruneSelection(selection, all)
+    if (!uiState.isLoading) PruneSelection(selection, all.map { it.threadId.value })
     val selected = all.filter { it.threadId.value in selection.ids }
     val summary = summarize(selected)
     val ids = selected.map { it.threadId.value }

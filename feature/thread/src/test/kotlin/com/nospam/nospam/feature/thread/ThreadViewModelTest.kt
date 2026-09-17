@@ -217,4 +217,73 @@ class ThreadViewModelTest {
         assertEquals(1, state.messages.count { it.body == "reply text" })
         assertEquals(MessageType.SENT, state.messages.last().type)
     }
+
+    @Test fun `the other party is taken from the first incoming message when the route has no address`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val vm = ThreadViewModel(telephonyWithThread9())
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        assertEquals("+1555", vm.uiState.value.address)
+    }
+
+    @Test fun `a known sender resolves to a contact name for the title`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val telephony = telephonyWithThread9()
+        telephony.contacts["+1555"] = com.nospam.nospam.core.model.Participant(address = "+1555", displayName = "Alice Freeman")
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        assertEquals("Alice Freeman", vm.uiState.value.contactName)
+        assertEquals("+1555", vm.uiState.value.address)
+    }
+
+    @Test fun `an unknown sender leaves the contact name null, so the screen shows the address`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val vm = ThreadViewModel(telephonyWithThread9())
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.contactName)
+    }
+
+    @Test fun `the address from the route wins for a thread with no messages yet`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val telephony = FakeTelephonyDataSource()
+        telephony.contacts["+98912"] = com.nospam.nospam.core.model.Participant(address = "+98912", displayName = "Sara")
+        val vm = ThreadViewModel(telephony, initialAddress = "+98912")
+        vm.loadThread(0L)
+        advanceUntilIdle()
+        assertEquals("+98912", vm.uiState.value.address)
+        assertEquals("Sara", vm.uiState.value.contactName)
+    }
+
+    @Test fun `deleting a selection removes every selected message`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val telephony = telephonyWithThread9(
+            Message(MessageId(1), ThreadId(9), "+1555", "one", 1L, MessageType.INBOX, true),
+            Message(MessageId(2), ThreadId(9), "+1555", "two", 2L, MessageType.INBOX, true),
+            Message(MessageId(3), ThreadId(9), "+1555", "three", 3L, MessageType.INBOX, true),
+        )
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        vm.onDeleteMessages(listOf(1L, 3L))
+        advanceUntilIdle()
+        assertEquals(listOf(1L, 3L), telephony.deletedMessageIds)
+    }
+
+    @Test fun `switching threads clears the previous contact name`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val telephony = telephonyWithThread9()
+        telephony.contacts["+1555"] = com.nospam.nospam.core.model.Participant(address = "+1555", displayName = "Alice Freeman")
+        val vm = ThreadViewModel(telephony)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        assertEquals("Alice Freeman", vm.uiState.value.contactName)
+
+        telephony.emitMessages(ThreadId(10), listOf(Message(MessageId(7), ThreadId(10), "+1999", "other", 5L, MessageType.INBOX, true)))
+        vm.loadThread(10L)
+        advanceUntilIdle()
+        assertNull(vm.uiState.value.contactName)
+        assertEquals("+1999", vm.uiState.value.address)
+    }
 }

@@ -32,29 +32,6 @@ class ConversationSelectionTest {
         isBlocked = blocked,
     )
 
-    @Test fun `toggle adds an unselected id and removes a selected one`() {
-        assertEquals(setOf(1L), toggled(emptySet(), 1))
-        assertEquals(setOf(1L, 2L), toggled(setOf(1L), 2))
-        assertEquals(setOf(2L), toggled(setOf(1L, 2L), 1))
-    }
-
-    @Test fun `selection is active only while something is selected`() {
-        val selection = ConversationSelection(emptySet())
-        assertFalse(selection.isActive)
-        selection.toggle(5)
-        assertTrue(selection.isActive)
-        selection.toggle(5)
-        assertFalse(selection.isActive)
-    }
-
-    @Test fun `retainVisible drops ids that left the list and keeps the rest`() {
-        val selection = ConversationSelection(setOf(1L, 2L, 3L))
-        selection.retainVisible(setOf(2L, 3L, 4L))
-        assertEquals(setOf(2L, 3L), selection.ids)
-        selection.retainVisible(emptySet())
-        assertFalse(selection.isActive)
-    }
-
     @Test fun `pin action unpins only when every selected row is pinned`() {
         assertTrue(summarize(listOf(conv(1, pinned = true), conv(2, pinned = true))).allPinned)
         assertFalse(summarize(listOf(conv(1, pinned = true), conv(2))).allPinned)

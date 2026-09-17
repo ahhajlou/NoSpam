@@ -18,7 +18,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nospam.nospam.core.designsystem.component.PruneSelection
+import com.nospam.nospam.core.designsystem.component.SelectionState
 import com.nospam.nospam.core.designsystem.component.TopBarAction
+import com.nospam.nospam.core.designsystem.component.rememberSelectionState
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.Participant
@@ -46,8 +49,8 @@ fun ArchivedScreen(
         onDelete(id)
     }
 
-    val selection = rememberConversationSelection()
-    PruneSelection(selection, archived)
+    val selection = rememberSelectionState()
+    PruneSelection(selection, archived.map { it.threadId.value })
     val ids = archived.map { it.threadId.value }.filter { it in selection.ids }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 

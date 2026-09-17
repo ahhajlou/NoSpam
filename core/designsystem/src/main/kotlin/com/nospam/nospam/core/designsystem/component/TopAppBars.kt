@@ -168,14 +168,9 @@ internal fun partitionTopBarActions(
     maxInline: Int,
 ): Pair<List<TopBarAction>, List<TopBarAction>> {
     val withIcon = actions.filter { it.icon != null }
-    // If everything fits inline there is no menu, so the "More" button's slot
-    // is free for one more icon.
-    val inlineCount = if (actions.size == withIcon.size && actions.size <= maxInline + 1) {
-        actions.size
-    } else {
-        minOf(maxInline, withIcon.size)
-    }
-    val inline = withIcon.take(inlineCount)
+    // Never more than maxInline icons, even when the rest would fit: the bar's
+    // shape should not change with the number of actions.
+    val inline = withIcon.take(maxInline)
     return inline to actions.filterNot { it in inline }
 }
 

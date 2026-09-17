@@ -262,6 +262,10 @@ pass 44/44 on the same device, so the storage layer is now verified.
 - [] Either bump Espresso and the Compose test artifacts, or keep a second AVD
   on an older API for UI tests. Decide before writing the E2E runner script,
   since the runner has to target whichever combination works.
+- Partly worked around 2026-09-17: the Compose UI tests for `feature:conversations`
+  and `feature:thread` also exist as JVM tests under Robolectric (`src/test`), so
+  those screens are covered and gated on every build. The `androidTest` copies stay
+  for real-device verification and remain unrunnable on API 37.
 
 ## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
 

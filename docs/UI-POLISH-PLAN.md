@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.3 done 2026-09-17.** Next: P1.4 (Thread).
+**P1.4 done 2026-09-17.** Next: P1.5 (New conversation) / P1.6 (Settings).
 
 ## 1. Constraints
 
@@ -139,8 +139,29 @@ Order chosen so each step leaves the app building and usable.
       - Fixed on the way: "Unblock" in the old menus called `block()`; now `unblock()`.
       - Removed: the preview-only "Empty Spam" button, the Spam row's inline "Not spam" button
         (swipe + selection replace it), the ActionMenuDialog use on these three screens.
-- [ ] P1.4 Thread: top app bar with contact name + call + overflow menu, message
-      long-press selection mode (same bar: 3 icons + ⋮, e.g. Copy/Forward/Delete, Share in ⋮), multi-line compose bar, emoji picker (`emoji2-emojipicker`), localized dates.
+- [x] P1.4 Thread: top app bar with contact name + call + overflow menu, message
+      long-press selection mode (same bar: 3 icons + ⋮, e.g. Copy/Forward/Delete, Share in ⋮),
+      Done 2026-09-17:
+      - Top bar: avatar + contact name (resolved through the existing `lookupContact`; number
+        underneath when the name comes from contacts, else the address), Call inline, ⋮ with
+        Add to contacts (unknown senders), Archive, Block, Delete conversation. Block and
+        Delete conversation confirm; Archive/Block/Delete navigate up afterwards.
+      - Messages: long-press selects (Copy, Forward, Delete inline; Share in ⋮; Forward/Share
+        single-selection only), tap reveals the time, selected rows highlight full width.
+      - Compose bar (`ComposeBar.kt`): multi-line (5), Send disabled while blank, emoji panel
+        (`emoji2-emojipicker` 1.6.0) that replaces the keyboard and inserts at the cursor;
+        the dead attachment button is gone (MMS attachments are phase 2).
+      - Date headers localized (`date_today`/`date_yesterday` + DateUtils), "Suspected spam" is
+        a label rather than a clickable chip, its two buttons now use string resources.
+      - `NewConversationScreen` split into its own file; `SelectionState`/`PruneSelection`
+        promoted to `core:designsystem` (messages are the second consumer).
+      - Selection bar shows exactly `maxInline` icons now: the old "one more icon when nothing
+        overflows" rule produced 4 icons and no ⋮.
+      - Fixed on the way: the app's XML theme was `Theme.AppCompat` (always dark), so the
+        emoji picker rendered white-on-white in light mode — now `Theme.AppCompat.DayNight`.
+      - Compose UI tests now run on the JVM under Robolectric (conversations + thread), which
+        works around the API 37 instrumented failure: merged coverage 38.22% -> 49.69%,
+        ratchet raised 37 -> 49. multi-line compose bar, emoji picker (`emoji2-emojipicker`), localized dates.
 - [ ] P1.5 New conversation screen: own top bar, M3 list items.
 - [ ] P1.6 Settings: top level General / per-SIM / Spam protection / Advanced / About, sub-pages.
 - [ ] P1.7 Onboarding pass for consistency.
@@ -209,3 +230,7 @@ Order chosen so each step leaves the app building and usable.
   updated: long_press_actions (selection bar, ⋮, multi-select, cancelled delete, back exits),
   spam_notspam_and_bulk (rewritten), persistence (star/mute via ⋮, Clear selection),
   _unblock_part1 (⋮ Block + confirm).
+- 2026-09-17 — P1.4 verified: build, 294 unit tests (incl. the new JVM Compose suites), kover
+  (49.69%, ratchet raised to 49), test APKs, E2E 8/0. Screenshots in the scratchpad
+  (p14-*.png). Two defects found by the screenshots: 4 icons in the selection bar (partition
+  rule) and the emoji picker unreadable in light mode (app XML theme was the dark AppCompat).

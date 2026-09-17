@@ -12,8 +12,27 @@
     <string name="action_delete">حذف</string>
     <string name="action_share">اشتراک‌گذاری</string>
     <string name="action_forward">ارسال به بعد</string>
-    <string name="delete_message_title">پیام حذف شود؟</string>
-    <string name="delete_message_body">این پیام برای همیشه حذف خواهد شد.</string>
     <string name="cancel">لغو</string>
     <string name="new_conversation_title">گفت‌وگوی جدید</string>
+    <string name="action_archive">بایگانی</string>
+    <string name="action_block">مسدود کردن</string>
+    <string name="action_call">تماس</string>
+    <string name="action_add_contact">افزودن به مخاطبان</string>
+    <string name="action_delete_conversation">حذف گفت‌وگو</string>
+    <string name="action_not_spam">هرزنامه نیست</string>
+    <string name="action_report_spam">گزارش هرزنامه</string>
+    <plurals name="delete_messages_title">
+        <item quantity="one">%d پیام حذف شود؟</item>
+        <item quantity="other">%d پیام حذف شود؟</item>
+    </plurals>
+    <string name="delete_messages_body">برای همیشه از این دستگاه حذف می‌شوند. این کار برگشت‌پذیر نیست.</string>
+    <string name="delete_conversation_title">این گفت‌وگو حذف شود؟</string>
+    <string name="delete_conversation_body">همه پیام‌های آن برای همیشه از این دستگاه حذف می‌شود. این کار برگشت‌پذیر نیست.</string>
+    <string name="block_sender_title">این فرستنده مسدود شود؟</string>
+    <string name="block_sender_body">دیگر پیامی از او دریافت نمی‌کنید. تا وقتی NoSpam برنامه پیش‌فرض پیامک است، شماره به فهرست شماره‌های مسدود گوشی هم اضافه می‌شود؛ پس تماس‌ها هم مسدود می‌شوند و با حذف NoSpam هم باقی می‌ماند.</string>
+    <string name="date_today">امروز</string>
+    <string name="date_yesterday">دیروز</string>
+    <string name="show_emoji_desc">نمایش ایموجی</string>
+    <string name="show_keyboard_desc">نمایش صفحه‌کلید</string>
+    <string name="sim_label">سیم‌کارت</string>
 </resources>

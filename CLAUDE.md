@@ -262,7 +262,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-15 |
 |---|---|---|
-| Unit | `src/test` across 16 modules | 238 tests, 38.63% line coverage |
+| Unit | `src/test` across 16 modules | 294 tests, 49.69% line coverage (2026-09-17) |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
 | Instrumented, Compose UI | 5 modules | **cannot run on API 37** — see below |
 | End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-17 |
@@ -276,6 +276,14 @@ Turbine for Flow assertions. Coverage gate is a ratchet in the root
 `NoSuchMethodException: android.hardware.input.InputManager.getInstance`.
 Espresso reflects into a platform method that no longer exists. Not app logic.
 Either bump the test artifacts or keep an older AVD for those suites.
+
+**Compose UI tests also run on the JVM through Robolectric**, which is how the
+screens are covered while that stands: `@RunWith(RobolectricTestRunner::class)`
+plus `@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")` in a module's
+`src/test`, with `testOptions.unitTests.isIncludeAndroidResources = true`. The
+qualifiers are not optional: Robolectric's default window is 320x470px, too
+small to compose a single list row, and every query then fails with "could not
+find any node".
 
 **End-to-end runs are local only**; CI has no emulator. `tools/run-e2e.sh`
 reseeds before every flow, because flows mutate shared fixtures and otherwise

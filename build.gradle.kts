@@ -74,8 +74,14 @@ kover {
             // Wave 2A raised merged line coverage from 31.1% (1457/4678)
             // to 38.22% (1788/4678); ratchet moved from 29 to 37, just
             // under the new actual number.
+            //
+            // 2026-09-17 (UI polish P1.4): Compose screens stopped being
+            // uncoverable. Robolectric runs the Compose UI tests on the JVM
+            // (see feature:conversations / feature:thread `src/test`), which
+            // also sidesteps the API 37 emulator failure in TODO.md. Merged
+            // line coverage 49.69% (2711/5456); ratchet 37 -> 49.
             rule("Merged line-coverage ratchet") {
-                minBound(37)
+                minBound(49)
             }
         }
     }

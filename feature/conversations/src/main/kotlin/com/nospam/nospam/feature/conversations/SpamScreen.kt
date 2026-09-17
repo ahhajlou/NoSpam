@@ -22,7 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nospam.nospam.core.designsystem.component.PruneSelection
+import com.nospam.nospam.core.designsystem.component.SelectionState
 import com.nospam.nospam.core.designsystem.component.TopBarAction
+import com.nospam.nospam.core.designsystem.component.rememberSelectionState
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.Participant
@@ -65,8 +68,8 @@ fun SpamScreen(
         onDelete(id)
     }
 
-    val selection = rememberConversationSelection()
-    PruneSelection(selection, spam)
+    val selection = rememberSelectionState()
+    PruneSelection(selection, spam.map { it.threadId.value })
     val selected = spam.filter { it.threadId.value in selection.ids }
     val summary = summarize(selected)
     var confirm by rememberSaveable { mutableStateOf<SpamConfirm?>(null) }
