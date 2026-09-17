@@ -2,14 +2,9 @@ appId: com.nospam.nospam
 tags:
   - settings
 ---
-# CAUTION: "Re-check all messages" below calls the real
-# SpamBackfillUseCase.rescanAll(), which re-runs the on-device classifier over
-# every message. It readily flags repetitive templated text (the kind
-# tools/seed.sh's bulk fixtures like NSTEST_LONG1 use) as spam. Combined with
-# spam_notspam_and_bulk.yaml's unscoped "Delete all", running this flow before
-# that one in the same suite pass can delete fixtures other flows still need —
-# it did during hardening of this suite. Re-run `tools/seed.sh seed` between
-# a run of this flow and anything that depends on the bulk fixtures.
+# Settings is a landing page of sections, each on its own page (P1.6). This
+# walks the sections, opens every dialog, and stops at the boundary where the
+# app hands off to system Settings. Requires tools/seed.sh seed.
 - launchApp:
     clearState: false
     permissions:
@@ -18,100 +13,59 @@ tags:
 - tapOn: "Open navigation menu"
 - tapOn: "Settings"
 - assertVisible: "General"
+- assertVisible: "Spam protection"
+- assertVisible: "Advanced"
+- assertVisible: "About"
+
+# --- General: default-SMS status, notifications, language ---
+- tapOn: "General"
+- assertVisible: "Default SMS app"
+- assertVisible: "NoSpam is default"          # role already held on this device
 - assertVisible: "Notifications"
 - assertVisible: "Bubbles"
-- assertVisible: "Language"
-
-# --- Language dialog: three radio options, Close ---
 - tapOn: "Language"
 - assertVisible: "App language"
-- assertVisible: "System default"
 - assertVisible: "English"
 - assertVisible: "فارسی"
 - tapOn: "Close"
 - assertNotVisible: "App language"
+# Settings with no storage yet are visible but disabled, never live-looking.
+- assertVisible: "Choose theme"
+- tapOn: "Navigate up"
 
-# --- Privacy & protection section (below the fold on a phone-size screen) ---
-- scrollUntilVisible:
-    element:
-        text: "Privacy & protection"
-    direction: DOWN
-- assertVisible: "Default SMS app"
-- assertVisible: "NoSpam is default"     # role already held on this device
-- assertVisible: "Spam protection"
-
-# SwitchRow (SettingsScreen.kt) has no row-level click handler and the M3
-# Switch carries no text/contentDescription of its own — it is the only
-# interactive element to the right of the row's title, so select it
-# positionally rather than by label.
+# --- Spam protection: the master switch round-trips ---
+- tapOn: "Spam protection"
+- assertVisible: "Filter spam, scams and phishing on this device"
 - tapOn:
     rightOf: "Spam protection"
 - tapOn:
     rightOf: "Spam protection"
+- assertVisible: "Blocked and allowed senders"
+- tapOn: "Navigate up"
 
-# "Re-check all messages" is NOT exercised here. It re-runs the classifier over
-# the whole history and recomputes sender_state, which resets every seeded
-# MIXED/SPAM fixture to CLEAN and silently breaks every later flow that depends
-# on them. It lives in settings_recheck.yaml, tagged `destructive`, excluded
-# from the default run. Assert only that the row is present.
+# --- Advanced: re-check entry point and the data dialog ---
+- tapOn: "Advanced"
 - assertVisible: "Re-check all messages"
-
 - tapOn: "Your data in Messages"
 - assertVisible: ".*Messages stay in the system SMS store.*"
 - tapOn: "Got it"
 - assertNotVisible: "Got it"
+- tapOn: "Navigate up"
 
-# --- Advanced section ---
-- scrollUntilVisible:
-    element:
-        text: "Advanced"
-    direction: DOWN
-- assertVisible: "Auto-download MMS"
-- tapOn:
-    rightOf: "Auto-download MMS"
-- tapOn:
-    rightOf: "Auto-download MMS"
-
-- tapOn: "Group messaging"
-- assertVisible: "Mass text"
-- assertVisible: "Send an SMS reply to all and get individual replies"
-- assertVisible: "Group MMS"
-- assertVisible: "Everyone sees replies in one group"
-- tapOn: "Close"
-
-# --- About section ---
-- scrollUntilVisible:
-    element:
-        text: "About"
-    direction: DOWN
-# "Version info" sits below the About header, so scrolling to the header is not
-# enough to bring the row itself into the viewport.
-- scrollUntilVisible:
-    element:
-        text: "Version info"
-    direction: DOWN
+# --- About ---
+- tapOn: "About"
 - assertVisible: "Version info"
-# Terms is the row below Version info; whether it is already on screen depends
-# on the exact layout (it stopped being once Settings got its own top bar).
-- scrollUntilVisible:
-    element:
-        text: "Terms of service"
-    direction: DOWN
 - tapOn: "Terms of service"
-- assertVisible: "Terms are not published yet for this build."
+- assertVisible: "Close"
 - tapOn: "Close"
+- tapOn: "Navigate up"
+- assertVisible: "General"
 
-# --- Boundary: Notifications / Bubbles leave the app for system Settings.
-# Assert up to the boundary and stop, per Wave 2B instructions. ---
-- scrollUntilVisible:
-    element:
-        text: "Notifications"
-    direction: UP
-# Tapping this launches the system notification settings via
-# ACTION_APP_NOTIFICATION_SETTINGS. Whether the OS screen actually appears is
-# the platform's business, not this app's, and asserting on it is flaky on an
-# emulator. What matters here is the regression we can own: the excursion does
-# not crash us, and we come back to a working app.
+# --- Boundary: Notifications leaves for system Settings.
+# Tapping this launches ACTION_APP_NOTIFICATION_SETTINGS. Whether the OS screen
+# appears is the platform's business; what matters here is the regression we own:
+# the excursion does not crash us, and we come back to a working app. ---
+- tapOn: "General"
 - tapOn: "Notifications"
 - back
-- assertVisible: "Settings"                  # back on Settings, app still alive
+- assertVisible: "Default SMS app"            # back on the General page, app alive

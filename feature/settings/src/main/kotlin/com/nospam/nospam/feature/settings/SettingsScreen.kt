@@ -1,414 +1,85 @@
 package com.nospam.nospam.feature.settings
 
-import com.nospam.nospam.core.telephony.DefaultSmsApp
-import android.app.NotificationManager
-import android.app.role.RoleManager
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.Settings
-import android.provider.Telephony
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.SimCard
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.dp
-import androidx.core.app.NotificationManagerCompat
-import androidx.lifecycle.compose.LifecycleResumeEffect
-import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nospam.nospam.core.designsystem.component.SettingsGroup
+import com.nospam.nospam.core.designsystem.component.SettingsItem
 import com.nospam.nospam.core.designsystem.component.TopBarNavigation
-import com.nospam.nospam.core.i18n.LocaleHelper
-import kotlinx.coroutines.launch
+import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 
-private data class LanguageOption(val tag: String, val title: String, val subtitle: String)
-
-@Composable
-private fun languageOptions() = listOf(
-    LanguageOption(
-        LocaleHelper.SELECTED_SYSTEM,
-        stringResource(R.string.lang_system),
-        stringResource(R.string.lang_follow),
-    ),
-    LanguageOption("en", stringResource(R.string.lang_english), stringResource(R.string.lang_english)),
-    LanguageOption("fa", stringResource(R.string.lang_persian), stringResource(R.string.lang_persian_sub)),
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Settings landing page: one entry per section, plus one per active SIM.
+ * Each entry opens its own page, which is how a messaging app's settings are
+ * expected to be laid out and keeps any single page short enough to scan.
+ */
 @Composable
 fun SettingsScreen(
     title: String,
     onOpenDrawer: () -> Unit = {},
-    onRecheck: () -> Unit = {},
+    viewModel: SettingsViewModel = viewModel(),
+    onOpenGeneral: () -> Unit = {},
+    onOpenSim: (Int) -> Unit = {},
+    onOpenSpamProtection: () -> Unit = {},
+    onOpenAdvanced: () -> Unit = {},
+    onOpenAbout: () -> Unit = {},
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    var isDefault by remember { mutableStateOf(isDefaultSmsApp(context)) }
-    var notificationsEnabled by remember { mutableStateOf(areNotificationsEnabled(context)) }
-    var bubblesAllowed by remember { mutableStateOf(areBubblesAllowed(context)) }
-    var selectedLanguage by remember { mutableStateOf(LocaleHelper.selectedOption()) }
-
-    var showLanguageDialog by remember { mutableStateOf(false) }
-    var showDataDialog by remember { mutableStateOf(false) }
-    var showTermsDialog by remember { mutableStateOf(false) }
-    var showGroupDialog by remember { mutableStateOf(false) }
-
-    val spamFlow = remember { SpamPreferences.flow(context) }
-    val spamEnabledState by spamFlow.collectAsState(initial = true)
-    val spamProtectionEnabled = spamEnabledState
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-    var autoDownloadMms by rememberSaveable { mutableStateOf(true) }
-    var groupMode by rememberSaveable { mutableStateOf("mass") }
-
-    val roleLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        isDefault = isDefaultSmsApp(context)
-    }
-
-    // Refresh system-backed state every time the user returns from system Settings
-    // or the role request dialog. This is what makes Default-SMS / Notifications
-    // subtitles correct instead of stale.
-    LifecycleResumeEffect(Unit) {
-        isDefault = isDefaultSmsApp(context)
-        notificationsEnabled = areNotificationsEnabled(context)
-        bubblesAllowed = areBubblesAllowed(context)
-        selectedLanguage = LocaleHelper.selectedOption()
-        onPauseOrDispose { }
-    }
-
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            NoSpamTopAppBar(
-                title = title,
-                navigation = TopBarNavigation.Menu(onOpenDrawer),
-                scrollBehavior = scrollBehavior,
+    SettingsScaffold(title = title, navigation = TopBarNavigation.Menu(onOpenDrawer)) {
+        SettingsGroup {
+            SettingsItem(
+                title = stringResource(R.string.section_general),
+                supportingText = stringResource(R.string.general_summary),
+                icon = Icons.Outlined.Settings,
+                onClick = onOpenGeneral,
             )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { innerPadding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp)) {
-        item { SectionHeader(stringResource(R.string.section_general)) }
-        item {
-            SettingsRow(
-                title = stringResource(R.string.notif_title),
-                subtitle = if (notificationsEnabled) stringResource(R.string.notif_on) else stringResource(R.string.notif_off),
-                onClick = { openAppNotificationSettings(context) }
-            )
-        }
-        item {
-            SettingsRow(
-                title = stringResource(R.string.bubbles_title),
-                subtitle = when (bubblesAllowed) {
-                    true -> stringResource(R.string.bubbles_allowed)
-                    false -> stringResource(R.string.bubbles_off)
-                    null -> stringResource(R.string.bubbles_system)
-                },
-                onClick = { openBubbleSettings(context) }
-            )
-        }
-        item {
-            SettingsRow(
-                title = stringResource(R.string.lang_title),
-                subtitle = languageDisplayName(selectedLanguage),
-                onClick = { showLanguageDialog = true }
-            )
-        }
-
-        item { SectionHeader(stringResource(R.string.section_privacy)) }
-        item {
-            SettingsRow(
-                title = stringResource(R.string.default_sms_title),
-                subtitle = if (isDefault) stringResource(R.string.default_sms_on) else stringResource(R.string.default_sms_off),
-                trailing = {
-                    if (isDefault) Text("✓", color = MaterialTheme.colorScheme.primary)
-                    else Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                },
-                onClick = { if (!isDefault) requestDefaultSmsRole(context, roleLauncher) }
-            )
-        }
-        item {
-            SwitchRow(
-                title = stringResource(R.string.spam_title),
-                subtitle = stringResource(R.string.spam_sub),
-                checked = spamProtectionEnabled,
-                onCheckedChange = { scope.launch { SpamPreferences.setEnabled(context, it) } }
-            )
-        }
-        item {
-            val recheckStarted = stringResource(R.string.recheck_started)
-            SettingsRow(
-                title = stringResource(R.string.scan_title),
-                subtitle = stringResource(R.string.scan_sub),
-                onClick = {
-                    onRecheck()
-                    scope.launch {
-                        snackbarHostState.showSnackbar(recheckStarted)
-                    }
-                }
-            )
-        }
-        item {
-            SettingsRow(
-                title = stringResource(R.string.data_title),
-                subtitle = stringResource(R.string.data_sub),
-                onClick = { showDataDialog = true }
-            )
-        }
-
-        item { SectionHeader(stringResource(R.string.section_advanced)) }
-        item {
-            SwitchRow(
-                title = stringResource(R.string.mms_title),
-                subtitle = stringResource(R.string.mms_sub),
-                checked = autoDownloadMms,
-                onCheckedChange = { autoDownloadMms = it }
-            )
-        }
-        item {
-            SettingsRow(
-                title = stringResource(R.string.group_title),
-                subtitle = if (groupMode == "mass") stringResource(R.string.group_mass_individual) else stringResource(R.string.group_mms),
-                onClick = { showGroupDialog = true }
-            )
-        }
-
-        item { SectionHeader(stringResource(R.string.section_about)) }
-        item {
-            // Informational only: no chevron, no click action.
-            InfoRow(title = stringResource(R.string.about_version), subtitle = appVersion(context))
-        }
-        item {
-            SettingsRow(
-                title = stringResource(R.string.about_terms),
-                subtitle = null,
-                onClick = { showTermsDialog = true }
-            )
-        }
-        }
-    }
-
-    if (showLanguageDialog) {
-        AlertDialog(
-            onDismissRequest = { showLanguageDialog = false },
-            title = { Text(stringResource(R.string.dialog_language)) },
-            text = {
-                Column {
-                    languageOptions().forEach { option ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .selectable(
-                                    selected = selectedLanguage == option.tag,
-                                    role = Role.RadioButton,
-                                    onClick = {
-                                        applyLanguage(option.tag)
-                                        selectedLanguage = option.tag
-                                        showLanguageDialog = false
-                                    }
-                                )
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selectedLanguage == option.tag,
-                                onClick = null
-                            )
-                            Column(modifier = Modifier.padding(start = 12.dp)) {
-                                Text(option.title, style = MaterialTheme.typography.bodyLarge)
-                                Text(option.subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showLanguageDialog = false }) { Text(stringResource(R.string.action_close)) }
+            uiState.sims.forEach { sim ->
+                SettingsItem(
+                    title = sim.displayName,
+                    // Carriers often leave the number out of the SIM; the page
+                    // says so rather than showing an empty line.
+                    supportingText = sim.number ?: stringResource(R.string.sim_number_unknown),
+                    icon = Icons.Outlined.SimCard,
+                    onClick = { onOpenSim(sim.subscriptionId) },
+                )
             }
-        )
-    }
-
-    if (showGroupDialog) {
-        AlertDialog(
-            onDismissRequest = { showGroupDialog = false },
-            title = { Text(stringResource(R.string.group_title)) },
-            text = {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .selectable(selected = groupMode == "mass", role = Role.RadioButton, onClick = { groupMode = "mass"; showGroupDialog = false })
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = groupMode == "mass", onClick = null)
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text(stringResource(R.string.group_mass), style = MaterialTheme.typography.bodyLarge)
-                            Text(stringResource(R.string.group_mass_sub), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .selectable(selected = groupMode == "mms", role = Role.RadioButton, onClick = { groupMode = "mms"; showGroupDialog = false })
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = groupMode == "mms", onClick = null)
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text(stringResource(R.string.group_mms), style = MaterialTheme.typography.bodyLarge)
-                            Text(stringResource(R.string.group_mms_sub), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showGroupDialog = false }) { Text(stringResource(R.string.action_close)) }
-            }
-        )
-    }
-
-    if (showDataDialog) {
-        AlertDialog(
-            onDismissRequest = { showDataDialog = false },
-            title = { Text(stringResource(R.string.data_title)) },
-            text = { Text(stringResource(R.string.data_text)) },
-            confirmButton = {
-                TextButton(onClick = { showDataDialog = false }) { Text(stringResource(R.string.data_ok)) }
-            }
-        )
-    }
-
-    if (showTermsDialog) {
-        AlertDialog(
-            onDismissRequest = { showTermsDialog = false },
-            title = { Text(stringResource(R.string.about_terms)) },
-            text = { Text(stringResource(R.string.terms_text)) },
-            confirmButton = {
-                TextButton(onClick = { showTermsDialog = false }) { Text(stringResource(R.string.action_close)) }
-            }
-        )
-    }
-}
-
-@Composable
-private fun languageDisplayName(tag: String): String = when {
-    tag == LocaleHelper.SELECTED_SYSTEM -> stringResource(R.string.lang_system)
-    tag.startsWith("fa") -> stringResource(R.string.lang_persian)
-    else -> stringResource(R.string.lang_english)
-}
-
-private fun applyLanguage(tag: String) {
-    if (tag == LocaleHelper.SELECTED_SYSTEM) {
-        LocaleHelper.clearToSystemDefault()
-    } else {
-        LocaleHelper.setLocale(tag)
-    }
-}
-
-private fun isDefaultSmsApp(context: Context): Boolean = DefaultSmsApp.isHeld(context)
-
-private fun requestDefaultSmsRole(
-    context: Context,
-    launcher: androidx.activity.result.ActivityResultLauncher<Intent>
-) {
-    // Launch can still throw if the activity is not in a valid state; the status
-    // row refreshes on resume, so swallowing keeps it truthful either way.
-    runCatching { DefaultSmsApp.requestIntent(context)?.let(launcher::launch) }
-}
-
-private fun areNotificationsEnabled(context: Context): Boolean {
-    return try {
-        NotificationManagerCompat.from(context).areNotificationsEnabled()
-    } catch (_: Exception) {
-        true
-    }
-}
-
-private fun areBubblesAllowed(context: Context): Boolean? {
-    return try {
-        val manager = context.getSystemService(NotificationManager::class.java) ?: return null
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-                // areBubblesAllowed() is deprecated since API 31; getBubblePreference()
-                // distinguishes ALL / SELECTED / NONE.
-                manager.getBubblePreference() != NotificationManager.BUBBLE_PREFERENCE_NONE
-            }
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
-                @Suppress("DEPRECATION")
-                manager.areBubblesAllowed()
-            }
-            else -> null
+            SettingsItem(
+                title = stringResource(R.string.section_spam),
+                supportingText = stringResource(R.string.spam_summary),
+                icon = Icons.Outlined.Security,
+                onClick = onOpenSpamProtection,
+            )
+            SettingsItem(
+                title = stringResource(R.string.section_advanced),
+                supportingText = stringResource(R.string.advanced_summary),
+                icon = Icons.Outlined.Tune,
+                onClick = onOpenAdvanced,
+            )
+            SettingsItem(
+                title = stringResource(R.string.section_about),
+                supportingText = appVersion(context),
+                icon = Icons.Outlined.Info,
+                onClick = onOpenAbout,
+            )
         }
-    } catch (_: Exception) {
-        null
     }
 }
 
-private fun openAppNotificationSettings(context: Context) {
-    try {
-        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-        }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-    } catch (_: Exception) {
-        // No-op: staying in Settings is better than crashing.
-    }
-}
-
-private fun openBubbleSettings(context: Context) {
-    try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_BUBBLE_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } else {
-            openAppNotificationSettings(context)
-        }
-    } catch (_: Exception) {
-        openAppNotificationSettings(context)
-    }
-}
-
-private fun appVersion(context: Context): String {
+internal fun appVersion(context: Context): String {
     return try {
         val pm = context.packageManager
         val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -429,64 +100,9 @@ private fun appVersion(context: Context): String {
     }
 }
 
-@Composable
-private fun SectionHeader(title: String) {
-    Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
-}
-
-@Composable
-private fun SettingsRow(
-    title: String,
-    subtitle: String?,
-    onClick: () -> Unit,
-    trailing: @Composable (() -> Unit)? = {
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-) {
-    Row(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        trailing?.invoke()
-    }
-    HorizontalDivider()
-}
-
-@Composable
-private fun SwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-    HorizontalDivider()
-}
-
-@Composable
-private fun InfoRow(title: String, subtitle: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-    HorizontalDivider()
-}
-
-// Previews
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, locale = "fa")
 @Composable
 fun SettingsScreenPreview() {
-    com.nospam.nospam.core.designsystem.theme.NoSpamTheme {
-        SettingsScreen(title = "Settings")
-    }
+    NoSpamTheme { SettingsScreen(title = "Settings") }
 }

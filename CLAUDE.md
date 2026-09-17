@@ -262,7 +262,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-15 |
 |---|---|---|
-| Unit | `src/test` across 16 modules | 294 tests, 49.69% line coverage (2026-09-17) |
+| Unit | `src/test` across 16 modules | 311 tests, 54.88% line coverage (2026-09-17) |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
 | Instrumented, Compose UI | 5 modules | **cannot run on API 37** — see below |
 | End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-17 |

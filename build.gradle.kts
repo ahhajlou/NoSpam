@@ -79,9 +79,11 @@ kover {
             // uncoverable. Robolectric runs the Compose UI tests on the JVM
             // (see feature:conversations / feature:thread `src/test`), which
             // also sidesteps the API 37 emulator failure in TODO.md. Merged
-            // line coverage 49.69% (2711/5456); ratchet 37 -> 49.
+            // line coverage 49.69% (2711/5456); ratchet 37 -> 49. Settings and
+            // the compose bar's counter brought their own suites: 54.88%
+            // (3100/5649); ratchet 49 -> 54.
             rule("Merged line-coverage ratchet") {
-                minBound(49)
+                minBound(54)
             }
         }
     }

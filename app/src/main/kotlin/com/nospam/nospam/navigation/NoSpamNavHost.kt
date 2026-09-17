@@ -41,7 +41,13 @@ import com.nospam.nospam.feature.conversations.ConversationsViewModel
 import com.nospam.nospam.feature.conversations.SpamScreen
 import com.nospam.nospam.feature.conversations.SpamViewModel
 import com.nospam.nospam.feature.onboarding.OnboardingScreen
+import com.nospam.nospam.feature.settings.AboutSettingsScreen
+import com.nospam.nospam.feature.settings.AdvancedSettingsScreen
+import com.nospam.nospam.feature.settings.GeneralSettingsScreen
 import com.nospam.nospam.feature.settings.SettingsScreen
+import com.nospam.nospam.feature.settings.SettingsViewModel
+import com.nospam.nospam.feature.settings.SimSettingsScreen
+import com.nospam.nospam.feature.settings.SpamSettingsScreen
 import com.nospam.nospam.feature.settings.SpamPreferences
 import com.nospam.nospam.feature.thread.NewConversationScreen
 import com.nospam.nospam.feature.thread.ThreadScreen
@@ -52,6 +58,11 @@ import kotlinx.serialization.Serializable
 @Serializable object ArchivedRoute
 @Serializable object SpamRoute
 @Serializable object SettingsRoute
+@Serializable object SettingsGeneralRoute
+@Serializable data class SettingsSimRoute(val subscriptionId: Int)
+@Serializable object SettingsSpamRoute
+@Serializable object SettingsAdvancedRoute
+@Serializable object SettingsAboutRoute
 @Serializable object OnboardingRoute
 @Serializable data class NewConversationRoute(val forwardBody: String? = null)
 @Serializable data class ThreadRoute(val threadId: Long, val address: String? = null, val forwardBody: String? = null)
@@ -119,6 +130,10 @@ fun NoSpamNavHost(
     val spamVm: SpamViewModel? = container?.let {
         viewModel(factory = vmFactory { SpamViewModel(it.conversationsRepository) })
     }
+    // Hoisted so the SIM list survives navigating into a SIM's page and back.
+    val settingsVm: SettingsViewModel = viewModel(
+        factory = vmFactory { SettingsViewModel(container?.telephony) }
+    )
 
     NavHost(navController = navController, startDestination = start) {
         composable<ConversationsRoute> {
@@ -192,8 +207,35 @@ fun NoSpamNavHost(
             SettingsScreen(
                 title = stringResource(R.string.drawer_settings),
                 onOpenDrawer = onOpenDrawer,
+                viewModel = settingsVm,
+                onOpenGeneral = { navController.navigate(SettingsGeneralRoute) },
+                onOpenSim = { subscriptionId -> navController.navigate(SettingsSimRoute(subscriptionId)) },
+                onOpenSpamProtection = { navController.navigate(SettingsSpamRoute) },
+                onOpenAdvanced = { navController.navigate(SettingsAdvancedRoute) },
+                onOpenAbout = { navController.navigate(SettingsAboutRoute) },
+            )
+        }
+        composable<SettingsGeneralRoute> {
+            GeneralSettingsScreen(onNavigateUp = { navController.navigateUp() })
+        }
+        composable<SettingsSimRoute> { backStackEntry ->
+            SimSettingsScreen(
+                subscriptionId = backStackEntry.toRoute<SettingsSimRoute>().subscriptionId,
+                onNavigateUp = { navController.navigateUp() },
+                viewModel = settingsVm,
+            )
+        }
+        composable<SettingsSpamRoute> {
+            SpamSettingsScreen(onNavigateUp = { navController.navigateUp() })
+        }
+        composable<SettingsAdvancedRoute> {
+            AdvancedSettingsScreen(
+                onNavigateUp = { navController.navigateUp() },
                 onRecheck = { container?.spamBackfill?.rescanAll() },
             )
+        }
+        composable<SettingsAboutRoute> {
+            AboutSettingsScreen(onNavigateUp = { navController.navigateUp() })
         }
         composable<OnboardingRoute> {
             val scope = rememberCoroutineScope()

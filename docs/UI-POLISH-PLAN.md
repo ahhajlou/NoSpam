@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.4 done 2026-09-17.** Next: P1.5 (New conversation) / P1.6 (Settings).
+**P1.5, P1.6 and the SMS counter done 2026-09-17.** Next: P1.7 (onboarding), P1.8 (strings), P1.9 (tests), P1.10 (visual check).
 
 ## 1. Constraints
 
@@ -162,8 +162,22 @@ Order chosen so each step leaves the app building and usable.
       - Compose UI tests now run on the JVM under Robolectric (conversations + thread), which
         works around the API 37 instrumented failure: merged coverage 38.22% -> 49.69%,
         ratchet raised 37 -> 49. multi-line compose bar, emoji picker (`emoji2-emojipicker`), localized dates.
-- [ ] P1.5 New conversation screen: own top bar, M3 list items.
-- [ ] P1.6 Settings: top level General / per-SIM / Spam protection / Advanced / About, sub-pages.
+- [x] P1.5 New conversation screen (2026-09-17): shared `Avatar` for top contacts and the
+      contact list, M3 `ListItem` rows, contacts-permission prompt restyled and its two
+      hardcoded English strings translated.
+- [x] P1.6 Settings (2026-09-17): landing page of sections, each on its own route/page.
+      - General: Default SMS app, Notifications, Bubbles, Language + an Appearance group
+        (theme, dynamic color, message sounds) shown disabled until phase 2 storage exists.
+      - One page per active SIM (`SettingsViewModel` reads `getActiveSubscriptions`): group
+        messaging, auto-download MMS, roaming MMS, delivery reports (disabled), and the SIM's
+        number with "Not provided by this SIM" when the carrier withholds it.
+      - Spam protection: master switch (live), blocked/allowed senders and the contacts-warning
+        toggle disabled pending phase 2. Advanced: re-check, auto-delete spam (disabled), data
+        notice. About: version, terms.
+      - Rows use the designsystem `SettingsGroup`/`SettingsItem`/`SettingsSwitchItem`.
+- [x] P1.6b Compose-bar SMS counter (user request, 2026-09-17): `smsLength()` computes GSM-7 vs
+      UCS-2 segmentation in pure Kotlin (160/153 vs 70/67, extension chars double); the counter
+      shows "remaining/parts" above Send once a second part is near, with a spoken description.
 - [ ] P1.7 Onboarding pass for consistency.
 - [ ] P1.8 Strings: remove hard-coded English, add Persian translations.
 - [ ] P1.9 Tests: update Compose UI tests and `.maestro/flows` (they anchor on
@@ -234,3 +248,7 @@ Order chosen so each step leaves the app building and usable.
   (49.69%, ratchet raised to 49), test APKs, E2E 8/0. Screenshots in the scratchpad
   (p14-*.png). Two defects found by the screenshots: 4 icons in the selection bar (partition
   rule) and the emoji picker unreadable in light mode (app XML theme was the dark AppCompat).
+- 2026-09-17 — P1.5/P1.6/counter: build green, 311 unit tests, coverage 54.88% (ratchet 49 → 54),
+  settings flows rewritten for the sub-pages. Note: the emulator reports no active SIM, so the
+  per-SIM pages are unverified on-device; they are covered by the ViewModel path only.
+- 2026-09-17 — E2E after the settings restructure: 8 pass / 0 fail.

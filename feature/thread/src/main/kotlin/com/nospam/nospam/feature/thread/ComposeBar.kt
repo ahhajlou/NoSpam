@@ -29,8 +29,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -107,13 +110,16 @@ internal fun ComposeBar(
                     disabledIndicatorColor = Color.Transparent,
                 ),
             )
-            IconButton(onClick = onSend, enabled = field.text.isNotBlank()) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = stringResource(R.string.send_message_desc),
-                    tint = if (field.text.isNotBlank()) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                SmsCounter(field.text)
+                IconButton(onClick = onSend, enabled = field.text.isNotBlank()) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = stringResource(R.string.send_message_desc),
+                        tint = if (field.text.isNotBlank()) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         if (emojiOpen) {
@@ -121,6 +127,40 @@ internal fun ComposeBar(
         }
     }
 }
+
+/**
+ * "remaining/parts", directly above Send, once the count starts to matter:
+ * a second part is about to begin, or the message already spans several.
+ * Hidden otherwise, so a short message keeps an uncluttered bar.
+ *
+ * The number is the limit the network will actually apply — Persian text or a
+ * single emoji switches the message to UCS-2, where a part is 70 characters
+ * rather than 160 — and each part is charged separately.
+ */
+@Composable
+private fun SmsCounter(text: String, modifier: Modifier = Modifier) {
+    val length = remember(text) { smsLength(text) }
+    val nearLimit = length.segments > 1 || length.remainingInSegment <= COUNTER_VISIBLE_FROM
+    if (length.segments == 0 || !nearLimit) return
+    val resources = LocalResources.current
+    Text(
+        text = stringResource(R.string.sms_counter, length.remainingInSegment, length.segments),
+        style = MaterialTheme.typography.labelSmall,
+        color = if (length.segments > 1) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.semantics {
+            contentDescription = resources.getQuantityString(
+                R.plurals.sms_counter_desc,
+                length.segments,
+                length.remainingInSegment,
+                length.segments,
+            )
+        },
+    )
+}
+
+/** Show the counter once this few characters remain in the current part. */
+private const val COUNTER_VISIBLE_FROM = 20
 
 /** Inserts [text] at the cursor, replacing any selection, and moves the cursor after it. */
 internal fun TextFieldValue.insert(text: String): TextFieldValue {

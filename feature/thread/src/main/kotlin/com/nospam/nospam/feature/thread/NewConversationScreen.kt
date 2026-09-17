@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +24,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -38,6 +42,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
+import com.nospam.nospam.core.designsystem.component.Avatar
 import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
 import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
@@ -157,9 +163,22 @@ fun NewConversationScreen(
                 ),
             )
             if (!hasContactPerm && dataSource != null) {
-                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Contacts permission needed to show your contacts", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                    androidx.compose.material3.TextButton(onClick = { permLauncher.launch(android.Manifest.permission.READ_CONTACTS) }) { Text("Allow") }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.contacts_permission_rationale),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                    androidx.compose.material3.TextButton(
+                        onClick = { permLauncher.launch(android.Manifest.permission.READ_CONTACTS) }
+                    ) { Text(stringResource(R.string.contacts_permission_allow)) }
                 }
             }
             Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
@@ -169,24 +188,20 @@ fun NewConversationScreen(
             ) {
                 contacts.take(5).forEach { contact ->
                     Column(
-                        modifier = Modifier.clickable { onAddressEntered(contact.phone) },
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.medium)
+                            .clickable { onAddressEntered(contact.phone) }
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                            .widthIn(max = 88.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Box(
-                            modifier = Modifier.size(56.dp).clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                contact.name.take(1).uppercase(),
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        }
+                        Avatar(name = contact.name, colorKey = contact.phone, size = 56.dp)
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             contact.name.substringBefore(" "),
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -195,32 +210,13 @@ fun NewConversationScreen(
             Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(filtered, key = { it.phone }) { contact ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .clickable { onAddressEntered(contact.phone) }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier.size(40.dp).clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                contact.name.take(1).uppercase(),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(contact.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                contact.detail,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                    ListItem(
+                        headlineContent = { Text(contact.name) },
+                        supportingContent = { Text(contact.detail) },
+                        leadingContent = { Avatar(name = contact.name, colorKey = contact.phone) },
+                        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                        modifier = Modifier.clickable { onAddressEntered(contact.phone) },
+                    )
                 }
             }
         }

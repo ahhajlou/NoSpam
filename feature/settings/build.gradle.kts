@@ -33,6 +33,13 @@ android {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
+    testOptions {
+        unitTests {
+            // Compose UI tests run on the JVM through Robolectric; they need the
+            // merged resources and the Compose test manifest's activity.
+            isIncludeAndroidResources = true
+        }
+    }
     buildFeatures {
         compose = true
     }
@@ -60,6 +67,8 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

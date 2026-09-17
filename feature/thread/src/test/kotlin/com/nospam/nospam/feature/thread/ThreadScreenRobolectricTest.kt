@@ -94,7 +94,8 @@ class ThreadScreenRobolectricTest {
     }
 
     @Test fun `send stays disabled until the draft has text`() {
-        rule.setContent { ThreadScreen(threadId = 1L) }
+        // Drafts are saved per thread id, so each typing test uses its own.
+        rule.setContent { ThreadScreen(threadId = 41L) }
         rule.onNodeWithContentDescription("Send message").assertIsNotEnabled()
         rule.onNodeWithText("SMS message").performTextInput("hi")
         rule.waitForIdle()
@@ -109,5 +110,24 @@ class ThreadScreenRobolectricTest {
         rule.onNodeWithContentDescription("Show keyboard").performClick()
         rule.waitForIdle()
         rule.onNodeWithContentDescription("Show emoji").assertIsDisplayed()
+    }
+
+    @Test fun `the character counter appears only as a draft approaches the limit`() {
+        rule.setContent { ThreadScreen(threadId = 42L) }
+        rule.onNodeWithText("SMS message").performTextInput("short")
+        rule.waitForIdle()
+        rule.onNodeWithText("155/1").assertDoesNotExist()
+
+        // 150 latin characters: 10 left in a single 160-character part.
+        rule.onNodeWithText("short").performTextInput("a".repeat(145))
+        rule.waitForIdle()
+        rule.onNodeWithText("10/1").assertIsDisplayed()
+    }
+
+    @Test fun `going past one part shows the part count`() {
+        rule.setContent { ThreadScreen(threadId = 43L) }
+        rule.onNodeWithText("SMS message").performTextInput("a".repeat(161))
+        rule.waitForIdle()
+        rule.onNodeWithText("145/2").assertIsDisplayed()
     }
 }
