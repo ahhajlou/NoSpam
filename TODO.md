@@ -255,6 +255,45 @@ pass 44/44 on the same device, so the storage layer is now verified.
   than cleanup. Until it is done, another app handing off to NoSpam gets a cold
   inbox.
 
+## Thread draft carryover — analyze before coding (2026-09-15)
+
+Found while black-box unit testing the new long-press message actions
+(Copy/Delete/Share/Forward, `ThreadScreen.kt`/`ThreadViewModel.kt`). A related
+but distinct bug in the same area — `forwardBody` being dropped entirely on
+`ThreadViewModel`'s no-`dataSource` path — was already fixed. This one is
+left open deliberately.
+
+`ThreadViewModel.loadThread(id, address, context, forwardBody)` only ever
+overwrites `uiState.draft` in two cases: `forwardBody != null` (synchronous),
+or a persisted draft is found via `DraftStore.load(context, id)` on the live
+path (`dataSource != null`), and only if that thread actually has a saved
+draft. If neither applies — the common case of a plain reload with
+`forwardBody == null` and no persisted draft for the *target* thread — nothing
+in `loadThread` clears `draft` at all. The live-path reset
+(`_uiState.value.copy(threadId = id, messages = emptyList(), ...)`) uses
+`.copy()`, which carries the previous value of `draft` forward untouched.
+
+Concretely: open thread A, type (or forward) text into the compose bar
+without sending, navigate to thread B, which has never had a saved draft —
+thread B's compose bar shows thread A's leftover text, and nothing on this
+path ever resets it to `""`.
+
+This predates the Copy/Delete/Share/Forward work — it is pre-existing
+`ThreadViewModel` behavior — but Forward makes it easier to trigger, since it
+deliberately populates a draft that the user may then navigate away from
+without sending.
+
+**Analyze again before touching `ThreadViewModel` code here.** In particular:
+whether a fresh thread with no persisted draft should explicitly reset to
+`""` up front, and whether doing so can race the async `DraftStore.load` (it
+runs in `viewModelScope.launch`, so an eager synchronous reset plus a later
+async overwrite needs to be ordered correctly, not just patched to "clear
+first").
+
+- [] Investigate and fix: draft carries over between threads when neither
+  `forwardBody` nor a persisted `DraftStore` entry exists for the
+  newly-opened thread. `feature/thread/src/main/kotlin/com/nospam/nospam/feature/thread/ThreadViewModel.kt`, `loadThread()`.
+
 ## Project-wide
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
 - [] Add instrumented tests for `core:telephony` provider query/write logic (off-device fake coverage is thin, per CLAUDE.md §5)

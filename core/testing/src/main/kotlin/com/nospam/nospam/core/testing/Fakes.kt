@@ -77,6 +77,8 @@ class FakeTelephonyDataSource(
     val insertedSent = mutableListOf<Pair<String, String>>()
     /** Thread ids passed to `deleteConversation`, in order. */
     val deletedThreadIds = mutableListOf<Long>()
+    /** Message ids passed to `deleteMessage`, in order. */
+    val deletedMessageIds = mutableListOf<Long>()
     /** Thread ids passed to `markAsRead`, in order (may contain duplicates). */
     val markedReadThreadIds = mutableListOf<Long>()
     /** Every `sendMessage` call, in order: address, body, subscriptionId. */
@@ -148,6 +150,11 @@ class FakeTelephonyDataSource(
 
     override suspend fun deleteConversation(threadId: ThreadId) {
         deletedThreadIds.add(threadId.value)
+    }
+
+    override suspend fun deleteMessage(messageId: Long) {
+        deletedMessageIds.add(messageId)
+        messagesByThread.values.forEach { flow -> flow.value = flow.value.filterNot { it.id.value == messageId } }
     }
 
     override suspend fun insertInboxMessage(

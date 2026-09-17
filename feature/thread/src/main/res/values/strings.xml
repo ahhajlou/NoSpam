@@ -9,4 +9,10 @@
     <string name="suspected_spam">Suspected spam</string>
     <string name="jump_to_latest_desc">Jump to latest</string>
     <string name="action_copy">Copy</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_share">Share</string>
+    <string name="action_forward">Forward</string>
+    <string name="delete_message_title">Delete message?</string>
+    <string name="delete_message_body">This message will be permanently deleted.</string>
+    <string name="cancel">Cancel</string>
 </resources>

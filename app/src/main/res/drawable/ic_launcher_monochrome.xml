@@ -7,10 +7,13 @@
     <group android:scaleX="0.9118" android:scaleY="0.9118"
         android:translateX="8.410" android:translateY="7.498">
         <path
-            android:fillColor="#1B1A19"
+            android:strokeColor="#000000"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
             android:pathData="M16 38c0-9.4 7.6-17 17-17h34c9.4 0 17 7.6 17 17v14c0 9.4-7.6 17-17 17H44L28.6 80.4c-1.6 1.2-3.8 0-3.8-2V67.2A17 17 0 0 1 16 52V38Z" />
         <path
-            android:strokeColor="#F4EFE6"
+            android:strokeColor="#000000"
             android:strokeWidth="6.5"
             android:strokeLineCap="round"
             android:strokeLineJoin="round"

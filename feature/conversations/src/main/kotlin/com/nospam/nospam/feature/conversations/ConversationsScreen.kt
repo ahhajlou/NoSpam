@@ -53,6 +53,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.data.BackfillStatus
+import com.nospam.nospam.core.designsystem.component.ActionMenuDialog
+import com.nospam.nospam.core.designsystem.component.ActionMenuItem
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ConversationFilter
@@ -231,7 +233,7 @@ fun ConversationsScreen(
         }
         menuFor?.let { conv ->
             val address = conv.participants.firstOrNull()?.address
-            ConversationActionsDialog(
+            ActionMenuDialog(
                 title = conv.participants.firstOrNull()?.displayName ?: address
                     ?: stringResource(R.string.unknown_sender),
                 actions = inboxActions(
@@ -247,7 +249,7 @@ fun ConversationsScreen(
                     onToggleMute = { onToggleMute(conv.threadId.value) },
                 ) + buildList {
                     if (address != null) {
-                        add(ConversationAction(label = "Add to contacts", onClick = {
+                        add(ActionMenuItem(label = "Add to contacts", onClick = {
                             try {
                                 val intent = android.content.Intent(android.content.Intent.ACTION_INSERT).apply {
                                     type = android.provider.ContactsContract.Contacts.CONTENT_TYPE
@@ -256,7 +258,7 @@ fun ConversationsScreen(
                                 context.startActivity(intent)
                             } catch (_: Exception) {}
                         }))
-                        add(ConversationAction(label = "Call", onClick = {
+                        add(ActionMenuItem(label = "Call", onClick = {
                             try { context.startActivity(android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.fromParts("tel", address, null))) } catch (_: Exception) {}
                         }))
                     }
@@ -279,26 +281,26 @@ private fun inboxActions(
     onToggleStar: () -> Unit,
     onTogglePin: () -> Unit,
     onToggleMute: () -> Unit,
-): List<ConversationAction> = buildList {
+): List<ActionMenuItem> = buildList {
     add(
-        ConversationAction(
+        ActionMenuItem(
             label = stringResource(
                 if (conv.read) R.string.menu_mark_unread else R.string.menu_mark_read
             ),
             onClick = onToggleRead,
         )
     )
-    add(ConversationAction(label = stringResource(if (conv.isStarred) R.string.action_unstar else R.string.action_star), onClick = onToggleStar))
-    add(ConversationAction(label = stringResource(if (conv.isPinned) R.string.action_unpin else R.string.action_pin), onClick = onTogglePin))
-    add(ConversationAction(label = stringResource(if (conv.isMuted) R.string.action_unmute else R.string.action_mute), onClick = onToggleMute))
+    add(ActionMenuItem(label = stringResource(if (conv.isStarred) R.string.action_unstar else R.string.action_star), onClick = onToggleStar))
+    add(ActionMenuItem(label = stringResource(if (conv.isPinned) R.string.action_unpin else R.string.action_pin), onClick = onTogglePin))
+    add(ActionMenuItem(label = stringResource(if (conv.isMuted) R.string.action_unmute else R.string.action_mute), onClick = onToggleMute))
     add(
-        ConversationAction(
+        ActionMenuItem(
             label = stringResource(R.string.menu_archive),
             onClick = onArchive,
         )
     )
     add(
-        ConversationAction(
+        ActionMenuItem(
             label = stringResource(R.string.menu_report_spam),
             destructive = true,
             onClick = onReportSpam,
@@ -306,7 +308,7 @@ private fun inboxActions(
     )
     if (address != null) {
         add(
-            ConversationAction(
+            ActionMenuItem(
                 label = stringResource(
                     if (conv.isBlocked) R.string.menu_unblock else R.string.menu_block
                 ),
@@ -316,7 +318,7 @@ private fun inboxActions(
         )
     }
     add(
-        ConversationAction(
+        ActionMenuItem(
             label = stringResource(R.string.menu_delete),
             destructive = true,
             onClick = onDelete,
@@ -515,16 +517,16 @@ fun ArchivedScreen(
             }
         }
         menuFor?.let { conv ->
-            ConversationActionsDialog(
+            ActionMenuDialog(
                 title = conv.participants.firstOrNull()?.displayName
                     ?: conv.participants.firstOrNull()?.address
                     ?: stringResource(R.string.unknown_sender),
                 actions = listOf(
-                    ConversationAction(
+                    ActionMenuItem(
                         label = stringResource(R.string.menu_unarchive),
                         onClick = { unarchive(conv) },
                     ),
-                    ConversationAction(
+                    ActionMenuItem(
                         label = stringResource(R.string.menu_delete),
                         destructive = true,
                         onClick = { onDelete(conv.threadId.value) },
@@ -571,30 +573,12 @@ fun SpamScreen(
     val spamList = (live ?: fakeSpamList).filterNot { it.threadId.value in dismissed }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     Column(modifier = Modifier.fillMaxSize()) {
-        // Banner
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.spam_banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-        }
-        if (spamList.isNotEmpty()) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.End) {
-                androidx.compose.material3.TextButton(onClick = {
-                    spamList.forEach { c -> c.participants.firstOrNull()?.address?.let(onBlock) }
-                }) { Text(stringResource(R.string.action_block_all)) }
-                androidx.compose.material3.TextButton(onClick = {
-                    spamList.forEach { c -> onDelete(c.threadId.value) }
-                    if (!isLive) fakeSpamList = emptyList()
-                }) { Text(stringResource(R.string.action_delete_all)) }
-                if (!isLive) {
-                    androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
-                        Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.empty_spam))
-                    }
+        if (spamList.isNotEmpty() && !isLive) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
+                androidx.compose.material3.TextButton(onClick = { fakeSpamList = emptyList() }) {
+                    Icon(Icons.Filled.Delete, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.empty_spam))
                 }
             }
         }
@@ -658,18 +642,18 @@ fun SpamScreen(
         menuFor?.let { conv ->
             val address = conv.participants.firstOrNull()?.address
             val notSpamMessage = stringResource(R.string.marked_as_not_spam, address.orEmpty())
-            ConversationActionsDialog(
+            ActionMenuDialog(
                 title = address ?: stringResource(R.string.unknown_sender),
                 actions = buildList {
                     add(
-                        ConversationAction(
+                        ActionMenuItem(
                             label = stringResource(R.string.not_spam),
                             onClick = { markNotSpam(conv, notSpamMessage) },
                         )
                     )
                     if (address != null) {
                         add(
-                            ConversationAction(
+                            ActionMenuItem(
                                 label = stringResource(
                                     if (conv.isBlocked) R.string.menu_unblock else R.string.menu_block
                                 ),
@@ -679,7 +663,7 @@ fun SpamScreen(
                         )
                     }
                     add(
-                        ConversationAction(
+                        ActionMenuItem(
                             label = stringResource(R.string.menu_delete),
                             destructive = true,
                             onClick = { onDelete(conv.threadId.value) },
