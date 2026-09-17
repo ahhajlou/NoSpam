@@ -8,7 +8,7 @@ tasks.withType<Test> { jvmArgs("-XX:+EnableDynamicAgentLoading") }
 
 android {
     namespace = "com.nospam.nospam.feature.export"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26

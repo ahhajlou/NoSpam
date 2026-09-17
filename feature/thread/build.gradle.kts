@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.nospam.nospam.feature.thread"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26

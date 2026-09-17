@@ -14,7 +14,7 @@ tasks.withType<Test> {
 
 android {
     namespace = "com.nospam.nospam.core.telephony"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26

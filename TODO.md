@@ -317,6 +317,7 @@ first").
   newly-opened thread. `feature/thread/src/main/kotlin/com/nospam/nospam/feature/thread/ThreadViewModel.kt`, `loadThread()`.
 
 ## Project-wide
+- [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
 - [] Add instrumented tests for `core:telephony` provider query/write logic. Two device suites exist (`TelephonyInstrumentedTest`: one SMS insert/query round trip plus a notification build; `TelephonyMapperDeviceTest`: two `ContentValues` mappers) but nothing covers pagination, delete, mark-read or the SIM path. The thread pagination cursor bug above is exactly the kind this would have caught
 - [] MMS: extend history scan to MMS when the MMS-parsing architecture is ready (currently SMS-only in backfill)

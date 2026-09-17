@@ -66,8 +66,9 @@ list whenever a UI element is built ahead of its backend.
 Order chosen so each step leaves the app building and usable.
 
 - [x] P1.0 Toolchain: Compose BOM `2024.09.00` → `2026.06.01` (material3 1.3.0 → 1.4.0, Compose UI 1.11.4).
-      Not `2026.09.00`: Compose 1.12 (BOM ≥ 2026.08.00) needs AGP 9.1+ and compileSdk 37,
-      and SDK 37 is not installed — separate toolchain upgrade, same material3 either way.
+      Then, after the user bumped AGP 9.4.0 / Gradle 9.6.0 / KSP 2.3.6: compileSdk 36 → 37
+      (platform `android-37.0` installed) and BOM → `2026.09.00` (Compose UI 1.12.1,
+      material3 still 1.4.0). targetSdk stays 36.
       Fixes: `feature:thread` and `feature:settings` now declare
       `material-icons-extended` (material3 1.4 no longer brings icons transitively);
       two `context.getString` calls in composables replaced (new lint
@@ -121,3 +122,6 @@ Order chosen so each step leaves the app building and usable.
 - 2026-09-17 — P1.0 done (see §4). Note: `assembleDebugAndroidTest` with default
   parallelism hit Gradle daemon GC thrashing at `-Xmx2048m` (dexing icons-extended
   into several test APKs); `--max-workers=2` passes. CI does not build test APKs.
+- 2026-09-17 — Toolchain finished: user's AGP/Gradle/KSP bump committed, compileSdk 37 +
+  BOM 2026.09.00. Build, 246 unit tests (85 UI re-run), kover, test APKs all green.
+  Next: P1.1.

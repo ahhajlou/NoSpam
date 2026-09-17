@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.nospam.nospam.baselineprofile"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         // Capturing a profile on an unrooted device needs API 33+, so generation

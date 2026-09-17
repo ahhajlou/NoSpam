@@ -286,9 +286,9 @@ not a graphics problem however much the log looks like one.
 
 ## 10. Build and toolchain
 
-Gradle 9.6.0, AGP 9.4.0, KSP 2.3.6, Kotlin 2.2.10, Compose BOM 2026.06.01
-(Material 3 1.4.0). BOM 2026.08.00 and later pull Compose 1.12, which requires
-compileSdk 37 — raise compileSdk with the BOM, not the BOM alone. The Gradle
+Gradle 9.6.0, AGP 9.4.0, KSP 2.3.6, Kotlin 2.2.10, Compose BOM 2026.09.00
+(Compose UI 1.12.1, Material 3 1.4.0). compileSdk 37 (SDK platform `android-37.0`,
+required by Compose 1.12), targetSdk 36. The Gradle
 daemon is pinned to a JDK 25 JetBrains toolchain through
 `gradle/gradle-daemon-jvm.properties`, so the CLI and the IDE share one daemon.
 

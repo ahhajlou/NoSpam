@@ -22,7 +22,7 @@ tasks.withType<Test> {
 android {
     namespace = "com.nospam.nospam"
     compileSdk {
-        version = release(36)
+        version = release(37)
     }
 
     defaultConfig {
