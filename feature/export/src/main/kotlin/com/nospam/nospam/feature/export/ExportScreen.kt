@@ -60,9 +60,10 @@ fun ExportScreen(
         stringResource(R.string.export_success, uiState.exportedCount, uiState.successFile ?: "")
     } else null
 
+    val emptyMessage = stringResource(R.string.export_empty)
     val errorMessage = uiState.error?.let { msg ->
         // If error is from empty string resource, it already localized
-        if (msg == context.getString(R.string.export_empty)) msg
+        if (msg == emptyMessage) msg
         else stringResource(R.string.export_failed, msg)
     }
 

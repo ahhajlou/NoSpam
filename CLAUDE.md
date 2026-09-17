@@ -286,7 +286,9 @@ not a graphics problem however much the log looks like one.
 
 ## 10. Build and toolchain
 
-Gradle 9.1.0, AGP 9.0.1, Kotlin 2.2.10, Compose BOM 2024.09.00. The Gradle
+Gradle 9.1.0, AGP 9.0.1, Kotlin 2.2.10, Compose BOM 2026.06.01 (Material 3
+1.4.0). BOM 2026.08.00 and later pull Compose 1.12, which requires AGP 9.1+ and
+compileSdk 37 — upgrade those together, not the BOM alone. The Gradle
 daemon is pinned to a JDK 25 JetBrains toolchain through
 `gradle/gradle-daemon-jvm.properties`, so the CLI and the IDE share one daemon.
 

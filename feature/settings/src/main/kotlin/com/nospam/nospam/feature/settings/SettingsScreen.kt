@@ -155,13 +155,14 @@ fun SettingsScreen(
             )
         }
         item {
+            val recheckStarted = stringResource(R.string.recheck_started)
             SettingsRow(
                 title = stringResource(R.string.scan_title),
                 subtitle = stringResource(R.string.scan_sub),
                 onClick = {
                     onRecheck()
                     scope.launch {
-                        snackbarHostState.showSnackbar(context.getString(R.string.recheck_started))
+                        snackbarHostState.showSnackbar(recheckStarted)
                     }
                 }
             )
