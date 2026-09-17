@@ -65,7 +65,7 @@ object NotificationHelper {
         cancelPending: PendingIntent,
     ): android.app.Notification {
         return NotificationCompat.Builder(context, CHANNEL_ID_BACKFILL)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_stat_message)
             .setContentTitle(context.getString(R.string.backfill_title))
             .setContentText(context.getString(R.string.backfill_progress, processed, total))
             // Before the first message is processed show an indeterminate spinner so
@@ -133,7 +133,7 @@ object NotificationHelper {
         } catch (_: Exception) {}
 
         return NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.sym_action_chat)
+            .setSmallIcon(R.drawable.ic_stat_message)
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setContentIntent(contentPending)
