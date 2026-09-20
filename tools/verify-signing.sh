@@ -9,59 +9,93 @@
 #
 #   1. `apksigner verify` answers "is this APK internally consistent?", NOT
 #      "is this the key that signs NoSpam?". A debug-signed APK, or one signed
-#      with a throwaway key, passes it happily. The check that matters is
-#      comparing the APK's signer fingerprint against the keystore's, so that
-#      is what this does.
-#   2. The release signing config in app/build.gradle.kts is absent when no
-#      keystore is configured, and `assembleRelease` then emits an UNSIGNED
-#      APK rather than failing. A typo in storeFile therefore looks like a
+#      with a throwaway key, passes it happily.
+#   2. The release signing config in app/build.gradle.kts is ABSENT when no
+#      keystore is configured, and `assembleRelease` then emits an UNSIGNED APK
+#      rather than failing. A typo in storeFile therefore looks like a
 #      successful build. This turns that into a loud failure.
-#   3. minSdk is 26, so v1 (JAR) signing is deliberately off and only the v2/v3
-#      blocks are expected. `apksigner verify` without --min-sdk-version
-#      assumes minSdk 1 and complains about the missing v1 block, which is not
-#      a real problem for this app.
+#
+# WHY IT DOES NOT READ apksigner's PRINTED TEXT.
+#
+# It used to, and that broke CI three times. apksigner names each signer
+# differently depending on build-tools version and on which schemes verified:
+#
+#   Signer #1 certificate DN: ...                                  <= 36.x
+#   Signer (minSdkVersion=N, maxSdkVersion=M) certificate DN: ...   v3.1 verified
+#   V3.0 Signer: certificate DN: ...                                37.0.0
+#
+# Every time, a correctly signed APK from a successful build was reported as
+# signed with the wrong key. That output is a human-readable UI with no
+# compatibility promise, so this script no longer parses it at all. Instead:
+#
+#   * whether the APK is signed  -> apksigner's EXIT CODE
+#   * which certificate signed it -> `--print-certs-pem`, and we compute the
+#     SHA-256 of the DER bytes ourselves with openssl
+#   * which certificate SHOULD have -> `keytool -exportcert` from the keystore,
+#     hashed the same way
+#
+# Both sides are then the same hash of the same standard encoding. PEM
+# delimiters are RFC 7468, not a vendor's log format.
 #
 # Usage:
-#   tools/verify-signing.sh                       # newest release APK
+#   tools/verify-signing.sh                        # newest release APK
 #   tools/verify-signing.sh path/to/some.apk
-#   tools/verify-signing.sh --expect <sha256>     # compare without the keystore
-#   tools/verify-signing.sh --require-identity    # unresolvable fingerprint = failure
+#   tools/verify-signing.sh --expect <sha256>      # compare without the keystore
+#   tools/verify-signing.sh --require-identity     # unresolvable expectation = failure
+#   tools/verify-signing.sh --fingerprint-out FILE # write the hex fingerprint to FILE
 set -uo pipefail
 
+# The script works from the repo root (keystore.properties, the default APK
+# path), but an APK argument must still mean what the CALLER meant by it, so
+# remember where we were invoked from and resolve relative paths against that.
+ORIG_PWD="$PWD"
 cd "$(dirname "$0")/.."
 
 MIN_SDK=26
 EXPECTED=""
 APK=""
 REQUIRE_IDENTITY=0
+FP_OUT=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --expect) EXPECTED="$2"; shift 2 ;;
+        --expect)          EXPECTED="${2:-}"; shift 2 ;;
         --require-identity) REQUIRE_IDENTITY=1; shift ;;
-        -h|--help) sed -n '5,30p' "$0"; exit 0 ;;
-        *) APK="$1"; shift ;;
+        --fingerprint-out) FP_OUT="${2:-}"; shift 2 ;;
+        -h|--help)         sed -n '5,45p' "$0"; exit 0 ;;
+        -*)                echo "unknown option: $1" >&2; exit 2 ;;
+        *)                 APK="$1"; shift ;;
     esac
 done
 
-if [ -t 1 ]; then R='\033[31m'; G='\033[32m'; Y='\033[33m'; N='\033[0m'
+if [ -t 1 ]; then R=$'\033[31m'; G=$'\033[32m'; Y=$'\033[33m'; N=$'\033[0m'
 else R=''; G=''; Y=''; N=''; fi
 fail() { printf '%sFAIL%s  %s\n' "$R" "$N" "$*"; exit 1; }
 pass() { printf '%sOK%s    %s\n' "$G" "$N" "$*"; }
 warn() { printf '%sWARN%s  %s\n' "$Y" "$N" "$*"; }
 
-normalise() { tr -d ': ' | tr '[:upper:]' '[:lower:]'; }
+normalise() { tr -d ': \r' | tr '[:upper:]' '[:lower:]'; }
 
-# --- locate apksigner -------------------------------------------------------
+TMPD="$(mktemp -d)"
+trap 'rm -rf "$TMPD"' EXIT INT TERM
+
+# --- tools ------------------------------------------------------------------
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 APKSIGNER="$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
-[ -x "$APKSIGNER" ] || fail "apksigner not found under $SDK/build-tools"
+[ -n "$APKSIGNER" ] && [ -x "$APKSIGNER" ] || fail "apksigner not found under $SDK/build-tools"
+command -v openssl >/dev/null || fail "openssl not found; it is how this script hashes certificates"
+KEYTOOL="keytool"
+[ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/keytool" ] && KEYTOOL="$JAVA_HOME/bin/keytool"
 
-# --- locate the APK ---------------------------------------------------------
+# --- the APK ----------------------------------------------------------------
 if [ -z "$APK" ]; then
     APK="$(ls -t app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)"
     [ -n "$APK" ] || fail "no APK in app/build/outputs/apk/release — run ./gradlew :app:assembleRelease first"
 fi
+case "$APK" in
+    /*) ;;
+    *)  [ -f "$ORIG_PWD/$APK" ] && APK="$ORIG_PWD/$APK" ;;
+esac
 [ -f "$APK" ] || fail "no such file: $APK"
 printf 'APK       %s\n' "$APK"
 printf 'apksigner %s\n' "$APKSIGNER"
@@ -70,85 +104,57 @@ case "$APK" in
     *unsigned*) fail "filename says unsigned — the release signing config did not apply" ;;
 esac
 
-# --- 1. is it signed at all, for our minSdk? --------------------------------
-OUT="$("$APKSIGNER" verify --min-sdk-version "$MIN_SDK" --verbose --print-certs "$APK" 2>&1)"
-STATUS=$?
-echo "$OUT" | grep -qE '^Verifies$' || {
-    echo "$OUT" | grep -vE '^WARNING: (A restricted|java.lang.System|Use --enable|Restricted)' >&2
-    fail "apksigner could not verify the signature (exit $STATUS)"
-}
-# NEVER anchor on the signer label. apksigner names each signer differently
-# depending on build-tools version and on which schemes verified. All three of
-# these come from the same tool and have each been seen on a real run:
-#
-#   Signer #1 certificate DN: ...                                  build-tools <= 36.x
-#   Signer (minSdkVersion=N, maxSdkVersion=M) certificate DN: ...  when v3.1 verified
-#   V3.0 Signer: certificate DN: ...                               build-tools 37.0.0
-#
-# Two CI failures came from anchoring: first on "^Signer #1", then on "^Signer ".
-# Both times the APK was correctly signed and the build had succeeded, and both
-# times the script announced a key mismatch. Only the "certificate DN:" and
-# "certificate SHA-256 digest:" substrings are stable across the three, so match
-# those anywhere in the line. "certificate", not "public key", keeps this off the
-# key-digest lines, which carry a different hash for the same signer.
-#
-# Source-stamp certificates are dropped: a source stamp is a separate
-# certificate and would otherwise look like a second signer.
-CERTS="$(echo "$OUT" | grep -vi 'source stamp')"
-DN="$(echo "$CERTS" | sed -n 's/.*certificate DN: *//p' | head -1)"
-
-# Deduplicated, because the 37.0.0 form can print one block per scheme for the
-# SAME certificate; counting lines would call a single-signer APK a two-signer
-# one. What actually matters is how many DISTINCT certificates signed it.
-FPS="$(echo "$CERTS" | sed -n 's/.*certificate SHA-256 digest: *//p' | normalise | sort -u)"
-NFP="$(printf '%s\n' "$FPS" | grep -c . || true)"
-
-# A fingerprint we could not read is a broken check, never a verdict about the
-# key. Comparing an empty string against the expected one would "fail" with the
-# right exit code and entirely the wrong reason, which is what happened twice.
-# Diagnostics go to stdout, not stderr: this runs piped into tee, and split
-# streams interleaved the failure message into the middle of the dump.
-if [ "$NFP" -eq 0 ]; then
-    echo "--- raw apksigner output ---"
-    echo "$OUT" | grep -vE '^WARNING: (A restricted|java.lang.System|Use --enable|Restricted)'
+# --- 1. is it signed, and does it verify for our minSdk? --------------------
+# Exit code only. Nothing here depends on how apksigner words its output.
+if ! VERIFY_OUT="$("$APKSIGNER" verify --min-sdk-version "$MIN_SDK" "$APK" 2>&1)"; then
+    echo "--- apksigner output ---"
+    printf '%s\n' "$VERIFY_OUT"
     echo "--- end ---"
-    fail "could not read a signer certificate from apksigner's output (above). This says nothing about whether the APK is correctly signed."
+    fail "apksigner could not verify the signature for minSdk $MIN_SDK"
 fi
-[ "$NFP" -eq 1 ] || fail "$NFP distinct signer certificates — expected exactly 1"
+pass "signed, and verifies for minSdk $MIN_SDK"
+
+# --- 2. which certificate signed it? ----------------------------------------
+PEM_OUT="$("$APKSIGNER" verify --min-sdk-version "$MIN_SDK" --print-certs-pem "$APK" 2>/dev/null)"
+printf '%s\n' "$PEM_OUT" | awk -v d="$TMPD" '
+    /^-----BEGIN CERTIFICATE-----$/ { n++; f = sprintf("%s/cert%03d.pem", d, n) }
+    f                               { print > f }
+    /^-----END CERTIFICATE-----$/   { close(f); f = "" }'
+
+NCERT=0
+for c in "$TMPD"/cert*.pem; do [ -e "$c" ] && NCERT=$((NCERT + 1)); done
+if [ "$NCERT" -eq 0 ]; then
+    echo "--- apksigner --print-certs-pem output ---"
+    printf '%s\n' "$PEM_OUT"
+    echo "--- end ---"
+    fail "apksigner emitted no PEM certificate (above). This says nothing about whether the APK is correctly signed."
+fi
+
+# Every distinct certificate that signed this APK. A source stamp or a second
+# signer shows up here as an extra entry and is rejected below rather than
+# quietly ignored: failing closed on an unexpected certificate is the point.
+for c in "$TMPD"/cert*.pem; do
+    fp="$(openssl x509 -in "$c" -outform DER 2>/dev/null | openssl dgst -sha256 -r 2>/dev/null | cut -d' ' -f1 | normalise)"
+    [ -n "$fp" ] || fail "openssl could not read a certificate apksigner emitted ($c)"
+    printf '%s\n' "$fp" >> "$TMPD/fps"
+done
+FPS="$(sort -u "$TMPD/fps")"
+NFP="$(printf '%s\n' "$FPS" | wc -l | tr -d ' ')"
+[ "$NFP" -eq 1 ] || fail "$NFP distinct signing certificates — expected exactly 1"
 ACTUAL="$FPS"
 
+DN="$(openssl x509 -in "$TMPD"/cert001.pem -noout -subject -nameopt RFC2253 2>/dev/null | sed 's/^subject= *//')"
 printf 'Signer    %s\n' "$DN"
 printf 'SHA-256   %s\n' "$ACTUAL"
 
-# --- 2. is it the DEBUG key? ------------------------------------------------
-# Checked BEFORE the v2/v3 assertions below, not after. AGP signs debug builds
-# with v2 only (verified 2026-09-20: v1 false, v2 true, v3 false), so a debug
-# APK trips the v3 check first and gets rejected with the useless diagnostic
-# "no v3 signature block" instead of being named for what it is.
 case "$DN" in
     *"CN=Android Debug"*) fail "signed with the Android debug key — this is not a releasable APK" ;;
 esac
 
-
-V2="$(echo "$OUT" | sed -n 's/^Verified using v2 scheme.*: //p')"
-V3="$(echo "$OUT" | sed -n 's/^Verified using v3 scheme.*: //p')"
-[ "$V2" = "true" ] || fail "no v2 signature block"
-[ "$V3" = "true" ] || fail "no v3 signature block"
-pass "signature verifies for minSdk $MIN_SDK (v2 and v3 present)"
-
 # --- 3. is it OUR key? ------------------------------------------------------
-# The expected fingerprint is READ FROM THE KEYSTORE, never hardcoded. Locally
-# that is keystore.properties; in CI it is the same four values from the
-# environment (see app/build.gradle.kts). --expect exists for a machine that has
-# the APK but not the key, and as opt-in hardening: a literal pinned in the
-# workflow would also catch a SWAPPED ANDROID_KEYSTORE_BASE64 secret, which this
-# cannot, because it trusts whatever keystore it was handed. That trade is
-# deliberate -- a constant nobody updates when the key changes fails the build
-# for the wrong reason, and secrets and workflow files are edited by the same
-# person on this project.
-KEYTOOL="keytool"
-[ -x "${JAVA_HOME:-}/bin/keytool" ] && KEYTOOL="$JAVA_HOME/bin/keytool"
-
+# The expectation is READ FROM THE KEYSTORE, never hardcoded: keystore.properties
+# locally, the same four variables from the environment in CI. --expect is for a
+# machine that has the APK but not the key.
 if [ -z "$EXPECTED" ]; then
     if [ -f keystore.properties ]; then
         STORE="$(sed -n 's/^storeFile=//p' keystore.properties)"
@@ -160,29 +166,42 @@ if [ -z "$EXPECTED" ]; then
         PASSWD="${ANDROID_KEYSTORE_PASSWORD:-}"
     fi
     if [ -n "$STORE" ] && [ -f "$STORE" ] && [ -n "$PASSWD" ]; then
-        EXPECTED="$("$KEYTOOL" -list -v -keystore "$STORE" -alias "$ALIAS" -storepass "$PASSWD" 2>/dev/null \
-            | sed -n 's/.*SHA256: //p' | head -1 | normalise)"
-        [ -n "$EXPECTED" ] || fail "could not read the certificate for alias '$ALIAS' out of $STORE"
+        # -file, not stdout, and the exit status is checked. `keytool
+        # -exportcert` with a bad alias exits 1 but still writes its error
+        # message to STDOUT (verified: 70 bytes). Piping stdout straight into a
+        # hash turned that message into a plausible-looking fingerprint, and the
+        # comparison below then blamed the signing key for a wrong alias --
+        # precisely the misleading verdict this script exists to avoid.
+        if ! "$KEYTOOL" -exportcert -keystore "$STORE" -alias "$ALIAS" \
+                -storepass "$PASSWD" -file "$TMPD/expected.der" >"$TMPD/keytool.out" 2>&1; then
+            echo "--- keytool output ---"; cat "$TMPD/keytool.out"; echo "--- end ---"
+            fail "could not export the certificate for alias '$ALIAS' from $STORE (above). This says nothing about the APK."
+        fi
+        # Round-tripped through openssl so a non-certificate cannot slip through,
+        # and hashed exactly like the APK's certificate above: DER bytes, SHA-256.
+        EXPECTED="$(openssl x509 -inform DER -in "$TMPD/expected.der" -outform DER 2>/dev/null \
+            | openssl dgst -sha256 -r 2>/dev/null | cut -d' ' -f1 | normalise)"
+        [ -n "$EXPECTED" ] || fail "keytool exported something for alias '$ALIAS' that is not a certificate"
     fi
 fi
 
 if [ -z "$EXPECTED" ]; then
-    # Without something to compare against, this script has checked that the APK
-    # is signed, not BY WHOM. In CI that is not good enough to publish on, so the
-    # workflow passes --require-identity and an unresolvable fingerprint stops
-    # the release rather than printing a warning nobody reads.
     if [ "$REQUIRE_IDENTITY" = "1" ]; then
-        fail "no keystore fingerprint to compare against, and --require-identity was given: cannot confirm who signed this APK"
+        fail "nothing to compare against and --require-identity was given: cannot confirm who signed this APK"
     fi
     warn "no keystore fingerprint to compare against — signature is valid, but its IDENTITY is unchecked"
     warn "pass --expect <sha256>, set ANDROID_KEYSTORE_FILE/_PASSWORD/_KEY_ALIAS, or fill in keystore.properties"
-    exit 0
+else
+    EXPECTED="$(printf '%s' "$EXPECTED" | normalise)"
+    if [ "$ACTUAL" = "$EXPECTED" ]; then
+        pass "signer matches our release key"
+    else
+        printf 'expected  %s\n' "$EXPECTED"
+        fail "signed with a DIFFERENT key than our keystore — do not publish this APK"
+    fi
 fi
 
-EXPECTED="$(echo "$EXPECTED" | normalise)"
-if [ "$ACTUAL" = "$EXPECTED" ]; then
-    pass "signer matches our release key"
-else
-    printf 'expected  %s\n' "$EXPECTED"
-    fail "signed with a DIFFERENT key than our keystore — do not publish this APK"
+# Machine-readable handoff, so the workflow never greps the text above.
+if [ -n "$FP_OUT" ]; then
+    printf '%s' "$ACTUAL" > "$FP_OUT" || fail "could not write the fingerprint to $FP_OUT"
 fi

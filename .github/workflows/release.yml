@@ -133,26 +133,37 @@ jobs:
 
       - name: Verify the APK is signed with our key
         id: verify
-        # apksigner verify alone would only prove the APK is self-consistent — a
-        # debug-signed or unsigned-then-resigned one passes it. So the script
-        # also compares the APK's signer against the certificate in the keystore
-        # we just decoded, which it reads through these same variables. No
-        # fingerprint is hardcoded: a constant here would have to be updated by
-        # hand on every key change and would fail the build for the wrong reason
-        # when someone forgot. --require-identity makes an unresolvable
-        # fingerprint a failure, so this can never pass on a warning.
+        # Two checks, neither of which parses apksigner's wording (its signer
+        # labels differ between build-tools versions, which broke this step
+        # three times): apksigner's exit code says the APK is signed and
+        # consistent; then the SHA-256 of the certificate in the keystore we
+        # just decoded must appear in its output. `apksigner verify` alone would
+        # pass a debug-signed APK, and an unsigned build is otherwise a green
+        # run, because app/build.gradle.kts builds unsigned when no keystore is
+        # configured. No fingerprint is hardcoded, so a key rotation cannot fail
+        # the build for the wrong reason.
         env:
           ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        # pipefail matters: the default shell is `bash -e`, where a failing
-        # command piped into tee would be masked by tee's exit 0.
         run: |
-          set -o pipefail
-          tools/verify-signing.sh --require-identity | tee "$RUNNER_TEMP/verify.log"
-          FP="$(sed -n 's/^SHA-256 *//p' "$RUNNER_TEMP/verify.log" | head -1)"
-          if [ -z "$FP" ]; then
-            echo "::error::could not capture the signer fingerprint for the release notes"
+          set -euo pipefail
+          APK="$(ls app/build/outputs/apk/release/*.apk)"   # one fat APK, no ABI splits
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+
+          # The cert's SHA-256 is the hash of its DER encoding, which is what
+          # keytool writes. -file rather than stdout: on failure keytool prints
+          # its error to stdout, which would otherwise be hashed as a "cert".
+          keytool -exportcert -keystore "$ANDROID_KEYSTORE_FILE" \
+            -alias "$ANDROID_KEY_ALIAS" -storepass:env ANDROID_KEYSTORE_PASSWORD \
+            -file "$RUNNER_TEMP/cert.der"
+          FP="$(sha256sum "$RUNNER_TEMP/cert.der" | cut -d' ' -f1)"
+
+          # --min-sdk-version: without it apksigner assumes minSdk 1 and reports
+          # the deliberately absent v1 block as a failure (enableV1Signing=false).
+          "$APKSIGNER" verify --min-sdk-version 26 --print-certs "$APK" | tee "$RUNNER_TEMP/certs.txt"
+          if ! grep -qiF "$FP" "$RUNNER_TEMP/certs.txt"; then
+            echo "::error::$APK is not signed with the certificate in our keystore (expected SHA-256 $FP)"
             exit 1
           fi
           echo "fingerprint=$FP" >> "$GITHUB_OUTPUT"
@@ -189,9 +200,10 @@ jobs:
         if: github.ref_type == 'tag'
         # The authoritative check: reads what was actually built, not the source.
         # It lives in this job so a mismatch fails before anything is uploaded.
+        env:
+          BUILD_VERSION: ${{ steps.metadata.outputs.version_name }}
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          BUILD_VERSION="${{ steps.metadata.outputs.version_name }}"
           if [ "$TAG_VERSION" != "${BUILD_VERSION#v}" ]; then
             echo "::error::git tag ($TAG_VERSION) doesn't match the built APK's version ($BUILD_VERSION)"
             exit 1
@@ -240,10 +252,11 @@ jobs:
           apksigner verify --min-sdk-version 26 --print-certs $APK
           \`\`\`
 
-          The signer must be:
+          The output must contain this signer certificate SHA-256 digest (the
+          label in front of it varies between apksigner versions):
 
           \`\`\`
-          Signer #1 certificate SHA-256 digest: ${{ needs.build.outputs.fingerprint }}
+          ${{ needs.build.outputs.fingerprint }}
           \`\`\`
 
           An APK signed with any other key is not from this project. NoSpam is
