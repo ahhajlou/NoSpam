@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # tools/seed.sh — idempotent seed/teardown for NoSpam manual QA (Maestro + persistence checks).
 #
 # Seeds a fixed set of SMS threads directly into the Telephony provider (content://sms)

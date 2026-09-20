@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.nospam.nospam.core.designsystem.component
 
 import androidx.compose.ui.test.junit4.createComposeRule
