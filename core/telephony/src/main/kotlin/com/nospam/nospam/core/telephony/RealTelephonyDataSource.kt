@@ -11,6 +11,7 @@ import android.provider.Telephony
 import android.util.Log
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.Message
+import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -272,10 +273,10 @@ class RealTelephonyDataSource(
     override suspend fun getMessages(
         threadId: ThreadId,
         limit: Int,
-        beforeId: Long?,
+        before: Message?,
     ): List<Message> = withContext(Dispatchers.IO) {
         try {
-            queryMessages(threadId, limit, beforeId)
+            queryMessages(threadId, limit, before)
         } catch (e: Exception) {
             // SecurityException (no permission) or SQLiteException (provider
             // column differences) — surface as empty, never crash the UI.
@@ -284,7 +285,7 @@ class RealTelephonyDataSource(
         }
     }
 
-    private fun queryMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> {
+    private fun queryMessages(threadId: ThreadId, limit: Int, before: Message?): List<Message> {
         val list = mutableListOf<Message>()
         val uri = Telephony.Sms.CONTENT_URI
         val projection = arrayOf(
@@ -294,17 +295,19 @@ class RealTelephonyDataSource(
             Telephony.Sms.BODY,
             Telephony.Sms.DATE,
             Telephony.Sms.TYPE,
-            Telephony.Sms.READ
+            Telephony.Sms.READ,
+            Telephony.Sms.SUBSCRIPTION_ID,
         )
         // Backward pagination: newest [limit] rows, or rows strictly older than
-        // [beforeId] (exclusive) when scrolling up — never a hard thread truncation.
-        val sel = if (beforeId != null) {
-            "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms._ID} < ?"
+        // [before] when scrolling up — never a hard thread truncation. The cursor
+        // is (date, _id), the same key as the ORDER BY below.
+        val sel = if (before != null) {
+            "${Telephony.Sms.THREAD_ID} = ? AND (${Telephony.Sms.DATE} < ? OR (${Telephony.Sms.DATE} = ? AND ${Telephony.Sms._ID} < ?))"
         } else {
             "${Telephony.Sms.THREAD_ID} = ?"
         }
-        val args = if (beforeId != null) {
-            arrayOf(threadId.value.toString(), beforeId.toString())
+        val args = if (before != null) {
+            arrayOf(threadId.value.toString(), before.date.toString(), before.date.toString(), before.id.value.toString())
         } else {
             arrayOf(threadId.value.toString())
         }
@@ -317,19 +320,31 @@ class RealTelephonyDataSource(
         return list.sortedWith(compareBy({ it.date }, { it.id.value }))
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?, messageId: Long?): Result<Unit> = withContext(Dispatchers.IO) {
+        val uri = messageId?.let(SmsSender::rowUri)
         try {
-            val mgr = context.resolveSmsManager(subscriptionId)
-            val parts = mgr.divideMessage(body)
-            if (parts.size <= 1) {
-                mgr.sendTextMessage(address, null, body, null, null)
-            } else {
-                mgr.sendMultipartTextMessage(address, null, parts, null, null)
-            }
+            SmsSender.send(context, address, body, subscriptionId, uri)
             Result.success(Unit)
         } catch (e: Exception) {
+            if (uri != null) SmsSender.setType(context, uri, MessageType.FAILED)
             Result.failure(e)
         }
+    }
+
+    override suspend fun insertOutboxMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? =
+        withContext(Dispatchers.IO) {
+            try {
+                val values = TelephonyMapper.buildOutboxValues(address, body, date, subscriptionId)
+                context.contentResolver.insert(Telephony.Sms.Outbox.CONTENT_URI, values)?.lastPathSegment?.toLongOrNull()
+            } catch (e: Exception) {
+                // Not the default SMS app: the system stores the message itself.
+                Log.w(TAG, "insertOutboxMessage failed", e)
+                null
+            }
+        }
+
+    override suspend fun updateMessageType(messageId: Long, type: MessageType) = withContext(Dispatchers.IO) {
+        SmsSender.setType(context, SmsSender.rowUri(messageId), type)
     }
 
     override suspend fun markAsRead(threadId: ThreadId) = withContext(Dispatchers.IO) {

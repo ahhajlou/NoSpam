@@ -13,6 +13,9 @@
                 <data android:mimeType="application/vnd.wap.mms-message" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".receiver.SmsSentReceiver"
+            android:exported="false" />
         <service
             android:name=".service.HeadlessSmsSendService"
             android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE"

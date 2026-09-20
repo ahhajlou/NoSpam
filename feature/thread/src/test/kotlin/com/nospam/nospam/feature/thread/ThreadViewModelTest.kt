@@ -60,14 +60,62 @@ class ThreadViewModelTest {
         assertEquals(listOf("+15550009"), fake.sentMessages.map { it.first })
     }
 
-    @Test fun `address from a previous thread is not reused`() = runTest {
-        val fake = telephonyWithThread9(
-            Message(MessageId(1), ThreadId(9), "+15550009", "hi", 1L, MessageType.SENT, true),
-        )
+    private fun outgoing(id: Long, type: MessageType, body: String = "hi", date: Long = id) =
+        Message(MessageId(id), ThreadId(9), "+15550009", body, date, type, true)
+
+    @Test fun `a message is written as outbox first and sent against that row`() = runTest {
+        val fake = telephonyWithThread9()
         val vm = ThreadViewModel(fake)
-        vm.loadThread(5L, address = "+15550005")
         vm.loadThread(9L)
-        assertEquals("+15550009", vm.uiState.value.address)
+        vm.onDraftChanged("hello")
+        vm.onSend()
+        assertEquals(listOf("+1555" to "hello"), fake.insertedOutbox)
+        assertEquals(listOf<Long?>(1001L), fake.sentMessageIds)
+    }
+
+    @Test fun `a failed message can be retried and is sent again on its own row`() = runTest {
+        val fake = telephonyWithThread9(outgoing(7, MessageType.FAILED, body = "again"))
+        val vm = ThreadViewModel(fake)
+        vm.loadThread(9L)
+        vm.onRetry(7L)
+        assertEquals(listOf(7L to MessageType.OUTBOX), fake.updatedMessageTypes)
+        assertEquals(listOf(Triple("+15550009", "again", null)), fake.sentMessages)
+        assertEquals(listOf<Long?>(7L), fake.sentMessageIds)
+    }
+
+    @Test fun `only a failed message is retried`() = runTest {
+        val fake = telephonyWithThread9(outgoing(7, MessageType.SENT))
+        val vm = ThreadViewModel(fake)
+        vm.loadThread(9L)
+        vm.onRetry(7L)
+        assertTrue(fake.sentMessages.isEmpty())
+    }
+
+    @Test fun `a sending row replaces the optimistic one instead of doubling it`() = runTest {
+        val fake = telephonyWithThread9(outgoing(1, MessageType.SENT, body = "earlier"))
+        val vm = ThreadViewModel(fake)
+        vm.loadThread(9L)
+        vm.onDraftChanged("now")
+        vm.onSend()
+        fake.emitMessages(ThreadId(9), listOf(outgoing(1, MessageType.SENT, body = "earlier"), outgoing(2, MessageType.OUTBOX, body = "now")))
+        assertEquals(1, vm.uiState.value.messages.count { it.body == "now" })
+    }
+
+    @Test fun `older pages load by date even when row ids disagree with dates`() = runTest {
+        val page = TelephonyDataSource.MESSAGES_PAGE_SIZE
+        // The newest `page` messages get the LOW ids; five older ones were inserted
+        // afterwards and carry the highest ids, like imported history.
+        val recent = (1..page).map { Message(MessageId(it.toLong()), ThreadId(9), "+1555", "r$it", 1_000L + it, MessageType.INBOX, true) }
+        val imported = (1..5).map { Message(MessageId(page + it.toLong()), ThreadId(9), "+1555", "old$it", it.toLong(), MessageType.INBOX, true) }
+        val fake = FakeTelephonyDataSource()
+        fake.emitMessages(ThreadId(9), recent + imported)
+        val vm = ThreadViewModel(fake)
+        vm.loadThread(9L)
+        assertTrue(vm.uiState.value.hasMoreOlder)
+        vm.loadOlder()
+        val bodies = vm.uiState.value.messages.map { it.body }
+        assertEquals(page + 5, bodies.size)
+        assertEquals(listOf("old1", "old2", "old3", "old4", "old5"), bodies.take(5))
     }
 
     @Test fun `initial state has fake messages`() {

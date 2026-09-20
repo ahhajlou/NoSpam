@@ -14,14 +14,20 @@ interface TelephonyDataSource {
     suspend fun getConversations(): List<Conversation>
     /**
      * Subset of a thread's messages in ascending date/id order.
-     * With [beforeId] == null returns the newest [limit] messages; with a
-     * [beforeId] (exclusive) returns up to [limit] messages strictly older.
+     * With [before] == null returns the newest [limit] messages; with a
+     * [before] message returns up to [limit] messages strictly older than it,
+     * in the same (date, id) order they are sorted by. The cursor must be the
+     * sort key: paging by row id alone strands messages that are older but were
+     * inserted later (imported or restored history).
      * Backward pagination: the thread opens with the newest page and the UI
      * prepends older pages as the user scrolls up, so long threads are never
      * truncated and never loaded in one query.
      */
-    suspend fun getMessages(threadId: ThreadId, limit: Int = MESSAGES_PAGE_SIZE, beforeId: Long? = null): List<Message>
-    suspend fun sendMessage(address: String, body: String, subscriptionId: Int? = null): Result<Unit>
+    suspend fun getMessages(threadId: ThreadId, limit: Int = MESSAGES_PAGE_SIZE, before: Message? = null): List<Message>
+    suspend fun sendMessage(address: String, body: String, subscriptionId: Int? = null, messageId: Long? = null): Result<Unit>
+    /** Writes an outgoing message as OUTBOX (sending) before it is sent. Null when this app may not write the provider. */
+    suspend fun insertOutboxMessage(address: String, body: String, date: Long, subscriptionId: Int? = null): Long?
+    suspend fun updateMessageType(messageId: Long, type: com.nospam.nospam.core.model.MessageType)
     suspend fun markAsRead(threadId: ThreadId)
     suspend fun markAsUnread(threadId: ThreadId)
     suspend fun deleteConversation(threadId: ThreadId)
