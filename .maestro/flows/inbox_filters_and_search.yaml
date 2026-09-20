@@ -14,7 +14,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 
 # --- All (default) ---
 - assertVisible: "All"
@@ -37,16 +37,19 @@ tags:
 
 # --- Unread ---
 - tapOn: "Unread"
-- assertVisible: "+15551110001"          # seed_contact_clean's newest message is read:0
+# The row shows the contact's display name, not its number: tools/seed.sh now
+# really creates "NoSpam QA Contact" (its raw_contact id used to be parsed from
+# the silent output of `content insert`, so the name and number rows were never
+# written and every conversation showed the bare +1555… address).
+- assertVisible: "NoSpam QA Contact"      # seed_contact_clean's newest message is read:0
 - tapOn: "All"
 
 # --- Known ---
 - tapOn: "Known"
-# The seeded contact conversation should surface here by display name once
-# tools/seed.sh's contact insert succeeds on this device/build of `content`.
-- assertVisible:
-    text: "NoSpam QA Contact|\\+15551110001"
-    optional: true
+# The seeded contact conversation surfaces here by display name. This was
+# `optional` while seed.sh's contact insert silently did nothing; it is a real
+# assertion now, and it is what proves "Known" filters on contact lookup.
+- assertVisible: "NoSpam QA Contact"
 - tapOn: "All"
 
 # --- Unknown ---

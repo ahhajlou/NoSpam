@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_messages">پیام‌ها</string>
+    <string name="channel_messages_desc">پیامک و MMS دریافتی</string>
+    <string name="channel_spam">هرزنامه</string>
+    <string name="channel_spam_desc">هرزنامه‌های مسدودشده</string>
+    <string name="channel_backfill">بررسی پیام‌های قدیمی</string>
+    <string name="channel_backfill_desc">پیشرفت بررسی یک‌باره هرزنامه در پیام‌های موجود</string>
+    <string name="backfill_title">در حال بررسی پیام‌های قدیمی برای هرزنامه</string>
+    <string name="backfill_progress">%1$d از %2$d پیام بررسی شد</string>
+    <string name="backfill_cancel">لغو</string>
+</resources>

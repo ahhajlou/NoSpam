@@ -13,8 +13,12 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 - longPressOn: "NSTEST_UNBLOCK1"
+- tapOn: "More options"
 - assertVisible: "Block"
+- tapOn: "Block"
+# Blocking is confirmed, because it reaches the system blocked-numbers list.
+- assertVisible: "Block 1 sender?"
 - tapOn: "Block"
 - assertNotVisible: "NSTEST_UNBLOCK1"

@@ -10,7 +10,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 - scrollUntilVisible:
     element:
         text: "NSTEST_MIXED1"
@@ -36,15 +36,21 @@ tags:
 # value), so the seeded text reads "http-//bit.ly/sale", not "http://..." —
 # match on a substring that doesn't depend on that transform (wrapped in .*
 # for the same full-match reason as above).
+# Long-press selects the message: the top bar becomes a selection bar with
+# Copy, Forward and Delete as icons and Share in the ⋮ menu (P1.3/P1.4 replaced
+# the action dialog, which itself replaced a copy-only dialog in 656146c).
 - longPressOn: ".*Big summer sale.*"
-- assertVisible: "Message"
+- assertVisible: "1 selected"
 - assertVisible: "Copy"
-# Tapping "Copy" already dismisses the dialog itself (ThreadScreen.kt sets
-# selected = null in the same onClick) — an extra `back` here has nothing
-# left to dismiss and instead pops the thread screen itself.
+- assertVisible: "Forward"
+- assertVisible: "Delete"
+- tapOn: "More options"
+- assertVisible: "Share"
+- back                                        # closes the menu, keeps the selection
+# Copy acts and leaves selection mode, so the bar's actions go with it.
 - tapOn: "Copy"
 - extendedWaitUntil:
-    notVisible: "Message"
+    notVisible: "Forward"
     timeout: 3000
 
 # Compose and send a reply. The emulator's virtual modem accepts outbound SMS
@@ -100,7 +106,9 @@ tags:
     visible: ".*Automated Maestro reply.*"
     timeout: 8000
 - assertVisible: ".*Automated Maestro reply.*"
-- back
+# Not `back`: the keyboard is usually still open after sending, and back only
+# closes it. The top bar's up button leaves the thread either way.
+- tapOn: "Navigate up"
 
 # --- New conversation ---
 - tapOn: "Start chat"
@@ -111,5 +119,14 @@ tags:
 - inputText: "5559998888"
 - pressKey: Enter
 - assertVisible: "SMS message"
-- back
-- back
+# Back out thread -> recipient picker -> inbox. Wait for the picker in between:
+# tapping twice in a row lands the second tap during the transition, where it is
+# swallowed, leaving the run on the picker with the keyboard over the screen
+# (the failure hierarchy then contains only IME nodes, which is confusing).
+# The flow ends here, on the thread the recipient picker opened.
+#
+# It used to back out to the inbox and assert on it, which asserted nothing this
+# flow is about and was unreliable: with the keyboard up, the hierarchy Maestro
+# reads contains only IME nodes, so every text assertion fails even though the
+# app is plainly visible behind it. Each flow relaunches and reseeds anyway, so
+# there is nothing to clean up by hand.

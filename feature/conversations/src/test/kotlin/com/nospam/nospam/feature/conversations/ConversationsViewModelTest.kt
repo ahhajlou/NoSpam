@@ -15,6 +15,9 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -133,5 +136,43 @@ class ConversationsViewModelTest {
             assertEquals(1, state.conversations.size)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    /** DAO writes hop to Dispatchers.IO, off the test scheduler, so wait on wall-clock time. */
+    private suspend fun eventually(condition: suspend () -> Boolean) = withContext(Dispatchers.Default) {
+        withTimeout(5_000) { while (!condition()) delay(10) }
+    }
+
+    @Test fun `setPinned on a partly pinned selection pins the rest and unpins nothing`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val repo = ConversationsRepository(FakeTelephonyDataSource(listOf(conv(1, "a"), conv(2, "b"))), db, CoroutineScope(testDispatcher))
+        db.pinnedDao.pin(1)
+        val vm = ConversationsViewModel(repo)
+        vm.setPinned(listOf(1L, 2L), true)
+        eventually { db.pinnedDao.isPinned(1) && db.pinnedDao.isPinned(2) }
+    }
+
+    @Test fun `setStarred and setMuted false clear the flag on every selected thread`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val repo = ConversationsRepository(FakeTelephonyDataSource(listOf(conv(1, "a"), conv(2, "b"))), db, CoroutineScope(testDispatcher))
+        db.starredDao.star(1); db.starredDao.star(2)
+        db.mutedDao.mute(2)
+        val vm = ConversationsViewModel(repo)
+        vm.setStarred(listOf(1L, 2L), false)
+        vm.setMuted(listOf(1L, 2L), false)
+        eventually {
+            !db.starredDao.isStarred(1) && !db.starredDao.isStarred(2) &&
+                !db.mutedDao.isMuted(1) && !db.mutedDao.isMuted(2)
+        }
+    }
+
+    @Test fun `without a repository setPinned moves rows between the pinned and recent lists`() = runTest {
+        val vm = ConversationsViewModel()
+        val before = vm.uiState.value
+        val recentId = before.conversations.first().threadId.value
+        vm.setPinned(listOf(recentId), true)
+        val after = vm.uiState.value
+        assertTrue(after.pinned.any { it.threadId.value == recentId })
+        assertFalse(after.conversations.any { it.threadId.value == recentId })
     }
 }

@@ -12,7 +12,37 @@
     <string name="action_delete">Delete</string>
     <string name="action_share">Share</string>
     <string name="action_forward">Forward</string>
-    <string name="delete_message_title">Delete message?</string>
-    <string name="delete_message_body">This message will be permanently deleted.</string>
     <string name="cancel">Cancel</string>
+    <string name="new_conversation_title">New conversation</string>
+    <string name="action_archive">Archive</string>
+    <string name="action_block">Block</string>
+    <string name="action_call">Call</string>
+    <string name="action_add_contact">Add to contacts</string>
+    <string name="action_delete_conversation">Delete conversation</string>
+    <string name="action_not_spam">Not spam</string>
+    <string name="action_report_spam">Report spam</string>
+    <plurals name="delete_messages_title">
+        <item quantity="one">Delete %d message?</item>
+        <item quantity="other">Delete %d messages?</item>
+    </plurals>
+    <string name="delete_messages_body">They will be permanently deleted from this device. This can\'t be undone.</string>
+    <string name="delete_conversation_title">Delete this conversation?</string>
+    <string name="delete_conversation_body">All of its messages will be permanently deleted from this device. This can\'t be undone.</string>
+    <string name="block_sender_title">Block this sender?</string>
+    <string name="block_sender_body">You won\'t get messages from them. While NoSpam is your default SMS app, the number is also added to your phone\'s blocked numbers, so calls are blocked too and the block stays if NoSpam is uninstalled.</string>
+    <string name="date_today">Today</string>
+    <string name="date_yesterday">Yesterday</string>
+    <string name="show_emoji_desc">Show emoji</string>
+    <string name="show_keyboard_desc">Show keyboard</string>
+    <string name="sim_label">SIM</string>
+    <string name="contacts_permission_rationale">Allow access to contacts to pick a recipient by name</string>
+    <string name="contacts_permission_allow">Allow</string>
+    <string name="sms_counter">%1$d/%2$d</string>
+    <plurals name="sms_counter_desc">
+        <item quantity="one">%1$d characters left, sent as %2$d message</item>
+        <item quantity="other">%1$d characters left, sent as %2$d messages</item>
+    </plurals>
+    <string name="clipboard_label">Message</string>
+    <string name="new_no_contacts">No contacts yet</string>
+    <string name="new_no_matches">No contacts match that</string>
 </resources>

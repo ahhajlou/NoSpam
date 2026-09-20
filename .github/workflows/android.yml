@@ -57,17 +57,17 @@ jobs:
       # that only shows up in release (app/src/release, and the release
       # classpath without feature:export / feature:mldebug). The Kover "ci"
       # variant merges debug variants only; see the root build.gradle.kts.
+      # Only two modules still have androidTest sources (2026-09-20): the
+      # Compose suites moved to the JVM, so assembling their test APKs
+      # compiled nothing. core:database's ten suites were never in this list.
       - name: Build, compile device-test suites, and check coverage ratchet
         run: >
           ./gradlew assembleDebug testDebugUnitTest lintDebug
           :core:model:test :core:common:test
           :app:compileReleaseKotlin
           :baselineprofile:compileNonMinifiedReleaseKotlin
-          :feature:conversations:assembleDebugAndroidTest
-          :feature:thread:assembleDebugAndroidTest
-          :feature:settings:assembleDebugAndroidTest
           :core:telephony:assembleDebugAndroidTest
-          :core:designsystem:assembleDebugAndroidTest
+          :core:database:assembleDebugAndroidTest
           :koverXmlReportCi :koverHtmlReportCi :koverVerifyCi
           --stacktrace
 

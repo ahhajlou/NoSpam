@@ -1,40 +1,43 @@
 package com.nospam.nospam.feature.thread
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AddCircle
-import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.automirrored.outlined.Forward
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -42,34 +45,60 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nospam.nospam.core.designsystem.component.ActionMenuDialog
-import com.nospam.nospam.core.designsystem.component.ActionMenuItem
+import com.nospam.nospam.core.designsystem.component.Avatar
+import com.nospam.nospam.core.designsystem.component.ConfirmationDialog
+import com.nospam.nospam.core.designsystem.component.isolateIfPhoneNumber
+import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
+import com.nospam.nospam.core.designsystem.component.PruneSelection
+import com.nospam.nospam.core.designsystem.component.SelectionTopAppBar
+import com.nospam.nospam.core.designsystem.component.TopBarAction
+import com.nospam.nospam.core.designsystem.component.TopBarActions
+import com.nospam.nospam.core.designsystem.component.TopBarNavigation
+import com.nospam.nospam.core.designsystem.component.rememberSelectionState
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeIncoming
 import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
+import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
+import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageType
 import kotlinx.coroutines.launch
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-@OptIn(ExperimentalFoundationApi::class)
+/** Three icons plus the overflow, as in the conversation lists. */
+private const val SELECTION_INLINE_ACTIONS = 3
+
+private enum class ThreadConfirm { DELETE_MESSAGES, DELETE_CONVERSATION, BLOCK }
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ThreadScreen(
     threadId: Long,
     address: String? = null,
     forwardBody: String? = null,
     onForward: (String) -> Unit = {},
+    onNavigateUp: () -> Unit = {},
+    onArchive: (Long) -> Unit = {},
+    onBlock: (String) -> Unit = {},
+    onDeleteConversation: (Long) -> Unit = {},
     viewModel: ThreadViewModel = viewModel(),
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
+    val resources = LocalResources.current
     LaunchedEffect(threadId, address, forwardBody) { viewModel.loadThread(threadId, address, context, forwardBody) }
-    var selected by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
-    var pendingDelete by remember { mutableStateOf<com.nospam.nospam.core.model.Message?>(null) }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lazyState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -87,7 +116,7 @@ fun ThreadScreen(
     }
     var hasScrolledInitially by remember { mutableStateOf(false) }
     LaunchedEffect(threadId) { hasScrolledInitially = false }
-    // Fix 4: initial scroll must not depend on atBottom race — use threadId + first non-empty
+    // Initial scroll must not depend on the atBottom race — use threadId + first non-empty
     LaunchedEffect(threadId, uiState.messages.isNotEmpty()) {
         if (!hasScrolledInitially && uiState.messages.isNotEmpty()) {
             lazyState.scrollToItem(0)
@@ -100,358 +129,372 @@ fun ThreadScreen(
             lazyState.animateScrollToItem(0)
         }
     }
-    // No Scaffold on this screen, so nothing was applying system-bar or IME
-    // insets: the compose bar sat under the navigation bar and the keyboard
-    // covered it. safeDrawing covers bars, cutout and IME together, and
-    // consuming it here means children need no further inset handling.
-    Box(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            val grouped = remember(uiState.messages) {
-                uiState.messages.groupBy {
-                    java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-                }.toSortedMap()
+
+    val selection = rememberSelectionState()
+    PruneSelection(selection, uiState.messages.map { it.id.value })
+    BackHandler(enabled = selection.isActive) { selection.clear() }
+    val selectedMessages = uiState.messages.filter { it.id.value in selection.ids }
+    // Tap reveals a message's time; one at a time, as in Google Messages.
+    var timestampFor by remember { mutableStateOf<Long?>(null) }
+    var confirm by rememberSaveable { mutableStateOf<ThreadConfirm?>(null) }
+
+    val title = uiState.contactName ?: (uiState.address ?: address)?.let(::isolateIfPhoneNumber) ?: ""
+    val conversationActions = buildList {
+        val target = uiState.address
+        if (target != null) {
+            add(TopBarAction(stringResource(R.string.action_call), Icons.Outlined.Call) { dial(context, target) })
+            if (uiState.contactName == null) {
+                add(TopBarAction(stringResource(R.string.action_add_contact), Icons.Outlined.PersonAdd) {
+                    addToContacts(context, target)
+                })
             }
-            // Reverse the grouped map so latest date group is at bottom (index 0)
-            val reversedGrouped = remember(grouped) { grouped.entries.reversed() }
-            LazyColumn(
-                state = lazyState,
-                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                reverseLayout = true
-            ) {
-                reversedGrouped.forEach { (date, msgs) ->
-                    // msgs are ASC; reverse within group so latest at bottom (index 0)
-                    val reversedMsgs = msgs.reversed()
-                    items(reversedMsgs, key = { it.id.value }) { msg ->
-                val isMe = msg.type == MessageType.SENT
-                val isSuspected = msg.id.value in uiState.spamMessageIds && !isMe
-                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
-                    if (isSuspected) {
-                        androidx.compose.material3.AssistChip(
-                            onClick = { },
-                            label = { Text(stringResource(R.string.suspected_spam)) },
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(if (isMe) MessageBubbleShapeOutgoing else MessageBubbleShapeIncoming)
-                                .background(if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
-                                .combinedClickable(onClick = {}, onLongClick = { selected = msg })
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                        ) {
-                            Text(
-                                msg.body,
-                                color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                                style = MaterialTheme.typography.bodyLarge
+        }
+        add(TopBarAction(stringResource(R.string.action_archive), Icons.Outlined.Archive) {
+            onArchive(threadId)
+            onNavigateUp()
+        })
+        if (target != null) {
+            add(TopBarAction(stringResource(R.string.action_block), Icons.Outlined.Block, destructive = true) {
+                confirm = ThreadConfirm.BLOCK
+            })
+        }
+        add(TopBarAction(stringResource(R.string.action_delete_conversation), Icons.Outlined.Delete, destructive = true) {
+            confirm = ThreadConfirm.DELETE_CONVERSATION
+        })
+    }
+    val messageActions = buildList {
+        add(TopBarAction(stringResource(R.string.action_copy), Icons.Outlined.ContentCopy) {
+            copyToClipboard(context, selectedMessages.joinToString("\n") { it.body })
+            selection.clear()
+        })
+        val single = selectedMessages.singleOrNull()
+        if (single != null) {
+            add(TopBarAction(stringResource(R.string.action_forward), Icons.AutoMirrored.Outlined.Forward) {
+                selection.clear()
+                onForward(single.body)
+            })
+        }
+        // Order matters: the first three icons stay in the bar, the rest move to
+        // the ⋮ menu, and Delete belongs in the bar rather than Share.
+        add(TopBarAction(stringResource(R.string.action_delete), Icons.Outlined.Delete, destructive = true) {
+            confirm = ThreadConfirm.DELETE_MESSAGES
+        })
+        if (single != null) {
+            add(TopBarAction(stringResource(R.string.action_share), Icons.Outlined.Share) {
+                shareText(context, single.body)
+                selection.clear()
+            })
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            if (selection.isActive) {
+                SelectionTopAppBar(
+                    selectedCount = selection.ids.size,
+                    onClearSelection = selection::clear,
+                    actions = messageActions,
+                    maxInlineActions = SELECTION_INLINE_ACTIONS,
+                )
+            } else {
+                NoSpamTopAppBar(
+                    title = { ThreadTitle(title = title, contactKnown = uiState.contactName != null, address = uiState.address) },
+                    navigation = TopBarNavigation.Back(onNavigateUp),
+                    // Call stays in the bar; everything else lives in the ⋮ menu,
+                    // so the title keeps its room even with a long contact name.
+                    actions = { TopBarActions(conversationActions, maxInline = 1) },
+                )
+            }
+        },
+    ) { padding ->
+        // Scaffold applies the bars' insets; the IME is not part of them, so it
+        // is added after consuming, which keeps the compose bar above the keyboard
+        // without double-counting the navigation bar underneath it.
+        Box(modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                val grouped = remember(uiState.messages) {
+                    uiState.messages.groupBy {
+                        java.time.Instant.ofEpochMilli(it.date).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    }.toSortedMap()
+                }
+                // Reverse the grouped map so the latest date group sits at the bottom (index 0)
+                val reversedGrouped = remember(grouped) { grouped.entries.reversed() }
+                LazyColumn(
+                    state = lazyState,
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    reverseLayout = true,
+                ) {
+                    reversedGrouped.forEach { (date, msgs) ->
+                        // msgs are ASC; reverse within the group so the latest is at index 0
+                        items(msgs.reversed(), key = { it.id.value }) { msg ->
+                            val id = msg.id.value
+                            MessageBubble(
+                                msg = msg,
+                                selected = id in selection.ids,
+                                suspected = id in uiState.spamMessageIds && msg.type != MessageType.SENT,
+                                showTimestamp = timestampFor == id,
+                                onClick = {
+                                    if (selection.isActive) selection.toggle(id)
+                                    else timestampFor = if (timestampFor == id) null else id
+                                },
+                                onLongClick = { selection.toggle(id) },
+                                onMarkNotSpam = { uiState.onMarkNotSpam?.invoke(id) },
+                                onReportSpam = { uiState.onReportSpam?.invoke(id) },
+                                modifier = Modifier.animateItem(),
                             )
                         }
+                        stickyHeader(key = "date-$date") { DateHeader(date) }
                     }
-                    if (isSuspected) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                            androidx.compose.material3.TextButton(onClick = { uiState.onMarkNotSpam?.invoke(msg.id.value) }) { Text("Not spam") }
-                            androidx.compose.material3.TextButton(onClick = { uiState.onReportSpam?.invoke(msg.id.value) }) { Text("Report spam") }
-                        }
-                    }
-                }
-            }
-                stickyHeader(key = date.toString()) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                        Box(modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 12.dp, vertical = 4.dp)) {
-                            Text(formatDateHeader(date), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-            // Backward-pagination sentinel at the oldest end: loads the next
-            // older page when it comes into view (reverseLayout => last slot).
-            if (uiState.hasMoreOlder || uiState.loadingOlder) {
-                item(key = "load-older") {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(if (uiState.loadingOlder) 40.dp else 1.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (uiState.loadingOlder) CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-        }
-        selected?.let { msg ->
-            val actionCopy = stringResource(R.string.action_copy)
-            val actionDelete = stringResource(R.string.action_delete)
-            val actionShare = stringResource(R.string.action_share)
-            val actionForward = stringResource(R.string.action_forward)
-            ActionMenuDialog(
-                title = msg.body,
-                actions = listOf(
-                    ActionMenuItem(label = actionCopy, onClick = {
-                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("sms", msg.body))
-                    }),
-                    ActionMenuItem(label = actionDelete, destructive = true, onClick = { pendingDelete = msg }),
-                    ActionMenuItem(label = actionShare, onClick = {
-                        try {
-                            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_TEXT, msg.body)
+                    // Backward-pagination sentinel at the oldest end: loads the next
+                    // older page when it comes into view (reverseLayout => last slot).
+                    if (uiState.hasMoreOlder || uiState.loadingOlder) {
+                        item(key = "load-older") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().height(if (uiState.loadingOlder) 40.dp else 1.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (uiState.loadingOlder) CircularProgressIndicator(modifier = Modifier.size(20.dp))
                             }
-                            context.startActivity(android.content.Intent.createChooser(intent, null))
-                        } catch (_: Exception) {}
-                    }),
-                    ActionMenuItem(label = actionForward, onClick = { onForward(msg.body) }),
-                ),
-                onDismiss = { selected = null },
-            )
-        }
-        pendingDelete?.let { msg ->
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { pendingDelete = null },
-                title = { Text(stringResource(R.string.delete_message_title)) },
-                text = { Text(stringResource(R.string.delete_message_body)) },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(onClick = {
-                        viewModel.onDeleteMessage(msg.id.value)
-                        pendingDelete = null
-                        selected = null
-                    }) { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
-                }
-            )
-        }
-        // Compose bar
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(8.dp).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = {}) { Icon(Icons.Default.AddCircle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            IconButton(onClick = {}) { Icon(Icons.Default.Face, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (uiState.sims.size > 1) {
-                var simMenu by remember { mutableStateOf(false) }
-                Box {
-                    androidx.compose.material3.TextButton(onClick = { simMenu = true }) {
-                        Text(uiState.sims.find { it.subscriptionId == uiState.selectedSimId }?.displayName ?: "SIM", style = MaterialTheme.typography.labelLarge)
-                    }
-                    androidx.compose.material3.DropdownMenu(expanded = simMenu, onDismissRequest = { simMenu = false }) {
-                        uiState.sims.forEach { sim ->
-                            androidx.compose.material3.DropdownMenuItem(text = { Text("${sim.displayName} ${sim.number ?: ""}") }, onClick = { viewModel.onSimSelected(sim.subscriptionId); simMenu = false })
                         }
                     }
                 }
+                ComposeBar(
+                    draft = uiState.draft,
+                    onDraftChanged = viewModel::onDraftChanged,
+                    onSend = viewModel::onSend,
+                    sims = uiState.sims,
+                    selectedSimId = uiState.selectedSimId,
+                    onSimSelected = viewModel::onSimSelected,
+                )
             }
-            OutlinedTextField(
-                value = uiState.draft,
-                onValueChange = viewModel::onDraftChanged,
-                placeholder = { Text(stringResource(R.string.compose_hint)) },
-                modifier = Modifier.weight(1f),
-                singleLine = true
+            if (!atBottom) {
+                FloatingActionButton(
+                    onClick = { scope.launch { lazyState.animateScrollToItem(0) } },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).padding(bottom = 72.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.jump_to_latest_desc))
+                }
+            }
+        }
+    }
+
+    when (confirm) {
+        ThreadConfirm.DELETE_MESSAGES -> ConfirmationDialog(
+            title = resources.getQuantityString(R.plurals.delete_messages_title, selection.ids.size, selection.ids.size),
+            text = stringResource(R.string.delete_messages_body),
+            confirmLabel = stringResource(R.string.action_delete),
+            onConfirm = {
+                viewModel.onDeleteMessages(selection.ids.toList())
+                selection.clear()
+            },
+            onDismiss = { confirm = null },
+        )
+        ThreadConfirm.DELETE_CONVERSATION -> ConfirmationDialog(
+            title = stringResource(R.string.delete_conversation_title),
+            text = stringResource(R.string.delete_conversation_body),
+            confirmLabel = stringResource(R.string.action_delete),
+            onConfirm = {
+                onDeleteConversation(threadId)
+                onNavigateUp()
+            },
+            onDismiss = { confirm = null },
+        )
+        ThreadConfirm.BLOCK -> ConfirmationDialog(
+            title = stringResource(R.string.block_sender_title),
+            text = stringResource(R.string.block_sender_body),
+            confirmLabel = stringResource(R.string.action_block),
+            onConfirm = {
+                uiState.address?.let(onBlock)
+                onNavigateUp()
+            },
+            onDismiss = { confirm = null },
+        )
+        null -> Unit
+    }
+}
+
+/** Avatar plus name, with the number underneath when the name came from contacts. */
+@Composable
+private fun ThreadTitle(title: String, contactKnown: Boolean, address: String?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Avatar(name = title, colorKey = address.orEmpty(), size = 36.dp)
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            IconButton(onClick = viewModel::onSend) {
-                Icon(Icons.AutoMirrored.Filled.Send, stringResource(R.string.send_message_desc), tint = MaterialTheme.colorScheme.primary)
-            }
-        }
-        }
-        if (!atBottom) {
-            FloatingActionButton(
-                onClick = { scope.launch { lazyState.animateScrollToItem(0) } },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).padding(bottom = 72.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-            ) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.jump_to_latest_desc))
+            if (contactKnown && address != null) {
+                Text(
+                    isolateIfPhoneNumber(address),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
 }
 
-private fun formatDateHeader(date: java.time.LocalDate): String {
-    val today = java.time.LocalDate.now()
-    val yesterday = today.minusDays(1)
-    return when (date) {
-        today -> "Today"
-        yesterday -> "Yesterday"
-        else -> date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MessageBubble(
+    msg: Message,
+    selected: Boolean,
+    suspected: Boolean,
+    showTimestamp: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMarkNotSpam: () -> Unit,
+    onReportSpam: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isMe = msg.type == MessageType.SENT
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            // The highlight spans the row, so a selected message reads as selected
+            // even when its bubble is narrow.
+            .background(if (selected) colors.secondaryContainer else Color.Transparent)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .semantics { this.selected = selected }
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
+    ) {
+        if (suspected) {
+            Text(
+                stringResource(R.string.suspected_spam),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onErrorContainer,
+                modifier = Modifier
+                    .padding(bottom = 4.dp)
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .background(colors.errorContainer)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .clip(if (isMe) MessageBubbleShapeOutgoing else MessageBubbleShapeIncoming)
+                .background(if (isMe) colors.primary else colors.surfaceContainerHigh)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Text(
+                msg.body,
+                color = if (isMe) colors.onPrimary else colors.onSurface,
+                // The message decides its own direction: an English message in a
+                // Persian thread would otherwise have its punctuation moved.
+                style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content),
+            )
+        }
+        if (showTimestamp) {
+            Text(
+                formatMessageTime(msg.date),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        if (suspected) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onMarkNotSpam) { Text(stringResource(R.string.action_not_spam)) }
+                TextButton(onClick = onReportSpam) { Text(stringResource(R.string.action_report_spam)) }
+            }
+        }
     }
-}
-
-internal data class Contact(val name: String, val detail: String, val phone: String)
-
-// Fallback seed for previews/tests when no provider is available.
-internal fun fakeContacts() = listOf(
-    Contact("Alice Freeman", "Mobile • 555-0102", "5550102"),
-    Contact("Amanda Jones", "Work • 555-0193", "5550193"),
-    Contact("Ben Carter", "Home • 555-0144", "5550144"),
-    Contact("Brian Smith", "Mobile • 555-0188", "5550188"),
-    Contact("Catherine O'Neil", "Mobile • 555-0167", "5550167"),
-    Contact("David Kim", "Work • 555-0112", "5550112"),
-)
-
-private fun contactEntryToUi(e: com.nospam.nospam.core.model.ContactEntry) = Contact(
-    name = e.displayName,
-    detail = "${e.label ?: "Mobile"} • ${e.phone}",
-    phone = e.phone
-)
-
-/**
- * Resolves a typed query to a destination address: an exact/contains match
- * on a known contact name wins, otherwise the raw query is treated as a
- * phone number/address. Pure logic so the IME-Done path is unit-testable.
- */
-internal fun resolveRecipientAddress(query: String, contacts: List<Contact> = fakeContacts()): String? {
-    val trimmed = query.trim()
-    if (trimmed.isEmpty()) return null
-    contacts.firstOrNull { it.name.equals(trimmed, ignoreCase = true) }?.let { return it.phone }
-    contacts.firstOrNull { it.name.contains(trimmed, ignoreCase = true) }?.let { return it.phone }
-    return trimmed
 }
 
 @Composable
-fun NewConversationScreen(
-    onAddressEntered: (String) -> Unit = {},
-    dataSource: com.nospam.nospam.core.telephony.TelephonyDataSource? = null,
-) {
-    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var hasContactPerm by remember {
-        mutableStateOf(
-            dataSource == null || androidx.core.content.ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.READ_CONTACTS
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+private fun DateHeader(date: java.time.LocalDate) {
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Text(
+            formatDateHeader(date),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
         )
     }
-    val permLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { granted -> hasContactPerm = granted }
-    var realContacts by remember { mutableStateOf<List<Contact>?>(null) }
-    // Load real contacts when provider is available and permission granted
-    androidx.compose.runtime.LaunchedEffect(dataSource, query, hasContactPerm) {
-        if (dataSource == null || !hasContactPerm) {
-            realContacts = null
-            return@LaunchedEffect
-        }
-        val limit = 50
-        val q = query.takeIf { it.isNotBlank() }
-        realContacts = try {
-            dataSource.getContacts(limit, q).map { contactEntryToUi(it) }
-        } catch (_: Exception) { null }
-    }
-    val isPreview = dataSource == null
-    val rc = realContacts
-    val contacts: List<Contact> = when {
-        isPreview -> remember { fakeContacts() }
-        !hasContactPerm -> emptyList()
-        rc != null -> rc
-        else -> emptyList()
-    }
-    val filtered: List<Contact> = remember(query, contacts, rc, isPreview) {
-        if (!isPreview && rc != null) contacts
-        else if (query.isBlank()) contacts
-        else contacts.filter {
-            it.name.contains(query, ignoreCase = true) || it.detail.contains(query, ignoreCase = true)
-        }
-    }
-    fun submit() {
-        resolveRecipientAddress(query)?.let { onAddressEntered(it) }
-    }
-    // Recipient picker: same situation, its own text field and no Scaffold.
-    Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
-        Text(stringResource(R.string.new_to), style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = { Text(stringResource(R.string.new_hint)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone,
-                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-            ),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                onDone = { submit() },
-            ),
-        )
-        if (!hasContactPerm && dataSource != null) {
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.errorContainer).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Contacts permission needed to show your contacts", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
-                androidx.compose.material3.TextButton(onClick = { permLauncher.launch(android.Manifest.permission.READ_CONTACTS) }) { Text("Allow") }
-            }
-        }
-        Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            contacts.take(5).forEach { contact ->
-                Column(
-                    modifier = Modifier.clickable { onAddressEntered(contact.phone) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Box(
-                        modifier = Modifier.size(56.dp).clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            contact.name.take(1).uppercase(),
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
-                    Text(
-                        contact.name.substringBefore(" "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-        Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(filtered, key = { it.phone }) { contact ->
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .clickable { onAddressEntered(contact.phone) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            contact.name.take(1).uppercase(),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(contact.name, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            contact.detail,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
+}
+
+/** Localized, unlike the previous hardcoded "Today" / "MMM d, yyyy". */
+@Composable
+private fun formatDateHeader(date: java.time.LocalDate): String {
+    val context = LocalContext.current
+    val today = java.time.LocalDate.now()
+    return when (date) {
+        today -> stringResource(R.string.date_today)
+        today.minusDays(1) -> stringResource(R.string.date_yesterday)
+        else -> {
+            val millis = date.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val flags = android.text.format.DateUtils.FORMAT_SHOW_DATE or
+                android.text.format.DateUtils.FORMAT_ABBREV_MONTH or
+                if (date.year == today.year) 0 else android.text.format.DateUtils.FORMAT_SHOW_YEAR
+            android.text.format.DateUtils.formatDateTime(context, millis, flags)
         }
     }
 }
 
-// Previews
+@Composable
+private fun formatMessageTime(millis: Long): String {
+    val context = LocalContext.current
+    return remember(millis) {
+        android.text.format.DateUtils.formatDateTime(context, millis, android.text.format.DateUtils.FORMAT_SHOW_TIME)
+    }
+}
+
+internal fun copyToClipboard(context: android.content.Context, text: String) {
+    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    // The label is what the system clipboard UI shows for the entry, so it is
+    // translated like anything else the user reads.
+    val label = context.getString(R.string.clipboard_label)
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+}
+
+internal fun shareText(context: android.content.Context, text: String) {
+    runCatching {
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_TEXT, text)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, null))
+    }
+}
+
+internal fun dial(context: android.content.Context, address: String) {
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_DIAL, android.net.Uri.fromParts("tel", address, null))
+        )
+    }
+}
+
+internal fun addToContacts(context: android.content.Context, address: String) {
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_INSERT).apply {
+                type = android.provider.ContactsContract.Contacts.CONTENT_TYPE
+                putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, address)
+            }
+        )
+    }
+}
+
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Thread Light")
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Thread Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Thread RTL", locale = "fa")
 @Composable
 fun ThreadScreenPreview() {
-    com.nospam.nospam.core.designsystem.theme.NoSpamTheme {
+    NoSpamTheme {
         ThreadScreen(threadId = 1)
     }
 }

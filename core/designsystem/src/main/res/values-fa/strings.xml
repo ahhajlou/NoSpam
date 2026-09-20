@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ds_navigate_up">بازگشت</string>
+    <string name="ds_open_navigation_menu">باز کردن فهرست</string>
+    <string name="ds_more_options">گزینه‌های بیشتر</string>
+    <string name="ds_clear_selection">لغو انتخاب</string>
+    <string name="ds_cancel">لغو</string>
+    <plurals name="ds_selected_count">
+        <item quantity="one">%d مورد انتخاب شد</item>
+        <item quantity="other">%d مورد انتخاب شد</item>
+    </plurals>
+</resources>

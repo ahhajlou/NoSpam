@@ -28,16 +28,22 @@ class RequiredPermissionsTest {
         assertTrue(requiredPermissions(Build.VERSION_CODES.TIRAMISU).containsAll(expected))
     }
 
-    @Test fun `notifications are not requested below API 33`() {
+    @Test fun `notifications are requested from API 33 but never required`() {
+        // An SMS app works with notifications off; gating on them would also send
+        // anyone who turns them off later back to onboarding.
+        assertTrue(
+            requestedPermissions(Build.VERSION_CODES.TIRAMISU)
+                .contains(Manifest.permission.POST_NOTIFICATIONS)
+        )
         assertFalse(
-            requiredPermissions(Build.VERSION_CODES.S_V2)
+            requiredPermissions(Build.VERSION_CODES.TIRAMISU)
                 .contains(Manifest.permission.POST_NOTIFICATIONS)
         )
     }
 
-    @Test fun `notifications are requested from API 33`() {
-        assertTrue(
-            requiredPermissions(Build.VERSION_CODES.TIRAMISU)
+    @Test fun `notifications are not requested below API 33`() {
+        assertFalse(
+            requestedPermissions(Build.VERSION_CODES.S_V2)
                 .contains(Manifest.permission.POST_NOTIFICATIONS)
         )
     }
@@ -45,5 +51,30 @@ class RequiredPermissionsTest {
     @Test fun `the list has no duplicates`() {
         val perms = requiredPermissions(Build.VERSION_CODES.TIRAMISU)
         assertEquals(perms.size, perms.toSet().size)
+    }
+
+    @Test fun `the phone permissions gate onboarding, as the per-SIM features need them`() {
+        val required = requiredPermissions(Build.VERSION_CODES.TIRAMISU)
+        assertTrue(required.contains(Manifest.permission.READ_PHONE_STATE))
+        assertTrue(required.contains(Manifest.permission.READ_PHONE_NUMBERS))
+    }
+
+    @Test fun `READ_PHONE_NUMBERS is not required below API 30, where it cannot be granted`() {
+        // Gating on a permission the manifest cannot hold on that API would strand
+        // the user on onboarding: checkSelfPermission can only ever return DENIED.
+        assertFalse(
+            requiredPermissions(Build.VERSION_CODES.P)
+                .contains(Manifest.permission.READ_PHONE_NUMBERS)
+        )
+        assertTrue(
+            requiredPermissions(Build.VERSION_CODES.P)
+                .contains(Manifest.permission.READ_PHONE_STATE)
+        )
+    }
+
+    @Test fun `the requested list contains the required one and has no duplicates`() {
+        val requested = requestedPermissions(Build.VERSION_CODES.TIRAMISU)
+        assertTrue(requested.containsAll(requiredPermissions(Build.VERSION_CODES.TIRAMISU)))
+        assertEquals(requested.size, requested.toSet().size)
     }
 }

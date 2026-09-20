@@ -19,7 +19,6 @@
     <string name="archive_empty_title">بایگانی خالی است</string>
     <string name="archive_empty_subtitle">پیام‌هایی که بایگانی می‌کنید اینجا نمایش داده می‌شوند.</string>
     <string name="unarchive">خارج کردن از بایگانی</string>
-    <string name="empty_spam">خالی‌کردن هرزنامه</string>
     <string name="not_spam">هرزنامه نیست</string>
     <string name="marked_as_not_spam">%1$s هرزنامه نیست</string>
     <string name="menu_mark_read">علامت‌گذاری به‌عنوان خوانده‌شده</string>
@@ -41,4 +40,33 @@
     <string name="action_mute">بی‌صدا کردن</string>
     <string name="action_unmute">فعال کردن صدا</string>
     <string name="badge_mixed">ترکیبی</string>
+    <string name="status_muted">بی‌صدا</string>
+    <string name="action_call">تماس</string>
+    <string name="action_add_contact">افزودن به مخاطبان</string>
+    <plurals name="confirm_delete_title">
+        <item quantity="one">%d گفت‌وگو حذف شود؟</item>
+        <item quantity="other">%d گفت‌وگو حذف شود؟</item>
+    </plurals>
+    <string name="confirm_delete_body">همه پیام‌های آن‌ها برای همیشه از این دستگاه حذف می‌شود. این کار برگشت‌پذیر نیست.</string>
+    <plurals name="confirm_block_title">
+        <item quantity="one">%d فرستنده مسدود شود؟</item>
+        <item quantity="other">%d فرستنده مسدود شود؟</item>
+    </plurals>
+    <string name="confirm_block_body">دیگر پیامی از آن‌ها دریافت نمی‌کنید. تا وقتی NoSpam برنامه پیش‌فرض پیامک است، شماره به فهرست شماره‌های مسدود گوشی هم اضافه می‌شود؛ پس تماس‌ها هم مسدود می‌شوند و با حذف NoSpam هم باقی می‌ماند.</string>
+    <plurals name="marked_not_spam_count">
+        <item quantity="one">%d گفت‌وگو به صندوق ورودی منتقل شد</item>
+        <item quantity="other">%d گفت‌وگو به صندوق ورودی منتقل شد</item>
+    </plurals>
+    <string name="spam_empty_title">هرزنامه‌ای نیست</string>
+    <string name="spam_empty_subtitle">گفت‌وگوهایی که هرزنامه تشخیص داده شده‌اند و فرستندگانی که مسدود می‌کنید اینجا نمایش داده می‌شوند.</string>
+    <string name="badge_blocked">مسدود</string>
+    <string name="clear_search">پاک کردن جست‌وجو</string>
+    <plurals name="time_minutes">
+        <item quantity="one">%d دقیقه</item>
+        <item quantity="other">%d دقیقه</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="one">%d ساعت</item>
+        <item quantity="other">%d ساعت</item>
+    </plurals>
 </resources>

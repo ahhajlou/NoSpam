@@ -18,6 +18,10 @@ import kotlinx.coroutines.launch
 data class ThreadUiState(
     val threadId: Long,
     val messages: List<Message> = emptyList(),
+    /** The other party's address, once known from the route or a message. */
+    val address: String? = null,
+    /** Contact name for [address], when the address is in the user's contacts. */
+    val contactName: String? = null,
     val draft: String = "",
     val spamMessageIds: Set<Long> = emptySet(),
     val onMarkNotSpam: ((Long) -> Unit)? = null,
@@ -51,6 +55,7 @@ class ThreadViewModel(
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
 
     private var messagesJob: Job? = null
+    private var contactJob: Job? = null
     private var verdictsJob: Job? = null
     private var lastRemote: List<Message> = emptyList()
     // Optimistic rows (negative ids) not yet confirmed by the provider.
@@ -90,9 +95,17 @@ class ThreadViewModel(
         }
         val dataSource = this.dataSource
         if (dataSource == null) {
-            _uiState.value = ThreadUiState(threadId = id, messages = fakeMessages(), draft = forwardBody ?: "")
+            _uiState.value = ThreadUiState(
+                threadId = id,
+                messages = fakeMessages(),
+                draft = forwardBody ?: "",
+                // A contact, so previews show the name with the number beneath it.
+                address = address ?: "+15550101",
+                contactName = "Alice",
+            )
             return
         }
+        contactJob?.cancel()
         optimistic = emptyList()
         lastRemote = emptyList()
         olderMessages = emptyList()
@@ -101,7 +114,9 @@ class ThreadViewModel(
         _uiState.value = _uiState.value.copy(
             threadId = id, messages = emptyList(), spamMessageIds = emptySet(),
             hasMoreOlder = false, loadingOlder = false,
+            address = pendingAddress, contactName = null,
         )
+        pendingAddress?.let(::resolveContact)
         messagesJob?.cancel()
         messagesJob = viewModelScope.launch {
             dataSource.observeMessages(ThreadId(id)).collect { remote ->
@@ -112,7 +127,15 @@ class ThreadViewModel(
                     // Terminates: the update re-emits with everything read.
                     dataSource.markAsRead(ThreadId(id))
                 }
-                _uiState.value = _uiState.value.copy(threadId = id, messages = merged(), hasMoreOlder = hasOlder)
+                // The route carries an address only when the thread was opened
+                // from the recipient picker; otherwise the other party is the
+                // sender of the first incoming message.
+                val other = _uiState.value.address
+                    ?: remote.firstOrNull { it.type == MessageType.INBOX }?.address
+                if (other != null && _uiState.value.address == null) resolveContact(other)
+                _uiState.value = _uiState.value.copy(
+                    threadId = id, messages = merged(), hasMoreOlder = hasOlder, address = other,
+                )
             }
         }
         // Per-message "Not spam"/"Report spam" inside a MIXED thread (no sender override).
@@ -127,6 +150,19 @@ class ThreadViewModel(
                     _uiState.value = _uiState.value.copy(spamMessageIds = ids)
                 }
             }
+        }
+    }
+
+    /**
+     * Contact name for the title. A miss (unknown number, no permission) leaves
+     * [ThreadUiState.contactName] null and the screen falls back to the address.
+     */
+    private fun resolveContact(address: String) {
+        val dataSource = this.dataSource ?: return
+        contactJob?.cancel()
+        contactJob = viewModelScope.launch {
+            val name = runCatching { dataSource.lookupContact(address)?.displayName }.getOrNull()
+            if (name != null) _uiState.value = _uiState.value.copy(contactName = name)
         }
     }
 
@@ -184,6 +220,8 @@ class ThreadViewModel(
     fun onSimSelected(subId: Int) {
         _uiState.value = _uiState.value.copy(selectedSimId = subId)
     }
+
+    fun onDeleteMessages(messageIds: Collection<Long>) = messageIds.forEach(::onDeleteMessage)
 
     fun onDeleteMessage(messageId: Long) {
         val dataSource = this.dataSource

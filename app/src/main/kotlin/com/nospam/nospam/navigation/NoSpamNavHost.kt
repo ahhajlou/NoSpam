@@ -12,6 +12,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -19,15 +20,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.nospam.nospam.NoSpamApplication
+import com.nospam.nospam.R
 import com.nospam.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,7 +46,14 @@ import com.nospam.nospam.feature.conversations.ConversationsViewModel
 import com.nospam.nospam.feature.conversations.SpamScreen
 import com.nospam.nospam.feature.conversations.SpamViewModel
 import com.nospam.nospam.feature.onboarding.OnboardingScreen
+import com.nospam.nospam.feature.onboarding.hasRequiredPermissions
+import com.nospam.nospam.feature.settings.AboutSettingsScreen
+import com.nospam.nospam.feature.settings.AdvancedSettingsScreen
+import com.nospam.nospam.feature.settings.GeneralSettingsScreen
 import com.nospam.nospam.feature.settings.SettingsScreen
+import com.nospam.nospam.feature.settings.SettingsViewModel
+import com.nospam.nospam.feature.settings.SimSettingsScreen
+import com.nospam.nospam.feature.settings.SpamSettingsScreen
 import com.nospam.nospam.feature.settings.SpamPreferences
 import com.nospam.nospam.feature.thread.NewConversationScreen
 import com.nospam.nospam.feature.thread.ThreadScreen
@@ -50,16 +64,28 @@ import kotlinx.serialization.Serializable
 @Serializable object ArchivedRoute
 @Serializable object SpamRoute
 @Serializable object SettingsRoute
+@Serializable object SettingsGeneralRoute
+@Serializable data class SettingsSimRoute(val subscriptionId: Int)
+@Serializable object SettingsSpamRoute
+@Serializable object SettingsAdvancedRoute
+@Serializable object SettingsAboutRoute
 @Serializable object OnboardingRoute
 @Serializable data class NewConversationRoute(val forwardBody: String? = null)
 @Serializable data class ThreadRoute(val threadId: Long, val address: String? = null, val forwardBody: String? = null)
 
 
-/** First launch (or revoked state) lands on onboarding instead of an empty inbox. */
+/**
+ * First launch, or a revoked permission, lands on onboarding instead of an
+ * empty inbox.
+ *
+ * Checks the whole required list, not just READ_SMS: holding the default-SMS
+ * role auto-grants the SMS permissions, so a READ_SMS-only check passed even
+ * when contacts or phone had been denied, and the gate never appeared.
+ * Notifications are deliberately not in that list, so turning them off does
+ * not send anyone back here.
+ */
 private fun needsOnboarding(context: Context): Boolean {
-    val smsGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
-        PackageManager.PERMISSION_GRANTED
-    if (!smsGranted) return true
+    if (!hasRequiredPermissions(context)) return true
     return !isDefaultSmsApp(context)
 }
 
@@ -70,7 +96,7 @@ private fun isDefaultSmsApp(context: Context): Boolean =
 fun NoSpamNavHost(
     navController: NavHostController,
     startDestination: Any? = null,
-    onDrawerClick: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val container = remember(context) {
@@ -87,6 +113,37 @@ fun NoSpamNavHost(
             resolvedStart = if (onboarding) OnboardingRoute else ConversationsRoute
         }
     }
+    // Permissions can be revoked while the app is in the background. Android
+    // usually kills the process, so the cold-start check above catches it — but
+    // not always, and a surviving process would sit in the inbox with contacts
+    // or SIM lookups silently returning nothing. Re-checking on resume closes
+    // that, and also catches the default-SMS role being handed to another app.
+    // Re-check the gate on every resume, and again once the graph exists.
+    //
+    // Resume alone is not enough. Revoking a permission kills the process; when
+    // the user reopens the app the task is restored, the NavHost restores its
+    // saved back stack (the inbox) rather than honouring `resolvedStart`, and at
+    // that first resume `currentBackStackEntry` is still null, so a resume-only
+    // check skips and never runs again. That left the app on the inbox with a
+    // required permission missing — caught by tools/permission_gate_check.sh.
+    var resumeTick by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        resumeTick++
+        onPauseOrDispose { }
+    }
+    val currentEntry by navController.currentBackStackEntryAsState()
+    LaunchedEffect(currentEntry, resumeTick) {
+        val destination = currentEntry?.destination ?: return@LaunchedEffect
+        if (destination.hasRoute(OnboardingRoute::class)) return@LaunchedEffect
+        if (!needsOnboarding(context)) return@LaunchedEffect
+        navController.navigate(OnboardingRoute) {
+            // Nothing behind it: the inbox must not be reachable by back while a
+            // required permission is missing.
+            popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
+
     val start = resolvedStart
     if (start == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -117,15 +174,21 @@ fun NoSpamNavHost(
     val spamVm: SpamViewModel? = container?.let {
         viewModel(factory = vmFactory { SpamViewModel(it.conversationsRepository) })
     }
+    // Hoisted so the SIM list survives navigating into a SIM's page and back.
+    val settingsVm: SettingsViewModel = viewModel(
+        factory = vmFactory { SettingsViewModel(container?.telephony) }
+    )
 
     NavHost(navController = navController, startDestination = start) {
         composable<ConversationsRoute> {
             val scope = rememberCoroutineScope()
             ConversationsScreen(
+                title = stringResource(R.string.drawer_inbox),
+                onOpenDrawer = onOpenDrawer,
                 viewModel = conversationsVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNewMessage = { navController.navigate(NewConversationRoute()) },
-                onToggleRead = { id, read ->
+                onSetRead = { id, read ->
                     scope.launch { container?.conversationsRepository?.setRead(ThreadId(id), read) }
                 },
                 onArchive = { id ->
@@ -137,6 +200,9 @@ fun NoSpamNavHost(
                 onBlock = { address ->
                     scope.launch { container?.blocklistRepository?.block(address) }
                 },
+                onUnblock = { address ->
+                    scope.launch { container?.blocklistRepository?.unblock(address) }
+                },
                 onDelete = { id ->
                     scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
                 },
@@ -145,6 +211,8 @@ fun NoSpamNavHost(
         composable<ArchivedRoute> {
             val scope = rememberCoroutineScope()
             ArchivedScreen(
+                title = stringResource(R.string.drawer_archived),
+                onOpenDrawer = onOpenDrawer,
                 viewModel = archivedVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onUnarchive = { id ->
@@ -158,6 +226,8 @@ fun NoSpamNavHost(
         composable<SpamRoute> {
             val scope = rememberCoroutineScope()
             SpamScreen(
+                title = stringResource(R.string.drawer_spam_blocked),
+                onOpenDrawer = onOpenDrawer,
                 viewModel = spamVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNotSpam = { id, address ->
@@ -168,14 +238,48 @@ fun NoSpamNavHost(
                 onBlock = { address ->
                     scope.launch { container?.blocklistRepository?.block(address) }
                 },
+                onUnblock = { address ->
+                    scope.launch { container?.blocklistRepository?.unblock(address) }
+                },
                 onDelete = { id ->
                     scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
                 },
             )
         }
-        debugToolDestinations(container, context)
+        debugToolDestinations(container, context, onOpenDrawer)
         composable<SettingsRoute> {
-            SettingsScreen(onRecheck = { container?.spamBackfill?.rescanAll() })
+            SettingsScreen(
+                title = stringResource(R.string.drawer_settings),
+                onOpenDrawer = onOpenDrawer,
+                viewModel = settingsVm,
+                onOpenGeneral = { navController.navigate(SettingsGeneralRoute) },
+                onOpenSim = { subscriptionId -> navController.navigate(SettingsSimRoute(subscriptionId)) },
+                onOpenSpamProtection = { navController.navigate(SettingsSpamRoute) },
+                onOpenAdvanced = { navController.navigate(SettingsAdvancedRoute) },
+                onOpenAbout = { navController.navigate(SettingsAboutRoute) },
+            )
+        }
+        composable<SettingsGeneralRoute> {
+            GeneralSettingsScreen(onNavigateUp = { navController.navigateUp() })
+        }
+        composable<SettingsSimRoute> { backStackEntry ->
+            SimSettingsScreen(
+                subscriptionId = backStackEntry.toRoute<SettingsSimRoute>().subscriptionId,
+                onNavigateUp = { navController.navigateUp() },
+                viewModel = settingsVm,
+            )
+        }
+        composable<SettingsSpamRoute> {
+            SpamSettingsScreen(onNavigateUp = { navController.navigateUp() })
+        }
+        composable<SettingsAdvancedRoute> {
+            AdvancedSettingsScreen(
+                onNavigateUp = { navController.navigateUp() },
+                onRecheck = { container?.spamBackfill?.rescanAll() },
+            )
+        }
+        composable<SettingsAboutRoute> {
+            AboutSettingsScreen(onNavigateUp = { navController.navigateUp() })
         }
         composable<OnboardingRoute> {
             val scope = rememberCoroutineScope()
@@ -195,6 +299,7 @@ fun NoSpamNavHost(
             val args = backStackEntry.toRoute<NewConversationRoute>()
             val scope = rememberCoroutineScope()
             NewConversationScreen(
+                onNavigateUp = { navController.navigateUp() },
                 onAddressEntered = { address ->
                     scope.launch {
                         val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L
@@ -211,11 +316,22 @@ fun NoSpamNavHost(
                     container?.let { ThreadViewModel(it.telephony, args.address, it.spamRepository) } ?: ThreadViewModel()
                 }
             )
+            val scope = rememberCoroutineScope()
             ThreadScreen(
                 threadId = args.threadId,
                 address = args.address,
                 forwardBody = args.forwardBody,
                 onForward = { body -> navController.navigate(NewConversationRoute(forwardBody = body)) },
+                onNavigateUp = { navController.navigateUp() },
+                onArchive = { id ->
+                    scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }
+                },
+                onBlock = { address ->
+                    scope.launch { container?.blocklistRepository?.block(address) }
+                },
+                onDeleteConversation = { id ->
+                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                },
                 viewModel = vm,
             )
         }

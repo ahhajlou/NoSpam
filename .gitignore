@@ -25,6 +25,9 @@ core/testing/bin/
 .kotlin/
 # Vendored third-party Claude Code skills: kept local, not part of the app.
 .claude/
+# Lock file written by `npx skills` for those same local skills; meaningless
+# without the skill files it pins.
+skills-lock.json
 
 # Editor swap files
 *.swp

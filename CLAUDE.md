@@ -143,7 +143,37 @@ self-contained:
   launched via the Activity Result API. There is no public intent action to
   build by hand. Pre-Q, fall back to `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT`
   with `EXTRA_PACKAGE_NAME`.
-- Multi-SIM: resolve `SmsManager` through `SubscriptionManager`.
+- Multi-SIM: resolve `SmsManager` through `SubscriptionManager`. Enumerating
+  subscriptions needs `READ_PHONE_STATE` (and `READ_PHONE_NUMBERS` from API 33
+  for a SIM's own number). Without them `getActiveSubscriptionInfoList` throws
+  `SecurityException`, `RealTelephonyDataSource` returns an empty list, and the
+  per-SIM settings pages and the SIM picker silently disappear — that was the
+  state until 2026-09-17, when the permissions were added.
+
+**Permission gate.** `requiredPermissions()` in `feature:onboarding` is the one
+list: SMS (read/send/receive), contacts, and phone (`READ_PHONE_STATE`, plus
+`READ_PHONE_NUMBERS` from API 30 — gating on it below that is unsatisfiable and
+would strand onboarding forever). `NoSpamNavHost` routes to onboarding whenever
+that list is not fully granted, on cold start *and* on resume, because a process
+that survives a revocation would otherwise sit in the inbox with contact and SIM
+lookups silently returning nothing. Checking only `READ_SMS` was not enough:
+holding the default-SMS role auto-grants the SMS permissions, so the gate never
+fired for contacts or phone.
+
+Contacts is required because the spam policy depends on it, not for cosmetics:
+saved contacts bypass the classifier (§5, `TODO.md`), and without the permission
+`lookupContact` returns nothing, so a contact's message can be classified as
+spam and hidden.
+
+`POST_NOTIFICATIONS` is requested (`optionalPermissions()`) but never required:
+an SMS app works with notifications off, Google Messages runs that way too, and
+gating on it would bounce anyone who turns notifications off back to onboarding.
+
+Verified 2026-09-17 on the emulator: Google Messages gates on SMS, contacts and
+phone individually — denying any one leaves it on its "You're almost done"
+screen. Its Phone permission carries `GRANTED_BY_DEFAULT` as a preinstalled app,
+so a re-request is auto-granted with no dialog; that masked the gate on a first
+look. Ours is user-granted and revocable, hence the resume check.
 
 Note for tests and scripts: the role constant is `android.app.role.SMS`,
 uppercase. Lowercase silently fails with "Unknown role".
@@ -158,8 +188,19 @@ uppercase. Lowercase silently fails with "Unknown role".
 - Always `padding(start=, end=)`, never `left`/`right`. Use
   `Icons.AutoMirrored.*` for directional icons.
 - `android:supportsRtl="true"`. Compose needs no extra flag.
-- Test with real Persian strings, not placeholder text. Latin numbers inside
-  Persian text need bidi isolation in places.
+- Test with real Persian strings, not placeholder text, and look at the running
+  app: `adb shell cmd locale set-app-locales com.nospam.nospam --locales fa`.
+- **Text whose language varies takes its direction from its content**, not from
+  the layout: snippets, message bodies, names and the thread title set
+  `TextDirection.Content`. Without it an English message in a Persian inbox
+  renders as ".Meeting moved to 3pm" — the layout's direction moves its full
+  stop to the front.
+- **Phone numbers are isolated** through `isolateIfPhoneNumber` (core:designsystem),
+  so a right-to-left layout cannot move a leading "+" to the other end. Only
+  phone-like values: isolate characters are invisible but still characters, and
+  UI tests and Maestro flows match sender ids by exact text.
+- Anything with digits that the user reads as one unit — the SMS part counter,
+  a SIM's number — goes through `isolateLtr` for the same reason.
 - Gregorian versus Jalali dates is still undecided in fact: `DateFormatter`
   comments mention a flag that does not exist, and the behaviour is Gregorian
   always. That is a silent default, which the i18n notes explicitly wanted to
@@ -248,7 +289,10 @@ Typography → `androidx.compose.material3.Typography`:
 | `headline-lg-mobile` | Hanken Grotesk | 24/32, 600 | `headlineLarge` (compact window class) |
 | `body-lg` | Inter | 16/24, 400, 0.5sp | `bodyLarge` |
 | `body-md` | Inter | 14/20, 400, 0.25sp | `bodyMedium` |
-| `label-lg` | Inter | 12/16, 500, 0.1sp | `labelLarge` |
+| `label-lg` | Inter | 12/16, 500, 0.1sp | `labelMedium` (M3 `labelLarge` is the 14/20 button role) |
+
+Roles DESIGN.md does not name use the M3 baseline scale, but are still defined
+explicitly in `Type.kt` so a font swap reaches every role.
 
 Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp,
 `lg`=16dp (message bubbles, sharp corner on the sender-side per the export), `xl`=24dp
@@ -257,27 +301,51 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 ## 9. Testing
 
-| Layer | Where | State as of 2026-09-15 |
+| Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit | `src/test` across 16 modules | 238 tests, 38.63% line coverage |
+| Unit, including every Compose screen | `src/test` across 17 modules | 339 tests, 60.49% line coverage |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
-| Instrumented, Compose UI | 5 modules | **cannot run on API 37** — see below |
-| End-to-end | `.maestro/flows` | 12 flows, 6 of 10 default ones passing |
+| Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
+| End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |
 
 Tests are written against behaviour, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
 Turbine for Flow assertions. Coverage gate is a ratchet in the root
 `build.gradle.kts`; raise it, never lower it.
 
-**Compose instrumented tests fail on API 37** with
-`NoSuchMethodException: android.hardware.input.InputManager.getInstance`.
-Espresso reflects into a platform method that no longer exists. Not app logic.
-Either bump the test artifacts or keep an older AVD for those suites.
+**Compose UI tests run on the JVM through Robolectric, not on a device.** As of
+2026-09-20 there is no `androidTest` source set in any Compose module: the
+instrumented copies asserted the same behaviour as their JVM counterparts and
+were folded into them, and those modules' `androidTest` dependencies went with
+them. Instrumented tests are for what the JVM cannot tell the truth about —
+`core:database` against real SQLite, `core:telephony` against a real
+`ContentResolver` and `SubscriptionManager`. Add a device suite only for that
+kind of code; a second copy of a screen test costs an emulator and asserts
+nothing new.
+
+This is also why Compose UI tests were not blocked by the emulator: **Compose
+instrumented tests fail on API 37** with `NoSuchMethodException:
+android.hardware.input.InputManager.getInstance` — Espresso reflects into a
+platform method that no longer exists, which is not app logic.
+
+The Robolectric setup: `@RunWith(RobolectricTestRunner::class)`
+plus `@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")` in a module's
+`src/test`, with `testOptions.unitTests.isIncludeAndroidResources = true`. The
+qualifiers are not optional: Robolectric's default window is 320x470px, too
+small to compose a single list row, and every query then fails with "could not
+find any node".
 
 **End-to-end runs are local only**; CI has no emulator. `tools/run-e2e.sh`
 reseeds before every flow, because flows mutate shared fixtures and otherwise
 break each other in ways that look like flakes. `tools/seed.sh` is idempotent —
 it resets the addresses it is about to write before writing them.
+
+Seeding also creates the contact "NoSpam QA Contact" (+15551110001), which is
+what the "Known" filter and contact-name resolution are asserted against. Note
+that **`content insert` prints nothing on success**, so a new row's id has to be
+read back with a follow-up query, never parsed from the insert's output — doing
+that left the contact uncreated and every run leaked one nameless `raw_contact`
+(187 of them before this was caught on 2026-09-20).
 
 **If you start an emulator by hand, use `-qt-hide-window`, never `-no-window`.**
 The latter selects `qemu-system-x86_64-headless`, which segfaults during startup
@@ -286,7 +354,9 @@ not a graphics problem however much the log looks like one.
 
 ## 10. Build and toolchain
 
-Gradle 9.1.0, AGP 9.0.1, Kotlin 2.2.10, Compose BOM 2024.09.00. The Gradle
+Gradle 9.6.0, AGP 9.4.0, KSP 2.3.6, Kotlin 2.2.10, Compose BOM 2026.09.00
+(Compose UI 1.12.1, Material 3 1.4.0). compileSdk 37 (SDK platform `android-37.0`,
+required by Compose 1.12), targetSdk 36. The Gradle
 daemon is pinned to a JDK 25 JetBrains toolchain through
 `gradle/gradle-daemon-jvm.properties`, so the CLI and the IDE share one daemon.
 

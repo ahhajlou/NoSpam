@@ -22,12 +22,15 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 
 # --- Starred ---
+# Star and mute sit in the selection bar's overflow (⋮) menu; pin is an icon.
 - longPressOn: "NSTEST_STAR1"
+- tapOn: "More options"
 - tapOn: "Unstar"
 - longPressOn: "NSTEST_STAR1"
+- tapOn: "More options"
 - tapOn: "Star"
 - stopApp
 - launchApp:
@@ -54,6 +57,7 @@ tags:
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - tapOn: "Unmute"
 - scrollUntilVisible:
     element:
@@ -61,6 +65,7 @@ tags:
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - tapOn: "Mute"
 - stopApp
 - launchApp:
@@ -71,13 +76,15 @@ tags:
     direction: DOWN
     optional: true
 - longPressOn: "NSTEST_MUTE1"
+- tapOn: "More options"
 - assertVisible: "Unmute"
-- back
+- back                                        # closes the menu
+- tapOn: "Clear selection"                  # leaves selection mode
 
 # --- Archived --- (NSTEST_ARCHIVE2 starts already archived, per tools/seed.sh;
 # a fixture dedicated to this flow, separate from NSTEST_ARCHIVE1 which
 # archived_unarchive.yaml round-trips, so the two never race each other)
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Archived"
 - assertVisible: "NSTEST_ARCHIVE2"
 - longPressOn: "NSTEST_ARCHIVE2"
@@ -85,21 +92,33 @@ tags:
 - stopApp
 - launchApp:
     clearState: false
+# NSTEST_ARCHIVE2 is dated 10 days back, so once unarchived it sorts to the end
+# of the inbox. The list only composes on-screen rows, so an assertion without
+# scrolling depends on screen height and fixture count, and failed on a phone.
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_ARCHIVE2"
+    direction: DOWN
 - assertVisible: "NSTEST_ARCHIVE2"           # back in the inbox, survived restart
 - longPressOn: "NSTEST_ARCHIVE2"
 - tapOn: "Archive"
 - stopApp
 - launchApp:
     clearState: false
-- assertNotVisible: "NSTEST_ARCHIVE2"        # gone from inbox again
-- tapOn: "Menu"
+# Absence cannot be shown by scrolling (an off-screen row is "not visible" too),
+# so narrow the inbox to this address and check its unique snippet is gone.
+# The query itself stays in the search field, hence asserting the snippet.
+- tapOn: "Search conversations"
+- inputText: "NSTEST_ARCHIVE2"
+- assertNotVisible: "Your prescription is ready for pickup."   # gone from inbox again
+- tapOn: "Open navigation menu"
 - tapOn: "Archived"
 - assertVisible: "NSTEST_ARCHIVE2"           # present in Archived, survived restart
 
 # --- Spam verdict override ("Not spam" sticks) --- NSTEST_SPAM3 is dedicated
 # to this flow (NSTEST_SPAM1 belongs to spam_notspam_and_bulk.yaml, NSTEST_SPAM2
 # is the never-mutated fixture inbox_filters_and_search.yaml checks against).
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Spam & blocked"
 - runFlow:
     when:
@@ -111,10 +130,10 @@ tags:
 - stopApp
 - launchApp:
     clearState: false
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Spam & blocked"
 - assertNotVisible: "NSTEST_SPAM3"          # spam tab: stays not-spam
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Inbox"
 - scrollUntilVisible:
     element:

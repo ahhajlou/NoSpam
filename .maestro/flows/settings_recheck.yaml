@@ -15,12 +15,10 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
-- tapOn: "Menu"
+- assertVisible: "Inbox"
+- tapOn: "Open navigation menu"
 - tapOn: "Settings"
-- scrollUntilVisible:
-    element:
-        text: "Re-check all messages"
-    direction: DOWN
+# Re-check moved to Settings > Advanced in P1.6.
+- tapOn: "Advanced"
 - tapOn: "Re-check all messages"
 - assertVisible: "Re-check started in the background"

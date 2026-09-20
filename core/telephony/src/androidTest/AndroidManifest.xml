@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The test APK is self-instrumenting: :app's manifest is not part of it, so
+     GrantPermissionRule has nothing to grant unless the permissions are
+     declared here. Without this the suite fails before reaching an assertion
+     with "Failed to grant permissions, see logcat for details". -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+</manifest>

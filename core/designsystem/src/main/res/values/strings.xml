@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ds_navigate_up">Navigate up</string>
+    <string name="ds_open_navigation_menu">Open navigation menu</string>
+    <string name="ds_more_options">More options</string>
+    <string name="ds_clear_selection">Clear selection</string>
+    <string name="ds_cancel">Cancel</string>
+    <plurals name="ds_selected_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+</resources>

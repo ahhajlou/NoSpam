@@ -13,7 +13,7 @@ plugins {
 // hand-roll its own copy of these fakes.
 android {
     namespace = "com.nospam.nospam.core.testing"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26

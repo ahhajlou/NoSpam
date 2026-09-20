@@ -14,7 +14,7 @@ tags:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
+- assertVisible: "Inbox"
 - assertNotVisible: "Welcome to NoSpam"
 
 # Belt-and-braces: if a future test run genuinely starts from a clean install
@@ -24,10 +24,12 @@ tags:
     when:
       visible: "Welcome to NoSpam"
     commands:
-      - assertVisible: "On-device spam filtering — no server."
-      - assertVisible: "Grant SMS & Contacts permissions"
-      - tapOn: "Grant SMS & Contacts permissions"
-      - assertVisible: "✓ Permissions granted"
+      # The two setup steps, each explaining what it is for (P1.7).
+      - assertVisible: "Messages, contacts and SIM"
+      - assertVisible: "Default SMS app"
+      - assertVisible: "Grant SMS, Contacts & Phone permissions"
+      - tapOn: "Grant SMS, Contacts & Phone permissions"
+      - assertVisible: "Granted"
       - assertVisible: "Set as default SMS app"
       - tapOn: "Set as default SMS app"
       # This opens the system role-request dialog, which is not a NoSpam view —
@@ -36,4 +38,4 @@ tags:
           visible: "Continue"
           timeout: 15000
       - tapOn: "Continue"
-      - assertVisible: "NoSpam SMS"
+      - assertVisible: "Inbox"

@@ -2,72 +2,59 @@ appId: com.nospam.nospam
 tags:
   - spam
 ---
-# Requires tools/seed.sh seed (NSTEST_SPAM1 is pre-flagged SPAM). Uses its own
-# disposable live-delivered spam message for the destructive bulk actions so it
-# never touches fixtures other flows depend on.
+# Spam & blocked: selection mode, swipe to "Not spam", and a multi-row action.
+# Rewritten 2026-09-17: the auto-delete banner and the Block all / Delete all
+# row this flow used to assert were removed in 6898a35 because they were
+# unconfirmed hard deletes. Requires tools/seed.sh seed (NSTEST_SPAM1,
+# NSTEST_SPAM2 and NSTEST_BULK1 are pre-flagged SPAM).
 - launchApp:
     clearState: false
     permissions:
       all: allow
-- assertVisible: "NoSpam SMS"
-- tapOn: "Menu"
+- assertVisible: "Inbox"
+- tapOn: "Open navigation menu"
 - assertVisible: "Spam & blocked"
 - tapOn: "Spam & blocked"
-- assertVisible: "Spam messages will be deleted automatically after 30 days."
 - assertVisible: "NSTEST_SPAM1"
+- assertNotVisible: "Block all"
+- assertNotVisible: "Delete all"
 
-# Long-press menu on a spam row: Not spam / Block / Delete.
+# --- Selection bar ---
 - longPressOn: "NSTEST_SPAM1"
-- assertVisible: "NSTEST_SPAM1"
+- assertVisible: "1 selected"
 - assertVisible: "Not spam"
 - assertVisible: "Block"
 - assertVisible: "Delete"
-- back
 
-# Swipe-to-"Not spam" (StartToEnd only) removes it from the Spam list.
+# Delete is a hard delete from the SMS provider, so it is confirmed with a count.
+- tapOn: "Delete"
+- assertVisible: "Delete 1 conversation?"
+- tapOn: "Cancel"
+- assertVisible: "NSTEST_SPAM1"
+- tapOn: "Clear selection"
+
+# --- Swipe toward the end edge marks one conversation not spam ---
 - swipe:
     from: "NSTEST_SPAM1"
     direction: RIGHT
 - assertNotVisible: "NSTEST_SPAM1"
-# The M3 Snackbar auto-dismisses after a few seconds; check for it right away
-# but don't fail the flow over a missed race against Maestro's own step
-# overhead — the row leaving Spam and reappearing in the Inbox below is the
-# durable assertion.
 - assertVisible:
-    text: "marked as not spam"
+    text: ".*moved to Inbox.*"
     optional: true
-
-# It must reappear in the inbox as a normal (non-spam) conversation.
-- tapOn: "Menu"
+- tapOn: "Open navigation menu"
 - tapOn: "Inbox"
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_SPAM1"
+    direction: DOWN
 - assertVisible: "NSTEST_SPAM1"
 
-# --- Bulk actions, on the disposable NSTEST_BULK1 fixture (tools/seed.sh
-# seeds it fresh every `seed` run; re-run `tools/seed.sh bulkspam` standalone
-# to recreate it after this flow consumes it) ---
-#
-# CAUTION found while hardening this flow: "Block all" / "Delete all"
-# (SpamScreen.kt) act on *every* conversation currently in the Spam & blocked
-# list, unscoped and with no confirmation dialog — not just the one fixture
-# this flow means to touch. Settings > "Re-check all messages" re-runs the
-# real classifier over full message history, and it readily flags repetitive
-# templated text (exactly what bulk seed fixtures like NSTEST_LONG1's "message
-# N of 200" look like) as spam. Running that re-check and this bulk-delete
-# step against the same shared fixture pool in one suite pass deleted most of
-# this project's other fixtures outright during hardening. Do not run
-# `settings_dialogs_and_switches` and this flow's bulk-action section back to
-# back against a fixture set you still need — re-seed after, or run this flow
-# in isolation (`maestro test .maestro/flows/spam_notspam_and_bulk.yaml`).
-- tapOn: "Menu"
+# --- Two rows at once ---
+- tapOn: "Open navigation menu"
 - tapOn: "Spam & blocked"
-- assertVisible: "NSTEST_BULK1"
-- assertVisible: "Block all"
-- assertVisible: "Delete all"
-# Deliberately NOT tapped. Both act on the entire Spam & blocked list, unscoped
-# and unconfirmed, and "Delete all" issues a hard DELETE against the system SMS
-# provider. Firing them here destroyed the shared fixture pool and made the
-# whole suite order-dependent — see the CAUTION above. Both buttons are also
-# under review for removal (TODO.md, "Bulk spam actions are irreversible and
-# unconfirmed"), so asserting they are reachable is as far as this flow should
-# go. If they survive that review with a confirmation dialog, extend this to
-# tap and then dismiss the dialog, which is safe.
+- longPressOn: "NSTEST_BULK1"
+- tapOn: "NSTEST_SPAM2"
+- assertVisible: "2 selected"
+- tapOn: "Not spam"
+- assertNotVisible: "NSTEST_BULK1"
+- assertNotVisible: "NSTEST_SPAM2"

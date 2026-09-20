@@ -4,12 +4,14 @@ import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.NavHostController
 import com.nospam.nospam.AppContainer
 import com.nospam.nospam.R
+import com.nospam.nospam.core.designsystem.component.DrawerDestinationScaffold
 import com.nospam.nospam.feature.export.ExportScreen
 import com.nospam.nospam.feature.export.ExportViewModel
 import com.nospam.nospam.feature.mldebug.MlDebugScreen
@@ -36,7 +38,7 @@ val debugTools: List<DebugTool> = listOf(
     ),
 )
 
-fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Context) {
+fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Context, onOpenDrawer: () -> Unit) {
     composable<ExportRoute> {
         val vm: ExportViewModel = viewModel(
             factory = vmFactory {
@@ -48,7 +50,9 @@ fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Con
                 } ?: ExportViewModel()
             }
         )
-        ExportScreen(viewModel = vm)
+        DrawerDestinationScaffold(stringResource(R.string.drawer_export), onOpenDrawer) {
+            ExportScreen(viewModel = vm)
+        }
     }
     composable<MlDebugRoute> {
         val vm: MlDebugViewModel = viewModel(
@@ -56,6 +60,8 @@ fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Con
                 container?.let { MlDebugViewModel(it.classifier) } ?: MlDebugViewModel()
             }
         )
-        MlDebugScreen(viewModel = vm)
+        DrawerDestinationScaffold(stringResource(R.string.drawer_mldebug), onOpenDrawer) {
+            MlDebugScreen(viewModel = vm)
+        }
     }
 }

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="section_general">عمومی</string>
-    <string name="section_privacy">حریم خصوصی و محافظت</string>
     <string name="section_advanced">پیشرفته</string>
     <string name="section_about">درباره</string>
     <string name="notif_title">اعلان‌ها</string>
@@ -42,4 +41,29 @@
     <string name="scan_title">بررسی مجدد همه پیام‌ها</string>
     <string name="scan_sub">بررسی دوباره همه پیام‌ها با فیلتر هرزنامه فعلی؛ تصمیم‌های دستی شما حفظ می‌شود</string>
     <string name="recheck_started">بررسی مجدد در پس‌زمینه آغاز شد</string>
+    <string name="general_summary">برنامه پیش‌فرض پیامک، اعلان‌ها، زبان</string>
+    <string name="spam_summary">فیلتر کردن، فرستندگان مسدود</string>
+    <string name="advanced_summary">بررسی دوباره پیام‌ها، فضای ذخیره‌سازی</string>
+    <string name="section_appearance">ظاهر</string>
+    <string name="theme_title">انتخاب پوسته</string>
+    <string name="theme_system">پیش‌فرض سیستم</string>
+    <string name="dynamic_color_title">استفاده از رنگ‌های تصویر زمینه</string>
+    <string name="dynamic_color_sub">متریال یو، اندروید ۱۲ و بالاتر</string>
+    <string name="sounds_title">پخش صدای پیام‌های ارسالی و دریافتی</string>
+    <string name="sounds_sub">هنگام ارسال یا دریافت پیام صدا پخش شود</string>
+    <string name="sim_title">سیم‌کارت</string>
+    <string name="sim_section_details">مشخصات سیم‌کارت</string>
+    <string name="sim_number_title">شماره تلفن</string>
+    <string name="sim_number_unknown">این سیم‌کارت شماره‌ای ارائه نمی‌دهد</string>
+    <string name="mms_roaming_title">دریافت خودکار MMS در رومینگ</string>
+    <string name="mms_roaming_sub">ممکن است در شبکه‌های دیگر هزینه داشته باشد</string>
+    <string name="delivery_reports_title">دریافت گزارش تحویل پیامک</string>
+    <string name="delivery_reports_sub">باخبر شوید که پیام چه زمانی تحویل داده شد</string>
+    <string name="blocked_senders_title">فرستندگان مسدود و مجاز</string>
+    <string name="blocked_senders_sub">فرستندگانی که مسدود یا مجاز کرده‌اید را ببینید و تغییر دهید</string>
+    <string name="warn_contacts_title">هشدار درباره پیام‌های مشکوک مخاطبان</string>
+    <string name="warn_contacts_sub">مخاطبان از فیلتر هرزنامه عبور می‌کنند؛ این گزینه فقط برچسب اضافه می‌کند و هیچ پیامی را پنهان نمی‌کند</string>
+    <string name="auto_delete_spam_title">حذف خودکار هرزنامه‌های قدیمی</string>
+    <string name="auto_delete_spam_sub">گفت‌وگوهای هرزنامه پس از ۳۰ روز حذف شوند</string>
+    <string name="section_spam">محافظت از هرزنامه</string>
 </resources>

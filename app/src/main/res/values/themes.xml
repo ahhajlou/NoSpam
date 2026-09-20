@@ -2,7 +2,10 @@
 <resources>
 
     <!-- AppCompat parent: required by AppCompatActivity (which in turn is required
-         for per-app locales on pre-33). All UI is Compose (NoSpamTheme), so this
-         view theme only hosts the activity window. -->
-    <style name="Theme.NoSpam" parent="Theme.AppCompat.NoActionBar" />
+         for per-app locales on pre-33). Almost all UI is Compose (NoSpamTheme),
+         but View-based children inherit from here: the emoji picker took its
+         text colors from this theme and rendered white-on-white in light mode
+         while the parent was the (always dark) Theme.AppCompat. DayNight also
+         gives the window the right background before Compose draws. -->
+    <style name="Theme.NoSpam" parent="Theme.AppCompat.DayNight.NoActionBar" />
 </resources>

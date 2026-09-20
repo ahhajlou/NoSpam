@@ -1,5 +1,9 @@
 # TODO List
 
+> Re-checked item by item against `main` at `c060f0c` on 2026-09-17. Items
+> ticked or rewritten in that pass say so inline; everything else was confirmed
+> still open in the code.
+
 - [] Lists all SMS from other SMS apps before app is installed
 - [] Message orders are wrong in conversations after i installed the app on a phone with old messages
 
@@ -9,8 +13,8 @@
   against a real imported history before ticking either.
 
 ## Backfill (Phase 12) follow-ups — clear fixes
-- [] Progress UX: emit `Running(0, total)` when a scan starts — `statusProgress` only fires every 100 messages, so small scans / the first second of large scans show no banner
-- [] Replace public `forceScanForTesting()` on `SpamBackfillUseCase` with a properly-scoped `rescan()` API (Settings currently calls `ensureStarted()`; the test-named hook stays unused in prod)
+- [x] Progress UX: emit `Running(0, total)` when a scan starts — done: `SpamBackfillUseCase.run()` announces `Running(0, total)` before the first batch, `statusProgress` adapts its step to history size, and `SpamBackfillProgressTest` asserts the start tick
+- [] Delete the unused `forceScanForTesting()` on `SpamBackfillUseCase`. The properly-scoped API it was waiting for exists: `rescanAll()`, which Settings' "Re-check all messages" already calls via `NoSpamNavHost`. Nothing in `src/` or tests calls the test-named hook any more
 - [] Align TASKS.md 12.5 with implementation: UiState exposes `BackfillStatus` directly, not a `BackfillProgress(processed, total)` data class
 - [] `insertAll` uses `CONFLICT_REPLACE`: a concurrent ingress verdict row for the same messageId gets overwritten mid-scan — skip-if-exists or accept deliberately
 - [] `flush()` writes `sender_state` then `message_verdict` in two transactions; wrap in a single transaction for atomicity
@@ -198,9 +202,28 @@ error.
   `FakeTelephonyDataSource` in `core:testing` (it mirrors the same `_id` contract
   and would silently diverge from an impl-only fix), and their tests.
 
-### Bulk spam actions are irreversible and unconfirmed  — safety
+### Bulk spam actions are irreversible and unconfirmed  — resolved by removal
 
-`ConversationsScreen`'s Spam & Blocked bulk row runs
+**Resolved 2026-09-15 in `6898a35` (PR #8):** the "Block all" / "Delete all"
+row and the "deleted automatically after 30 days" banner were removed from
+`SpamScreen`, so the unconfirmed hard delete no longer exists. Per-conversation
+Not spam / Block / Delete remain on swipe and long-press. The analysis below is
+kept because it is the rule any future bulk action must meet — including
+multi-select in the UI polish work (`docs/UI-POLISH-PLAN.md`).
+
+- [x] **`.maestro/flows/spam_notspam_and_bulk.yaml` was stale** — rewritten
+  2026-09-17 with Spam selection mode (`docs/UI-POLISH-PLAN.md` P1.3): it now
+  asserts the bulk row is gone, a confirmed Delete, swipe to Not spam and a
+  two-row Not spam. Passing. `settings_dialogs_and_switches.yaml` still carries
+  a comment mentioning the removed button; harmless.
+- The confirmation rule below is now implemented for multi-select Delete and
+  Block in Inbox, Archived and Spam & blocked (count in the title; Block states
+  that it reaches the system blocked-numbers list and calls).
+- The "Empty Spam" button left in `SpamScreen` renders only in preview/fake mode
+  (`!isLive`) and deletes nothing real. Not a finding, noted so it is not
+  mistaken for a surviving bulk action.
+
+Original finding, for the record — `ConversationsScreen`'s Spam & Blocked bulk row ran
 `spamList.forEach { onDelete(it.threadId.value) }`, which reaches
 `telephony.deleteConversation` — a hard delete from the system SMS provider. No
 confirmation, no undo, no tombstone.
@@ -217,25 +240,33 @@ Three things make this worse than an ordinary delete button:
 Observed for real: running a re-check and then a bulk action in one session
 destroyed most of the seeded test fixtures.
 
-- [] Confirmation dialog naming the count before Delete all.
-- [] Confirmation for Block all that states it also blocks calls and persists
+The fixes proposed here no longer have a button to attach to. They stand as the
+rule for any bulk action that is reintroduced (multi-select Delete / Block):
+
+- Confirmation dialog naming the count before a bulk delete.
+- Confirmation for a bulk block that states it also blocks calls and persists
   after uninstall.
-- [] Consider an undo snackbar for Block, which is reversible. Delete is not, so
+- Consider an undo snackbar for Block, which is reversible. Delete is not, so
   confirmation is the only guard available there.
 
-### Compose instrumented tests cannot run on API 37  — tooling
+### Compose instrumented tests cannot run on API 37  — tooling — **resolved 2026-09-20**
 
-All 20 Compose UI tests fail with
+Compose UI tests failed with
 `NoSuchMethodException: android.hardware.input.InputManager.getInstance`.
 Espresso's UI controller reflectively calls a method that no longer exists on
 API 37. Not app logic — the emulator is newer than the test libraries.
 
-The nine `Sqlite*Dao` suites and `SqliteNoSpamOpenHelper` are unaffected and
-pass 44/44 on the same device, so the storage layer is now verified.
+Resolved by removing the need rather than the failure. Every Compose
+`androidTest` suite duplicated a JVM suite, so in P1.9 the device-only
+assertions were ported into the Robolectric suites and the instrumented copies
+deleted; `feature:conversations`, `feature:thread`, `feature:settings` and
+`core:designsystem` no longer have an `androidTest` source set. Nothing is
+waiting on an Espresso bump or a second AVD, and screen coverage is gated on
+every build instead of on an emulator.
 
-- [] Either bump Espresso and the Compose test artifacts, or keep a second AVD
-  on an older API for UI tests. Decide before writing the E2E runner script,
-  since the runner has to target whichever combination works.
+The storage suites (nine `Sqlite*Dao` plus `SqliteNoSpamOpenHelper`, 44/44) and
+`core:telephony`'s were never affected and stay on the device — see CLAUDE.md §9
+for when a new instrumented test is the right call.
 
 ## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
 
@@ -243,8 +274,8 @@ pass 44/44 on the same device, so the storage layer is now verified.
   closed the drawer; it had never done anything. A menu item that silently does
   nothing is worse than no menu item, so it is gone rather than left lying.
   Re-add it when it is actually implemented. Note it is a bulk action over every
-  conversation with no natural undo, so it should follow whatever confirmation
-  rule the spam bulk actions settle on.
+  conversation with no natural undo, so it should follow the bulk-action
+  confirmation rule recorded under "Bulk spam actions" above.
 
 - [] **`ACTION_SENDTO` handling is advertised but not implemented.** The
   manifest claims `sms:`, `smsto:`, `mms:` and `mmsto:` so other apps can hand
@@ -294,8 +325,40 @@ first").
   `forwardBody` nor a persisted `DraftStore` entry exists for the
   newly-opened thread. `feature/thread/src/main/kotlin/com/nospam/nospam/feature/thread/ThreadViewModel.kt`, `loadThread()`.
 
+## Drafts in the inbox — agreed model (2026-09-18)
+
+Today a draft is invisible outside its own thread: `DraftStore` is a DataStore
+in `feature:thread` keyed by thread id, the inbox shows no sign of it, and
+`Conversation.hasDraft` exists but is never set or rendered.
+
+**Verified on the emulator (Google Messages 20260331, as default SMS app):**
+typing a draft and leaving the thread moves that conversation to the **top** of
+the inbox, above the newest received message, and its preview reads
+`You: <draft text>` with a **"Draft"** label. Notably, `content://sms` has **no
+`type=3` (draft) rows** afterwards — Messages keeps drafts in its own database,
+not the system store. So the ordering and the label are the app's own doing, and
+we can match the behaviour without writing to the provider.
+
+Agreed for a later phase:
+- [] Show a "Draft" marker and the draft text as the preview in the inbox row.
+- [] Sort a conversation with a draft by when the draft was saved, so it rises
+  to the top like Messages does. A half-written message is the conversation the
+  user is most likely to return to.
+- [] Set `Conversation.hasDraft` from the draft store rather than leaving the
+  field unused.
+- [] Needs a home the inbox can read: `DraftStore` lives in `feature:thread`,
+  and `feature:conversations` must not depend on it. Move it to `core:data` (or
+  `core:database`) when this is built — that is also where the draft-carryover
+  bug below gets fixed.
+- [] Decide then whether to also write drafts to the provider as `type=3`. It
+  would make drafts visible to other SMS apps and survive a reinstall, which
+  Messages does not bother with; weigh that against a second source of truth,
+  which CLAUDE.md §4 warns about.
+
 ## Project-wide
+- [] Reply on the conversation's own SIM. `ThreadViewModel` only knows a subscription id when the SIM list loaded, so with phone permission missing (or a single-SIM device) `sendMessage` passes none and `resolveSmsManager` falls back to the system default SIM — on a dual-SIM phone, replying to a conversation that arrived on SIM 2 can go out on SIM 1. The provider records the subscription per message, and reading it needs no permission, so this is fixable independently of the permission gate
+- [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
-- [] Add instrumented tests for `core:telephony` provider query/write logic (off-device fake coverage is thin, per CLAUDE.md §5)
+- [] Add instrumented tests for `core:telephony` provider query/write logic. Two device suites exist (`TelephonyInstrumentedTest`: one SMS insert/query round trip plus a notification build; `TelephonyMapperDeviceTest`: two `ContentValues` mappers) but nothing covers pagination, delete, mark-read or the SIM path. The thread pagination cursor bug above is exactly the kind this would have caught
 - [] MMS: extend history scan to MMS when the MMS-parsing architecture is ready (currently SMS-only in backfill)
 - [] Rename `com.nospam.nospam` applicationId/package before publishing

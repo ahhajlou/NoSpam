@@ -16,6 +16,12 @@
 
     <uses-permission android:name="android.permission.READ_CELL_BROADCASTS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Enumerating SIMs for the per-SIM settings pages and the dual-SIM send
+         picker; READ_PHONE_NUMBERS is what reads a SIM's own number from API 33.
+         Requested and required in onboarding, as Google Messages does. Nothing
+         read here leaves the device. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
