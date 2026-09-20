@@ -33,3 +33,13 @@ skills-lock.json
 *.swp
 *.swo
 *~
+
+# Signing keystores. The release key lives outside this repo entirely;
+# this is a backstop against a stray copy being committed.
+*.jks
+*.keystore
+*.p12
+
+# Release signing: passwords for the key, never committed. See
+# keystore.properties.template.
+keystore.properties

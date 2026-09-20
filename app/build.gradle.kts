@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.baselineprofile)
@@ -8,6 +10,26 @@ plugins {
 }
 
 val appVersionName = "0.1.0-alpha.5"
+
+// Release signing material never lives in this repository. It is read from
+// keystore.properties at the root (gitignored, see keystore.properties.template)
+// or, in CI, from the matching environment variables. When neither is present
+// the release build type simply has no signing config and `assembleRelease`
+// produces an unsigned APK, so a clone without the key still builds.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingSetting(propertyKey: String, envName: String): String? =
+    (keystoreProperties.getProperty(propertyKey) ?: System.getenv(envName))
+        ?.takeIf { it.isNotBlank() }
+
+val keystorePath = signingSetting("storeFile", "ANDROID_KEYSTORE_FILE")
+val keystoreFile = keystorePath?.let { path ->
+    File(path).takeIf { it.isAbsolute } ?: rootProject.file(path)
+}
+val hasReleaseSigning = keystoreFile?.exists() == true
 
 base {
     archivesName = "NoSpam-$appVersionName"
@@ -40,8 +62,26 @@ android {
         localeFilters += listOf("en", "fa")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = signingSetting("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = signingSetting("keyAlias", "ANDROID_KEY_ALIAS")
+                keyPassword = signingSetting("keyPassword", "ANDROID_KEY_PASSWORD")
+                    ?: signingSetting("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+                // v1 (jar) signing is what pre-API-24 devices need; minSdk is 26,
+                // so only the APK Signature Scheme v2/v3 blocks are required.
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

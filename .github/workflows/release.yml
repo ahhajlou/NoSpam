@@ -1,4 +1,4 @@
-name: Build Release APK
+name: Release
 
 on:
   push:
@@ -6,70 +6,177 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# One run per tag. Not cancel-in-progress: a half-finished signing job that gets
+# cancelled is harmless, but a cancelled *publish* can leave a release with some
+# of its assets, which is worse than waiting.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Nothing by default; each job opts into exactly what it needs. The signing job
+# never gets `contents: write`, and the publishing job never sees the signing
+# secrets — see the comment on the `release` job.
+permissions: {}
+
 jobs:
   build:
+    name: Build, sign and verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       version_name: ${{ steps.metadata.outputs.version_name }}
       version_code: ${{ steps.metadata.outputs.version_code }}
+      apk_name: ${{ steps.metadata.outputs.apk_name }}
     steps:
       - uses: actions/checkout@v7
+
+      # Cheap guard, before the six-minute build. The authoritative check runs
+      # after assembling, against what was actually built; this one just turns
+      # "tagged without bumping the version" into a five-second failure.
+      - name: Check the tag matches appVersionName
+        if: github.ref_type == 'tag'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          APP="$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)"
+          if [ "$TAG" != "$APP" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match appVersionName '$APP' — bump the version in app/build.gradle.kts before tagging"
+            exit 1
+          fi
 
       - name: Set up JDK 25
         uses: actions/setup-java@v6
         with:
-          distribution: temurin
+          # JetBrains, not Temurin: gradle/gradle-daemon-jvm.properties pins
+          # toolchainVendor=JETBRAINS. With any other vendor installed, Gradle
+          # downloads one into ~/.gradle/jdks on every run. android.yml has said
+          # this since it was written; this workflow used temurin and paid that
+          # download on every release until 2026-09-20.
+          distribution: jetbrains
           java-version: "25"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          # See the matching comment in android.yml: the action's default
-          # package list requests the legacy "tools" package, removed from
-          # Google's SDK manifest on 2026-09-14.
+          # See the matching comment in android.yml: the action's default package
+          # list requests the legacy "tools" package, removed from Google's SDK
+          # manifest on 2026-09-14. An empty value still sets ANDROID_HOME and
+          # pre-accepts the licences; AGP provisions the platform and
+          # build-tools it needs, including the apksigner used to verify below.
           packages: ''
 
-      - name: Cache Gradle
-        uses: actions/cache@v6
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
+          # Matches android.yml: "basic" is the MIT-licensed cache provider.
+          # The default "enhanced" one is under Gradle's commercial terms.
+          cache-provider: basic
+          # A tag is not the default branch, so this is read-only anyway. Stated
+          # explicitly because a release must never be able to poison main's
+          # build cache. Replaces the hand-rolled actions/cache block, which
+          # cached only ~/.gradle/caches and ~/.gradle/wrapper and so missed the
+          # configuration cache and the downloaded JDK.
+          cache-read-only: true
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+      # No `chmod +x ./gradlew`: it is mode 100755 in git, so the checkout is
+      # already executable.
 
-      - name: "Assemble debug APK (pre-release: debug only)"
-        # Pre-release: no point shipping unsigned release builds yet.
-        # run: ./gradlew :app:assembleRelease :app:assembleDebug --stacktrace
-        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Decode the release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          # An unset secret expands to an empty string, which would base64-decode
+          # to an empty file. app/build.gradle.kts treats a missing keystore as
+          # "build unsigned" by design, so without this check a misconfigured
+          # repository would publish an unsigned APK and report success.
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set — refusing to build a release that would silently be unsigned. See docs/SIGNING.md §3."
+            exit 1
+          fi
+          # printf, not echo: some shells' echo mangles backslashes in a long blob.
+          # $RUNNER_TEMP, not the workspace: a keystore inside the checkout can be
+          # swept up by an artifact upload with a careless path glob.
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
-      - name: Read build metadata
+      - name: Run unit tests and assemble the signed release APK
+        env:
+          # Read by the signing config in app/build.gradle.kts, which prefers
+          # keystore.properties (absent here) and falls back to these.
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          # Optional: blank falls back to the store password, which is the case
+          # for a PKCS12 keystore made by `keytool -genkeypair -storetype PKCS12`.
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        # android.yml runs on pushes to main and on PRs, so a tag build is
+        # otherwise untested code: the tagged commit gets the unit suite here.
+        # Release lint needs no separate task — `lint { checkReleaseBuilds = true }`
+        # puts lintVitalRelease inside assembleRelease already.
+        run: >
+          ./gradlew
+          testDebugUnitTest :core:model:test :core:common:test
+          :app:assembleRelease
+          --stacktrace
+
+      - name: Verify the APK is signed with our key
+        # apksigner verify alone would only prove the APK is self-consistent — a
+        # debug-signed or throwaway-signed one passes it. The fingerprint is
+        # pinned here as a literal rather than kept in a secret because it is
+        # public (it is in every APK we ship) and because pinning it in the repo
+        # means swapping the signing key shows up in a diff and in review.
+        run: >
+          tools/verify-signing.sh
+          --expect 55869c56eefb9bf16e2f8f2285524d9d93d33f067d54a53dce896a88799dfac1
+
+      - name: Remove the keystore from the runner
+        if: always()
+        # The runner is ephemeral, so this is belt-and-braces — and the one line
+        # that has to stay if this ever moves to a self-hosted runner.
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Read build metadata and checksum the APK
         id: metadata
         run: |
-          META=app/build/outputs/apk/debug/output-metadata.json
-          # ABI-split disabled: a single fat APK, so filtering for the ABI-less
-          # (universal) element is no longer needed.
-          # VERSION_NAME=$(jq -r '.elements[] | select(.filters | length == 0) | .versionName' "$META")
-          # VERSION_CODE=$(jq -r '.elements[] | select(.filters | length == 0) | .versionCode' "$META")
+          set -euo pipefail
+          OUT=app/build/outputs/apk/release
+          META="$OUT/output-metadata.json"
+          # ABI splits are disabled (see app/build.gradle.kts), so there is a
+          # single fat APK and no need to filter for the ABI-less element.
           VERSION_NAME=$(jq -r '.elements[0].versionName' "$META")
           VERSION_CODE=$(jq -r '.elements[0].versionCode' "$META")
-          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "--- Built APKs ---"
-          find app/build/outputs/apk -name '*.apk' -printf '%p\n'
+          APK_NAME=$(jq -r '.elements[0].outputFile' "$META")
+          # Written from inside the directory so the path in the file is bare and
+          # `sha256sum -c` works wherever a user unpacks the download.
+          ( cd "$OUT" && sha256sum "$APK_NAME" > "$APK_NAME.sha256" )
+          {
+            echo "version_name=$VERSION_NAME"
+            echo "version_code=$VERSION_CODE"
+            echo "apk_name=$APK_NAME"
+          } >> "$GITHUB_OUTPUT"
+          echo "--- built ---"
+          ls -l "$OUT"/*.apk "$OUT"/*.sha256
 
-      - name: Upload release artifacts
+      - name: Verify the built APK's version matches the tag
+        if: github.ref_type == 'tag'
+        # The authoritative check: reads what was actually built, not the source.
+        # It lives in this job so a mismatch fails before anything is uploaded.
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          BUILD_VERSION="${{ steps.metadata.outputs.version_name }}"
+          if [ "$TAG_VERSION" != "${BUILD_VERSION#v}" ]; then
+            echo "::error::git tag ($TAG_VERSION) doesn't match the built APK's version ($BUILD_VERSION)"
+            exit 1
+          fi
+
+      - name: Upload the signed APK
         uses: actions/upload-artifact@v7
         with:
           name: release-apk
+          # Explicit globs: the same directory also holds output-metadata.json
+          # and a baselineProfiles/ tree, neither of which belongs in a release.
           path: |
-            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/*.sha256
           retention-days: 7
           if-no-files-found: error
 
@@ -79,29 +186,52 @@ jobs:
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # only this job needs write access
-
+      contents: write   # only this job writes, and it holds no signing secrets
     steps:
-      - name: Download APK artifact
+      - name: Download the signed APK
         uses: actions/download-artifact@v8
         with:
           name: release-apk
           path: release-apk
 
-      - name: Verify tag matches build version
+      - name: Compose the release body
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          BUILD_VERSION="${{ needs.build.outputs.version_name }}"
-          BUILD_VERSION="${BUILD_VERSION#v}"
-          if [ "$TAG_VERSION" != "$BUILD_VERSION" ]; then
-            echo "::error::Git tag ($TAG_VERSION) doesn't match app version ($BUILD_VERSION)"
-            exit 1
-          fi
+          set -euo pipefail
+          APK="${{ needs.build.outputs.apk_name }}"
+          cat > body.md <<EOF
+          NoSpam ${{ needs.build.outputs.version_name }} (versionCode ${{ needs.build.outputs.version_code }})
 
-      - name: Create GitHub Release
+          ### Verifying this download
+
+          This APK is distributed outside Google Play, so the signature is the
+          only thing tying it to this project. Check both before installing:
+
+          \`\`\`
+          sha256sum -c $APK.sha256
+          apksigner verify --min-sdk-version 26 --print-certs $APK
+          \`\`\`
+
+          The signer must be:
+
+          \`\`\`
+          Signer #1 certificate SHA-256 digest: 55869c56eefb9bf16e2f8f2285524d9d93d33f067d54a53dce896a88799dfac1
+          \`\`\`
+
+          An APK signed with any other key is not from this project. NoSpam is
+          your default SMS app, so this matters more than usual.
+          EOF
+          cat body.md
+
+      - name: Create the GitHub Release
+        # Third-party action, and deliberately in the job that has no keystore
+        # and no secrets beyond the default token. Worth pinning to a commit SHA
+        # rather than a tag if you want this supply-chain-hardened.
         uses: softprops/action-gh-release@v3.0.3
         with:
-          files: release-apk/*.apk
+          files: |
+            release-apk/*.apk
+            release-apk/*.sha256
+          body_path: body.md
           fail_on_unmatched_files: true
           generate_release_notes: true
           prerelease: ${{ contains(needs.build.outputs.version_name, 'alpha') || contains(needs.build.outputs.version_name, 'beta') || contains(needs.build.outputs.version_name, 'rc') }}

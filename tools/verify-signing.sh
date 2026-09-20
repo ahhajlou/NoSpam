@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# tools/verify-signing.sh — check that a built APK is signed, and signed with
+# OUR key.
+#
+# Why this exists rather than a bare `apksigner verify`:
+#
+#   1. `apksigner verify` answers "is this APK internally consistent?", NOT
+#      "is this the key that signs NoSpam?". A debug-signed APK, or one signed
+#      with a throwaway key, passes it happily. The check that matters is
+#      comparing the APK's signer fingerprint against the keystore's, so that
+#      is what this does.
+#   2. The release signing config in app/build.gradle.kts is absent when no
+#      keystore is configured, and `assembleRelease` then emits an UNSIGNED
+#      APK rather than failing. A typo in storeFile therefore looks like a
+#      successful build. This turns that into a loud failure.
+#   3. minSdk is 26, so v1 (JAR) signing is deliberately off and only the v2/v3
+#      blocks are expected. `apksigner verify` without --min-sdk-version
+#      assumes minSdk 1 and complains about the missing v1 block, which is not
+#      a real problem for this app.
+#
+# Usage:
+#   tools/verify-signing.sh                       # newest release APK
+#   tools/verify-signing.sh path/to/some.apk
+#   tools/verify-signing.sh --expect <sha256>     # compare without the keystore
+set -uo pipefail
+
+cd "$(dirname "$0")/.."
+
+MIN_SDK=26
+EXPECTED=""
+APK=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --expect) EXPECTED="$2"; shift 2 ;;
+        -h|--help) sed -n '5,30p' "$0"; exit 0 ;;
+        *) APK="$1"; shift ;;
+    esac
+done
+
+fail() { printf '\033[31mFAIL\033[0m  %s\n' "$*"; exit 1; }
+pass() { printf '\033[32mOK\033[0m    %s\n' "$*"; }
+warn() { printf '\033[33mWARN\033[0m  %s\n' "$*"; }
+
+normalise() { tr -d ': ' | tr '[:upper:]' '[:lower:]'; }
+
+# --- locate apksigner -------------------------------------------------------
+SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+APKSIGNER="$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)"
+[ -x "$APKSIGNER" ] || fail "apksigner not found under $SDK/build-tools"
+
+# --- locate the APK ---------------------------------------------------------
+if [ -z "$APK" ]; then
+    APK="$(ls -t app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)"
+    [ -n "$APK" ] || fail "no APK in app/build/outputs/apk/release — run ./gradlew :app:assembleRelease first"
+fi
+[ -f "$APK" ] || fail "no such file: $APK"
+printf 'APK       %s\n' "$APK"
+
+case "$APK" in
+    *unsigned*) fail "filename says unsigned — the release signing config did not apply" ;;
+esac
+
+# --- 1. is it signed at all, for our minSdk? --------------------------------
+OUT="$("$APKSIGNER" verify --min-sdk-version "$MIN_SDK" --verbose --print-certs "$APK" 2>&1)"
+STATUS=$?
+echo "$OUT" | grep -qE '^Verifies$' || {
+    echo "$OUT" | grep -vE '^WARNING: (A restricted|java.lang.System|Use --enable|Restricted)' >&2
+    fail "apksigner could not verify the signature (exit $STATUS)"
+}
+V2="$(echo "$OUT" | sed -n 's/^Verified using v2 scheme.*: //p')"
+V3="$(echo "$OUT" | sed -n 's/^Verified using v3 scheme.*: //p')"
+[ "$V2" = "true" ] || fail "no v2 signature block"
+[ "$V3" = "true" ] || fail "no v3 signature block"
+pass "signature verifies for minSdk $MIN_SDK (v2 and v3 present)"
+
+SIGNERS="$(echo "$OUT" | grep -c '^Signer #[0-9]* certificate DN:')"
+[ "$SIGNERS" = "1" ] || warn "$SIGNERS signers — expected exactly 1"
+
+DN="$(echo "$OUT" | sed -n 's/^Signer #1 certificate DN: //p')"
+ACTUAL="$(echo "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | normalise)"
+printf 'Signer    %s\n' "$DN"
+printf 'SHA-256   %s\n' "$ACTUAL"
+
+# --- 2. is it the DEBUG key? ------------------------------------------------
+case "$DN" in
+    *"CN=Android Debug"*) fail "signed with the Android debug key — this is not a releasable APK" ;;
+esac
+
+# --- 3. is it OUR key? ------------------------------------------------------
+if [ -z "$EXPECTED" ] && [ -f keystore.properties ]; then
+    STORE="$(sed -n 's/^storeFile=//p' keystore.properties)"
+    ALIAS="$(sed -n 's/^keyAlias=//p' keystore.properties)"
+    PASSWD="$(sed -n 's/^storePassword=//p' keystore.properties)"
+    if [ -n "$STORE" ] && [ -f "$STORE" ] && [ -n "$PASSWD" ]; then
+        EXPECTED="$(keytool -list -v -keystore "$STORE" -alias "$ALIAS" -storepass "$PASSWD" 2>/dev/null \
+            | sed -n 's/.*SHA256: //p' | head -1 | normalise)"
+    fi
+fi
+
+if [ -z "$EXPECTED" ]; then
+    warn "no keystore fingerprint to compare against — signature is valid, but its IDENTITY is unchecked"
+    warn "pass --expect <sha256>, or fill in keystore.properties, to check it is really our key"
+    exit 0
+fi
+
+EXPECTED="$(echo "$EXPECTED" | normalise)"
+if [ "$ACTUAL" = "$EXPECTED" ]; then
+    pass "signer matches our release key"
+else
+    printf 'expected  %s\n' "$EXPECTED"
+    fail "signed with a DIFFERENT key than our keystore — do not publish this APK"
+fi

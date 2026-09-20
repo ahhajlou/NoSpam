@@ -367,6 +367,25 @@ daemon is pinned to a JDK 25 JetBrains toolchain through
 tools/run-e2e.sh                         # end-to-end, needs a device
 ```
 
+**Release signing.** Full detail in [`docs/SIGNING.md`](docs/SIGNING.md);
+the summary is that `:app` has a `release` signing config that reads four
+values from `keystore.properties` at the repo root, falling back to the
+environment (`ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) for CI. The keystore itself lives outside the working
+tree and `keystore.properties` is gitignored; `keystore.properties.template`
+documents the keys. When neither source is present the config is simply absent
+and `assembleRelease` emits an unsigned APK, so a clone without the key still
+builds. `enableV1Signing = false` — minSdk is 26, so the v2/v3 blocks suffice
+and the JAR-signing block is dead weight.
+
+`tools/verify-signing.sh` checks a built APK before it is published. It runs
+`apksigner verify --min-sdk-version 26` (without that flag apksigner assumes
+minSdk 1 and reports the deliberately-absent v1 block as a failure) and then
+compares the signer's SHA-256 against the keystore's, because `apksigner
+verify` on its own proves only that an APK is self-consistent — a debug-signed
+or throwaway-signed APK passes it. It also fails on an `*unsigned*` filename
+and on `CN=Android Debug`.
+
 Performance work is measured on a **release** build, not debug: the same commit
 is roughly 1.75s debuggable and 0.91s release, because a debuggable APK JITs far
 more and runs StrictMode. Discard the first launch after install and take the
@@ -411,6 +430,9 @@ Standing rules, not a one-time fix list.
 
 - `TODO.md` — open work, and the agreed spam routing model. Read before
   touching `ThreadSpamPolicy`.
+- `docs/SIGNING.md` — release key: generating it, configuring it, CI secrets,
+  and the safety rules. Read before touching the signing config or publishing
+  a build.
 - `docs/ARCHITECTURE-REVIEW.md` — 2026-09-13 audit, current.
 - `REVIEW.md` — 2026-09-11 thread-safety and performance review. Mostly fixed;
   check its status table before acting on anything in it.
