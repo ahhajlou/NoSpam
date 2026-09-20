@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="welcome">به NoSpam خوش آمدید</string>
-    <string name="tagline">پالایش هرزنامه روی دستگاه — بدون سرور.</string>
+    <string name="tagline">با دو گام کوتاه، NoSpam برای پالایش هرزنامه روی همین دستگاه آماده است.</string>
     <string name="grant">اعطای دسترسی‌های پیامک، مخاطبان و تلفن</string>
-    <string name="granted">✓ دسترسی‌ها اعطا شد</string>
+    <string name="granted">اعطا شد</string>
     <string name="set_default">تنظیم به‌عنوان برنامهٔ پیش‌فرض پیامک</string>
-    <string name="is_default">✓ برنامهٔ پیش‌فرض پیامک</string>
+    <string name="is_default">پیش‌فرض است</string>
     <string name="continue_btn">ادامه</string>
+    <string name="privacy_note">همه چیز روی همین دستگاه انجام می‌شود. NoSpam دسترسی اینترنت ندارد، پس پیام‌های شما نمی‌توانند از گوشی خارج شوند.</string>
+    <string name="step_permissions_title">پیام‌ها، مخاطبان و سیم‌کارت</string>
+    <string name="step_permissions_body">برای خواندن و ارسال پیامک، نمایش نام افرادی که می‌شناسید به‌جای شماره خام، و تشخیص اینکه هر پیام به کدام سیم‌کارت مربوط است. مخاطبان همچنین به فیلتر هرزنامه می‌گویند به چه کسانی اعتماد دارید تا پیام‌هایشان هرگز پنهان نشود.</string>
+    <string name="step_permissions_blocked">اندروید دوباره نمی‌پرسد، چون درخواست دو بار رد شده است. می‌توانید این دسترسی‌ها را از تنظیمات برنامه بدهید.</string>
+    <string name="action_open_settings">باز کردن تنظیمات</string>
+    <string name="step_default_title">برنامه پیش‌فرض پیامک</string>
+    <string name="step_default_body">اندروید فقط به برنامه پیش‌فرض پیامک اجازه می‌دهد پیام بفرستد و آن را در حافظه پیام‌های گوشی ذخیره کند.</string>
 </resources>

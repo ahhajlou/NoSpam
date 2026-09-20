@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.5, P1.6 and the SMS counter done 2026-09-17.** Next: P1.7 (onboarding), P1.8 (strings), P1.9 (tests), P1.10 (visual check).
+**P1.7 done 2026-09-20.** Next: P1.8 (strings), P1.9 (tests), P1.10 (visual check).
 
 ## 1. Constraints
 
@@ -178,7 +178,18 @@ Order chosen so each step leaves the app building and usable.
 - [x] P1.6b Compose-bar SMS counter (user request, 2026-09-17): `smsLength()` computes GSM-7 vs
       UCS-2 segmentation in pure Kotlin (160/153 vs 70/67, extension chars double); the counter
       shows "remaining/parts" above Send once a second part is near, with a spoken description.
-- [ ] P1.7 Onboarding pass for consistency.
+- [x] P1.7 Onboarding (2026-09-20). It is a gate now, not just a first-run screen, so it
+      explains itself: app mark, headline, and two steps (permissions, default SMS app) that
+      each say what they are for, show a check when satisfied, and carry their own action.
+      - Handles the dead end: after two denials Android stops showing the dialog, so the grant
+        button did nothing. It now detects that (`shouldShowRequestPermissionRationale` false
+        for every missing permission), says Android will not ask again, and opens app settings.
+      - States the privacy promise on the screen that asks for access: no internet permission,
+        nothing leaves the phone.
+      - Scrolls, so two steps plus explanations survive small screens and large font sizes.
+        Continue is disabled until both steps are done, rather than hidden.
+      - Persian throughout; Robolectric UI tests for the steps, the privacy line, the disabled
+        Continue, the granted state, and completion.
 - [ ] P1.8 Strings: remove hard-coded English, add Persian translations.
 - [ ] P1.9 Tests: update Compose UI tests and `.maestro/flows` (they anchor on
       "NoSpam SMS" and dialog labels), run unit tests + coverage gate.
@@ -266,3 +277,7 @@ Order chosen so each step leaves the app building and usable.
   now checks the whole required list on cold start and on resume. Contacts stays required
   because the contact bypass in the spam policy depends on it. Phase 2: reply on the
   conversation's own subscription id (TODO.md, Project-wide).
+- 2026-09-20 — P1.7: onboarding rebuilt as an explained gate. Verified on emulator-5554 in light
+  and dark. Labels tightened after the screenshot pass: the done states read "Granted" and
+  "Set as default" rather than a bare "Set", which looked like a button.
+- 2026-09-20 — P1.7 E2E: 8 pass / 0 fail (onboarding flow updated for the new step strings).

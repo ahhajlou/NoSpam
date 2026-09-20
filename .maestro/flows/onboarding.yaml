@@ -24,10 +24,12 @@ tags:
     when:
       visible: "Welcome to NoSpam"
     commands:
-      - assertVisible: "On-device spam filtering — no server."
+      # The two setup steps, each explaining what it is for (P1.7).
+      - assertVisible: "Messages, contacts and SIM"
+      - assertVisible: "Default SMS app"
       - assertVisible: "Grant SMS, Contacts & Phone permissions"
       - tapOn: "Grant SMS, Contacts & Phone permissions"
-      - assertVisible: "✓ Permissions granted"
+      - assertVisible: "Granted"
       - assertVisible: "Set as default SMS app"
       - tapOn: "Set as default SMS app"
       # This opens the system role-request dialog, which is not a NoSpam view —
