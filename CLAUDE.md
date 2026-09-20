@@ -378,13 +378,17 @@ and `assembleRelease` emits an unsigned APK, so a clone without the key still
 builds. `enableV1Signing = false` — minSdk is 26, so the v2/v3 blocks suffice
 and the JAR-signing block is dead weight.
 
-`tools/verify-signing.sh` checks a built APK before it is published. It runs
-`apksigner verify --min-sdk-version 26` (without that flag apksigner assumes
-minSdk 1 and reports the deliberately-absent v1 block as a failure) and then
-compares the signer's SHA-256 against the keystore's, because `apksigner
-verify` on its own proves only that an APK is self-consistent — a debug-signed
-or throwaway-signed APK passes it. It also fails on an `*unsigned*` filename
-and on `CN=Android Debug`.
+The release workflow's "Verify the APK is signed with our key" step checks a
+built APK before it is published. `apksigner verify --min-sdk-version 26` gives
+signed-and-consistent by exit code (without the flag apksigner assumes minSdk 1
+and reports the deliberately-absent v1 block as a failure), then the SHA-256 of
+the keystore's certificate must appear in its output, because `apksigner verify`
+on its own passes a debug-signed or throwaway-signed APK. It deliberately does
+not parse apksigner's signer labels, which changed between build-tools versions
+and broke this step three times. `tools/verify-signing.sh` is the
+same two checks for local use (keystore.properties or `--expect <sha256>`); it
+fails rather than warns when it cannot tell whose key signed the APK. Keep the
+two in step.
 
 Performance work is measured on a **release** build, not debug: the same commit
 is roughly 1.75s debuggable and 0.91s release, because a debuggable APK JITs far

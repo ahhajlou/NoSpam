@@ -191,29 +191,29 @@ against a throwaway key — but no tag has been pushed through the workflow yet.
 
 ## 4. Verifying a build
 
+CI checks this in the "Verify the APK is signed with our key" step of
+`release.yml`. Locally:
+
 ```bash
-tools/verify-signing.sh                    # newest release APK
+tools/verify-signing.sh                    # newest release APK, key from keystore.properties
 tools/verify-signing.sh path/to/some.apk
 tools/verify-signing.sh --expect <sha256>  # on a machine without the keystore
 ```
 
-```
-APK       app/build/outputs/apk/release/NoSpam-0.1.0-alpha.5-release.apk
-OK    signature verifies for minSdk 26 (v2 and v3 present)
-Signer    CN=Amirhossein Hajlou, OU=NoSpam, O=NoSpam, L=Tehran, ST=Tehran, C=IR
-SHA-256   55869c56eefb9bf16e2f8f2285524d9d93d33f067d54a53dce896a88799dfac1
-OK    signer matches our release key
-```
-
-It exits non-zero on an unsigned APK, a debug-signed APK (`CN=Android Debug`),
-a missing v2/v3 block, or a signer that is not our key.
-
-By hand, the two commands it wraps:
+It exits non-zero on anything it cannot positively confirm. By hand, the same
+two facts:
 
 ```bash
-$ANDROID_HOME/build-tools/36.1.0/apksigner verify --min-sdk-version 26 --print-certs -v app.apk
-keytool -list -v -keystore ~/.local/share/keystores/NoSpam.jks -alias upload | grep SHA256
+APKSIGNER=$ANDROID_HOME/build-tools/<version>/apksigner
+$APKSIGNER verify --min-sdk-version 26 --print-certs app.apk   # exit 0 = signed
+keytool -exportcert -keystore ~/.local/share/keystores/NoSpam.jks -alias upload -file cert.der
+sha256sum cert.der    # this hash must appear in the apksigner output above
 ```
+
+Match on the hash, not on the label in front of it: apksigner prints
+`Signer #1 certificate SHA-256 digest:` in some versions and
+`V3.0 Signer: certificate SHA-256 digest:` in others. It fails on an unsigned
+APK, a debug-signed APK, a missing v2/v3 block, or a signer that is not our key.
 
 Two things people get wrong here:
 
