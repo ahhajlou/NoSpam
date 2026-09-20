@@ -303,7 +303,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 17 modules | 339 tests, 60.39% line coverage |
+| Unit, including every Compose screen | `src/test` across 17 modules | 339 tests, 60.49% line coverage |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
 | End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |
@@ -339,6 +339,13 @@ find any node".
 reseeds before every flow, because flows mutate shared fixtures and otherwise
 break each other in ways that look like flakes. `tools/seed.sh` is idempotent —
 it resets the addresses it is about to write before writing them.
+
+Seeding also creates the contact "NoSpam QA Contact" (+15551110001), which is
+what the "Known" filter and contact-name resolution are asserted against. Note
+that **`content insert` prints nothing on success**, so a new row's id has to be
+read back with a follow-up query, never parsed from the insert's output — doing
+that left the contact uncreated and every run leaked one nameless `raw_contact`
+(187 of them before this was caught on 2026-09-20).
 
 **If you start an emulator by hand, use `-qt-hide-window`, never `-no-window`.**
 The latter selects `qemu-system-x86_64-headless`, which segfaults during startup

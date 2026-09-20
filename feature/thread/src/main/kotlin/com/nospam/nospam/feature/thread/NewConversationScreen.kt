@@ -181,12 +181,16 @@ fun NewConversationScreen(
                     ) { Text(stringResource(R.string.contacts_permission_allow)) }
                 }
             }
-            Text(stringResource(R.string.new_top), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 12.dp))
-            Row(
-                modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                contacts.take(5).forEach { contact ->
+            // A section header with nothing under it is worse than no section:
+            // on a device with no contacts saved this screen showed "Top
+            // contacts", a divider and "All contacts" over empty space.
+            if (contacts.isNotEmpty()) {
+                SectionHeader(stringResource(R.string.new_top))
+                Row(
+                    modifier = Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    contacts.take(5).forEach { contact ->
                     Column(
                         modifier = Modifier
                             .clip(MaterialTheme.shapes.medium)
@@ -195,29 +199,43 @@ fun NewConversationScreen(
                             .widthIn(max = 88.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Avatar(name = contact.name, colorKey = contact.phone, size = 56.dp)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            contact.name.substringBefore(" "),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            Avatar(name = contact.name, colorKey = contact.phone, size = 56.dp)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                contact.name.substringBefore(" "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            }
+            if (filtered.isNotEmpty()) {
+                SectionHeader(stringResource(R.string.new_all))
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(filtered, key = { it.phone }) { contact ->
+                        ListItem(
+                            headlineContent = { Text(contact.name) },
+                            supportingContent = { Text(contact.detail) },
+                            leadingContent = { Avatar(name = contact.name, colorKey = contact.phone) },
+                            colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                            modifier = Modifier.clickable { onAddressEntered(contact.phone) },
                         )
                     }
                 }
-            }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-            Text(stringResource(R.string.new_all), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(filtered, key = { it.phone }) { contact ->
-                    ListItem(
-                        headlineContent = { Text(contact.name) },
-                        supportingContent = { Text(contact.detail) },
-                        leadingContent = { Avatar(name = contact.name, colorKey = contact.phone) },
-                        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
-                        modifier = Modifier.clickable { onAddressEntered(contact.phone) },
-                    )
-                }
+            } else if (hasContactPerm || isPreview) {
+                // Permission held and still nothing to show: say which of the two
+                // it is, rather than leaving the recipient field over blank space.
+                Text(
+                    stringResource(
+                        if (query.isBlank()) R.string.new_no_contacts else R.string.new_no_matches
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 16.dp),
+                )
             }
         }
     }
@@ -227,4 +245,15 @@ fun NewConversationScreen(
 @Composable
 fun NewConversationScreenPreview() {
     NoSpamTheme { NewConversationScreen() }
+}
+
+/** Matches the inbox's section headers (`SectionHeader` in feature:conversations). */
+@Composable
+private fun SectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+    )
 }

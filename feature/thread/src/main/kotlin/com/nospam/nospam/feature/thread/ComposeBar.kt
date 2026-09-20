@@ -14,6 +14,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -113,12 +114,19 @@ internal fun ComposeBar(
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 SmsCounter(field.text)
-                IconButton(onClick = onSend, enabled = field.text.isNotBlank()) {
+                // The tint comes from the button, not from the icon: hard-setting
+                // it to onSurfaceVariant when disabled painted a full-opacity
+                // mid-dark arrow, so a Send that does nothing looked enabled.
+                IconButton(
+                    onClick = onSend,
+                    enabled = field.text.isNotBlank(),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
                     Icon(
                         Icons.AutoMirrored.Filled.Send,
                         contentDescription = stringResource(R.string.send_message_desc),
-                        tint = if (field.text.isNotBlank()) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }

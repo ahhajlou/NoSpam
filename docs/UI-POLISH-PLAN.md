@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.9 done 2026-09-20.** Next: P1.10 (visual check).
+**P1 complete 2026-09-20.** All twelve steps done; branch ready for review.
 
 ## 1. Constraints
 
@@ -225,7 +225,36 @@ Order chosen so each step leaves the app building and usable.
         referenced only by its own test.
       - 339 unit tests, 60.39% line coverage (3470/5746); ratchet 54 → 60. Flows were
         already brought up to date in P1.2–P1.8; re-run to confirm.
-- [ ] P1.10 Visual check light / dark / Persian RTL on device.
+- [x] P1.10 Visual check light / dark / Persian RTL on device. Thirty screenshots
+      (inbox, selection mode, drawer, archived, spam, thread, new conversation, settings
+      landing / general / about) in light-EN, dark-EN and light-FA, driven by a Maestro
+      tour kept outside `.maestro/flows` so the E2E runner never picks it up. Four things
+      were wrong; everything else matched the design.
+      - **The selected drawer item was the least legible row in the drawer.** M3's default
+        selected content is `onSecondaryContainer`, which in the Stitch light palette is a
+        mid grey: 4.56:1 on the selected pill against 8.84:1 for every unselected row. Now
+        `onSurface` (13.3:1), keeping the pill. Dark mode was already right.
+      - **A disabled Send looked enabled.** The icon hard-set its tint to
+        `onSurfaceVariant`, which overrode the button's disabled color with a
+        full-opacity mid-dark arrow. The tint now comes from the button.
+      - **New conversation showed "Top contacts", a divider and "All contacts" over
+        empty space** on a device with no contacts. Each section is hidden when empty,
+        with "No contacts yet" / "No contacts match that" instead.
+      - **Its two section headers did not match each other** (one primary, one
+        onSurfaceVariant, different padding) or the inbox's. Both now use the inbox
+        treatment.
+      - Checked and found correct: RTL mirroring throughout (drawer, chips, bubbles,
+        FAB, AutoMirrored icons), English text inside a Persian layout keeping its own
+        direction, the dark scheme's tonal surfaces, selection mode, the 88dp FAB
+        clearance (what looked like an overlap is the FAB floating over mid-scroll
+        content, which is standard), and the bubbles' mirrored corner.
+      - Fell out of the check, in `tools/seed.sh` rather than the app: the QA contact was
+        never created. `content insert` prints nothing on success, so the raw_contact id
+        was parsed from an empty string, the function returned before writing the name and
+        number rows, and each run leaked one nameless raw_contact (187 by 2026-09-20).
+        Contact-name resolution and the "Known" filter were therefore never exercised on
+        device. Fixed; `inbox_filters_and_search` now asserts the display name, and its
+        "Known" assertion is no longer `optional`.
 
 ## 5. Open questions (answers recorded here)
 
@@ -322,3 +351,7 @@ Order chosen so each step leaves the app building and usable.
   339 unit tests, 60.39% coverage (ratchet 54 → 60). CLAUDE.md §9 rewritten: instrumented
   tests are now for storage and telephony only, and the rule for adding one is stated.
 - 2026-09-20 — P1.9 E2E: 8 pass / 0 fail, unchanged flows.
+- 2026-09-20 — P1.10: 30 screenshots in light-EN / dark-EN / light-FA. Four UI fixes (drawer
+  selected-item contrast, disabled Send, empty contact sections, header styling) plus the
+  seed.sh contact bug they uncovered. 339 unit tests, 60.49% coverage, E2E 8 pass / 0 fail.
+  P1 complete.

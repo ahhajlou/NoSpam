@@ -43,4 +43,6 @@
         <item quantity="other">%1$d نویسه باقی مانده، در %2$d پیامک ارسال می‌شود</item>
     </plurals>
     <string name="clipboard_label">پیام</string>
+    <string name="new_no_contacts">هنوز مخاطبی ندارید</string>
+    <string name="new_no_matches">مخاطبی با این عبارت پیدا نشد</string>
 </resources>

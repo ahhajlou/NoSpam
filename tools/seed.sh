@@ -112,8 +112,17 @@ thread_id_for() {
 
 contact_insert() {
     # Minimal raw_contact + data row so ContactLookup / "Known" filter can resolve it.
+    #
+    # `content insert` prints NOTHING on success, so the raw_contact id cannot be
+    # parsed from its output. It was, which meant raw_id was always empty, the
+    # function returned before writing the name and number, and every run left
+    # one more nameless raw_contact behind (187 of them on the dev emulator by
+    # 2026-09-20). The contact therefore never existed: the inbox showed the raw
+    # +1555… number instead of "NoSpam QA Contact", and the recipient picker had
+    # nothing to list. Read the id back instead.
     local raw_id
-    raw_id="$(adbs shell "content insert --uri content://com.android.contacts/raw_contacts --bind account_type:s: --bind account_name:s:" 2>/dev/null | sed -n 's#.*/\([0-9]*\)$#\1#p')"
+    adbs shell "content insert --uri content://com.android.contacts/raw_contacts --bind account_type:s: --bind account_name:s:" >/dev/null 2>&1 || return 0
+    raw_id="$(adbs shell "content query --uri content://com.android.contacts/raw_contacts --projection _id" 2>/dev/null | tail -1 | sed -n 's/.*_id=\([0-9]*\).*/\1/p')"
     if [ -z "$raw_id" ]; then return 0; fi
     adbs shell "content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:${raw_id} --bind mimetype:s:vnd.android.cursor.item/name --bind data1:s:'${CONTACT_NAME}'" >/dev/null 2>&1 || true
     adbs shell "content insert --uri content://com.android.contacts/data --bind raw_contact_id:i:${raw_id} --bind mimetype:s:vnd.android.cursor.item/phone_v2 --bind data1:s:'${CONTACT_PHONE}' --bind data2:i:2" >/dev/null 2>&1 || true
