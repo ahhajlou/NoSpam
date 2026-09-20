@@ -13,3 +13,10 @@ Kotlin + Jetpack Compose + Material 3, English first with full RTL support
 ./gradlew :app:assembleDebug
 ./gradlew build          # every module: assemble + lint + unit tests
 ```
+
+## License
+
+NoSpam is free software, licensed under the
+[GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`).
+You may use, study, modify and redistribute it under the terms of that licence;
+derived works must remain under the same licence and make their source available.
