@@ -223,7 +223,7 @@ Order chosen so each step leaves the app building and usable.
         tap-menu model dropped in Q1), `PillChip` and `SearchBarPlaceholder` (replaced by
         `FilterChip` and `SearchBarDefaults.InputField` at the call sites). Each was
         referenced only by its own test.
-      - 330 unit tests, 60.39% line coverage (3470/5746); ratchet 54 → 60. Flows were
+      - 339 unit tests, 60.39% line coverage (3470/5746); ratchet 54 → 60. Flows were
         already brought up to date in P1.2–P1.8; re-run to confirm.
 - [ ] P1.10 Visual check light / dark / Persian RTL on device.
 
@@ -319,6 +319,6 @@ Order chosen so each step leaves the app building and usable.
 - 2026-09-20 — P1.8 E2E: 8 pass / 0 fail. inbox_filters_and_search needed `.*` around the phone number it asserts, for the same isolate-character reason.
 - 2026-09-20 — P1.9: the four Compose `androidTest` suites folded into their Robolectric
   counterparts and deleted, along with three components no production code still called.
-  330 unit tests, 60.39% coverage (ratchet 54 → 60). CLAUDE.md §9 rewritten: instrumented
+  339 unit tests, 60.39% coverage (ratchet 54 → 60). CLAUDE.md §9 rewritten: instrumented
   tests are now for storage and telephony only, and the rule for adding one is stated.
 - 2026-09-20 — P1.9 E2E: 8 pass / 0 fail, unchanged flows.

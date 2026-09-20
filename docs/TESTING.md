@@ -1,208 +1,232 @@
-# NoSpam — Android SMS app with on-device spam filtering
+# Testing NoSpam
 
-A full replacement SMS messenger for Android with on-device ML spam/scam
-classification (TF-IDF + linear model, no server round-trip).
-Kotlin + Jetpack Compose + Material 3, English first with full RTL support
-(Persian is the first RTL target).
+How to run the tests, what each layer is for, and what is deliberately not
+covered.
 
-Architecture source of truth: [`../CLAUDE.md`](../CLAUDE.md).
-Execution tracker: [`../TASKS.md`](../TASKS.md) (all 6 phases complete).
+> **Rewritten 2026-09-20 from the code.** The previous version was written on
+> 2026-09-04 for Phase 6 and patched occasionally after, so most of its numbers
+> and several of its structural claims had stopped being true: it described
+> Room (never used), an eleven-module graph (there are 18), a dependency rule
+> the code has never followed, `platform 36` (compileSdk is 37), a Robolectric
+> failure that was fixed in Wave 2A, a Kover exclusion that no longer exists,
+> and a `.maestro/smoke_test.yaml` that had been replaced by twelve flows. If a
+> claim here contradicts the code, the code wins; fix this file.
 
-## Module graph
+**Architecture lives in [`../CLAUDE.md`](../CLAUDE.md)** — modules and their
+tiers in §2, the testing rules in §9. This file does not restate them, which is
+how the previous version drifted into contradicting them.
 
-```
-:app
- ├─ feature:conversations   (Inbox / Archived / Spam & Blocked / Search)
- ├─ feature:thread          (message thread + new conversation)
- ├─ feature:settings
- └─ feature:onboarding      (permissions + default-SMS-app request)
+## Layers
 
-feature:* → core:designsystem, core:model, core:data, core:i18n
-core:data → core:model, core:database, core:telephony, core:ml
-core:* → only core:common + core:model (never each other)
-core:common, core:model, core:testing → leaves
-```
+| Layer | Where | Needs a device | State 2026-09-20 |
+|---|---|---|---|
+| Unit, including every Compose screen | `src/test` in 17 modules | no | 339 tests |
+| Instrumented, storage | `core/database/src/androidTest` | yes | 44 tests in 10 files |
+| Instrumented, telephony | `core/telephony/src/androidTest` | yes | 4 tests, 3 run + 1 self-skipped |
+| End-to-end | `.maestro/flows` | yes | 12 flows, 8 run by default |
+| Manual checks | `tools/*.sh` | yes | permission gate, block/unblock persistence |
 
-- `:app → feature:* → core:*`, one-way, enforced by Gradle.
-- `core:model` is a plain Kotlin/JVM module — zero Android imports.
-- SMS content lives in Android's Telephony provider; only `core:telephony`
-  touches it. Room holds app-owned data only (blocklist, verdicts, metadata).
-- No Hilt/Koin: a manual `AppContainer` in `:app` wires the four singletons
-  (receivers can't use constructor injection anyway).
+Tests are written against behaviour, not implementation. The fakes in
+`core:testing` are the substitution point — do not hand-roll a local fake.
+Turbine for Flow assertions.
 
 ## Prerequisites
 
-- JDK 25 (Gradle daemon + `kotlin.jvmToolchain(25)` for JVM modules;
-  app bytecode target stays 17 for dex compatibility).
-- Android SDK with platform 36 (compile/target) and minSdk 26.
-- An emulator or device for install, the storage/telephony instrumented
-  suites, and the Maestro flows. Compose UI tests no longer need one (§2).
+- **JDK 25.** The Gradle daemon is pinned to a JetBrains toolchain through
+  `gradle/gradle-daemon-jvm.properties` so the CLI and the IDE share one
+  daemon. Module bytecode targets Java 17.
+- **Android SDK platform `android-37.0`** (compileSdk 37, targetSdk 36,
+  minSdk 26).
+- **A device or emulator** for the instrumented suites, the Maestro flows and
+  the manual scripts. The Compose UI tests do not need one.
+- **Maestro CLI** for the flows: `curl -Ls "https://get.maestro.mobile.dev" | bash`.
 
 ## Build
 
 ```bash
 ./gradlew :app:assembleDebug
 ./gradlew build          # every module: assemble + lint + unit tests
-```
-
-Install and smoke-test:
-
-```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb logcat | grep AppSmsReceiver   # Prediction: ham/spam + Score
+adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=… notif=…"
 ```
 
-## Tests
-
-### 1. JVM unit tests — fast, run everywhere (53 tests, 0 failures)
-
-Pure logic with JUnit + fakes from `core:testing`, no device needed:
+## 1. Unit tests — no device, run everywhere
 
 ```bash
-# everything at once
-./gradlew :core:model:test :core:common:test :core:testing:test \
-  :core:database:testDebugUnitTest :core:data:testDebugUnitTest \
-  :core:ml:testDebugUnitTest :core:telephony:testDebugUnitTest \
-  :core:notifications:testDebugUnitTest :core:i18n:testDebugUnitTest \
-  :core:designsystem:testDebugUnitTest \
-  :feature:conversations:testDebugUnitTest :feature:thread:testDebugUnitTest
+./gradlew test                              # all 17 modules
+./gradlew :feature:thread:testDebugUnitTest # one module
 ```
 
-| Module | What's covered |
-|---|---|
-| `core:model` | Domain types, `TelephonyConstants` |
-| `core:common` | `Result` map/fold, dispatchers, permission constants |
-| `core:testing` | All fakes (classifier counts, telephony filters) |
-| `core:database` | In-memory DAOs: blocklist, verdict override, retention prune |
-| `core:data` | Repos + `SmsIngressUseCase` (spam→READ=1, ham→unread, insert failure, override-preserving prune) |
-| `core:ml` | Preprocess (URL/NUM_TOKEN, Persian normalization, ZWNJ), `char_wb` n-grams, classifier parity |
-| `core:telephony` | Constants, reply-text/subscription pure helpers |
-| `core:i18n` | RTL detection, bidi isolates, date formatting |
-| `core:designsystem` | Stitch seed colors, typography, shapes |
-| `feature:*` | `ConversationsViewModel` (incl. duplicate-key crash regression), `ThreadViewModel` send/draft |
+| Module | Tests | What is covered |
+|---|---|---|
+| `core:model` | 24 | Domain types, `ThreadSpamPolicy`, `TelephonyConstants` |
+| `core:common` | 8 | `Result` map/fold, dispatchers, permission constants |
+| `core:testing` | 9 | The fakes themselves (classifier counts, telephony filters) |
+| `core:database` | 31 | DAO logic against `NoSpamDatabase.inMemory()` |
+| `core:data` | 49 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune) |
+| `core:ml` | 10 | Preprocessing (URL/NUM tokens, Persian normalisation, ZWNJ), `char_wb` n-grams, classifier parity |
+| `core:telephony` | 24 | Address normalisation, default-SMS detection, `SmsManager` resolution |
+| `core:notifications` | 3 | Channel ids and reply-extra constants **only** — see Known gaps |
+| `core:i18n` | 3 | RTL detection, date formatting |
+| `core:designsystem` | 29 | Color roles, type scale, shapes, avatar palette, top-bar action partition, bidi isolation, avatar semantics |
+| `feature:conversations` | 31 | `ConversationsViewModel` + the inbox/spam screens |
+| `feature:thread` | 57 | `ThreadViewModel`, SMS segment counting, emoji insertion + the thread and new-conversation screens |
+| `feature:settings` | 19 | `SettingsViewModel`, spam preferences + the settings pages and dialogs |
+| `feature:onboarding` | 12 | The permission list and the onboarding screen |
+| `feature:export`, `feature:mldebug` | 21 | Debug-only features; absent from release |
+| `:app` | 9 | `AppContainer` wiring and `AppSmsReceiver` |
 
-### 2. Compose UI tests — no emulator, they run on the JVM
+**Compose screens are tested here, not on a device.** Suites use
+`createComposeRule` under Robolectric:
 
-`createComposeRule` suites live in each module's `src/test` and run under
-Robolectric with the rest of the unit tests (conversations list/filter/search/
-click, spam rows + not-spam + block confirmation, thread send/selection/compose
-bar, settings sections and dialogs, onboarding, avatar semantics):
+```kotlin
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
+```
+
+plus `testOptions.unitTests.isIncludeAndroidResources = true` in the module's
+build file. **The qualifiers are not optional**: Robolectric's default window is
+320x470px, too small to compose a single list row, and every query then fails
+with "could not find any node".
+
+## 2. Instrumented tests — need an emulator
+
+Only two modules have an `androidTest` source set, and the rule for adding a
+third is in CLAUDE.md §9: an instrumented test is for what the JVM cannot tell
+the truth about. Until 2026-09-20 every Compose screen also had a device copy
+asserting the same things; those were folded into the JVM suites and deleted.
+
+- `core:database` — nine `Sqlite*Dao` suites against real SQLite, plus
+  `SqliteNoSpamOpenHelperTest` (every table is created, the version is 4, data
+  survives a reopen).
+- `core:telephony` — `TelephonyInstrumentedTest` (the notification reply
+  action; plus an SMS insert/query round trip that **always self-skips**, see
+  below) and `TelephonyMapperDeviceTest` (real `ContentValues` mapping, which
+  JVM stubs cannot do). 3 run, 1 skipped.
+
+  Two things about this suite are easy to trip over. It is **self-instrumenting**:
+  the test APK is `com.nospam.nospam.core.telephony.test`, and `:app`'s manifest
+  is not part of it, so `core/telephony/src/androidTest/AndroidManifest.xml`
+  declares the SMS permissions itself — without it `GrantPermissionRule` fails
+  before any assertion with "Failed to grant permissions, see logcat for
+  details". And `sms_insert_and_query_round_trip` needs the *test* package to
+  hold the default-SMS role, which it cannot: the role needs the receivers and
+  service that live in `:app`. Its `Assume` therefore always fires, and writing
+  to the provider is covered end-to-end by the Maestro flows instead.
 
 ```bash
-./gradlew test          # or a single module, e.g. :feature:thread:testDebugUnitTest
+# grant the role first (tools/run-e2e.sh does it, or set it in system settings)
+adb shell cmd role add-role-holder android.app.role.SMS com.nospam.nospam
+./gradlew :core:database:connectedDebugAndroidTest :core:telephony:connectedDebugAndroidTest
+
+# compile-only check, no device (this is what CI runs):
+./gradlew :core:database:assembleDebugAndroidTest :core:telephony:assembleDebugAndroidTest
 ```
 
-Since 2026-09-20 there is no `androidTest` source set in any Compose module.
-The instrumented copies asserted the same things and could not run on API 37;
-see CLAUDE.md §9 for the rule on when an instrumented test is still the right
-call. Each suite needs `@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")` —
-Robolectric's default 320x470 window is too small to compose a list row.
+> Naming rule for these suites: test function names must use underscores
+> (`` `insert_round_trip` ``). Spaces in backtick names break D8 dexing before
+> dex-040. JVM suites are free to use spaces.
 
-> Naming rule for the device suites below: test function names must use
-> underscores (`` `insert_round_trip` ``). Spaces in backtick names break D8
-> dexing pre-dex-040. JVM suites are free to use spaces.
-
-### 3. Instrumented tests — need an emulator with NoSpam as default SMS app
-
-- `core/telephony/.../TelephonyInstrumentedTest` — SMS insert/query
-  round-trip (skips itself via `Assume` unless the app holds the
-  default-SMS role) + notification reply-action assertion.
-- `core/telephony/.../TelephonyMapperDeviceTest` — real `ContentValues`
-  mapping (impossible on JVM: `android.content` is stubbed).
+## 3. End-to-end — Maestro, local only
 
 ```bash
-# grant the role first (or set it in Settings), then:
-./gradlew :core:telephony:connectedDebugAndroidTest
+tools/run-e2e.sh          # installs, grants the role, reseeds, runs every untagged flow
+maestro test .maestro/flows/onboarding.yaml   # one flow, if the fixtures are already seeded
 ```
 
-Compile/package check without a device:
+`tools/run-e2e.sh` reseeds with `tools/seed.sh core` **before every flow**.
+The flows share one fixture pool in the Telephony provider and `nospam.db`, and
+several mutate it (block, archive, star, mark-not-spam), so without reseeding a
+flow silently breaks the next one's preconditions and the failure looks like a
+flake. `tools/seed.sh` is idempotent and only touches addresses prefixed
+`NSTEST_`, so teardown removes exactly what it created.
+
+Eight of the twelve flows run by default. The runner skips three tags:
+
+| Tag | Flows | Why it is opt-in |
+|---|---|---|
+| `debug` | `debug_tools` | Needs a debug-only feature module |
+| `destructive` | `settings_recheck` | Rewrites global classifier state |
+| `manual-only` | `_unblock_part1_block`, `_unblock_part2_deliver_and_unblock` | Driven by `tools/persistence_check.sh`, which injects an SMS between the parts; reseeding between them guarantees part 2 fails |
+
+Selectors are text and content descriptions only — there is no `testTag`
+wiring in the app. Two consequences worth knowing before editing a flow:
+isolate characters around phone numbers mean a number assertion needs `.*`
+around it, and a flow cannot assert anything while the keyboard is up, because
+Maestro's view hierarchy then contains only IME nodes.
+
+## 4. Manual checks — things neither harness can reach
 
 ```bash
-./gradlew :core:telephony:assembleDebugAndroidTest \
-  :core:database:assembleDebugAndroidTest
+tools/permission_gate_check.sh   # onboarding gate on revoke + resume
+tools/persistence_check.sh       # block → inbound SMS → unblock, across process death
 ```
 
-### 4. Maestro E2E smoke test — needs an emulator + Maestro CLI
+`permission_gate_check.sh` exists because **Maestro cannot deny these
+permissions**: `launchApp: permissions: {phone: deny}` leaves `READ_PHONE_STATE`
+granted, and holding the default-SMS role makes Android re-grant contacts and
+phone (`GRANTED_BY_ROLE`). Only an explicit `pm revoke` takes them away.
 
-`.maestro/smoke_test.yaml` — launch → drawer navigation → Settings → back to
-Inbox. Text/content-description selectors only (no `testTag` wiring in the
-app), and it passes on fresh installs (asserts the onboarding screen via a
-conditional `runFlow`) as well as on already-set-up devices. It deliberately
-does *not* tap through the permission / default-SMS system dialogs — those
-are Android-version-dependent and belong to manual verification instead.
-
-```bash
-# one-time: install Maestro CLI (https://maestro.dev)
-curl -Ls "https://get.maestro.mobile.dev" | bash
-
-# with an emulator running (or device plugged in):
-./gradlew :app:installDebug
-maestro test .maestro/smoke_test.yaml
-```
-
-## Coverage (Kover)
-
-Merged report over every module (Kover `0.9.9`, root is the merging
-module via `kover(...)` deps):
-
-```bash
-./gradlew :koverXmlReport    # build/reports/kover/report.xml + html/
-./gradlew :koverVerify       # ratchet gate (also runs in CI)
-```
-
-Current merged JVM line coverage: **32.8% (484/1476)**.
-Module highs: `core:ml` 89%, `core:database/dao` 83%, `core:model` 78%,
-`core:data` 68%, `core:testing` 94%, design tokens 94%.
-
-Two deliberate policies, both documented in the root `build.gradle.kts`:
-
-1. **Dead legacy tree excluded** (`app/.../ui|navigation|receiver|service|ml`,
-   deprecated telephony shim) — unregistered from the manifest and
-   unreferenced, kept only until end-of-project cleanup.
-2. **Ratchet, not the 80% goal**: `total { verify { minBound(30) } }`
-   fails the build on regression ("never lower this bound"). 80% honestly
-   requires the emulator suites above plus working Robolectric (currently
-   broken on JDK 25 — `RoboCookieManager` NoClassDefFound — so
-   `NotificationCompat` builders and `ContentValues` mapping stay
-   device-tested). Raise the bound as those suites land.
-
-## CI
-
-`.github/workflows/android.yml` (JDK 25 + Android SDK), one Gradle
-invocation: debug assemble + `testDebugUnitTest` + `lintDebug` (+ `test` for
-the two JVM modules) → compile-only release check (`:app:compileReleaseKotlin`,
-which covers `app/src/release` and the release classpath without
-`feature:export`/`feature:mldebug`, plus `:baselineprofile`) → test-APK
-assembly → `:koverXmlReportCi :koverVerifyCi` → report upload. The `ci` Kover
-variant merges debug variants only; `total` (`:koverXmlReport :koverVerify`)
-also merges release, which would compile the release graph again. Both
-use the same ratchet. CI deliberately does not run `build`: that also
-packages release, benchmarkRelease and nonMinifiedRelease APKs, which nothing
-consumes, and it made up about 43% of the executed tasks.
-Connected tests are intentionally excluded — they need an emulator with
-the default-SMS role; run them locally per §3 above before release.
-
-## Manual verification (spam pipeline)
+Spam pipeline, by hand:
 
 ```bash
 adb emu sms send +989121234567 "see you tomorrow"     # ham → notification with Reply
 adb emu sms send 1000 "You won! Click here to claim"  # spam → silent, verdict stored
 ```
 
-Reply inline from the ham notification, then check the thread shows the
-reply. "Not spam" on a spam row persists an override that survives the
-30-day auto-spam prune.
+Reply inline from the ham notification and check the thread shows it. "Not
+spam" on a spam row persists an override that survives the 30-day auto-spam
+prune.
 
-## Known limitations / next steps
+## Coverage (Kover 0.9.9)
 
-- Inbox/Spam/Thread read live provider data via `AppContainer` repos
-  (fake fallback only in previews/tests). Archived is truthfully empty —
-  the provider has no archived flag, so an app-owned archive store is
-  still future work. Contact-name resolution is also future work
-  (rows show the raw address until then).
-- Room is an in-memory stand-in (KSP + AGP 9.0/Kotlin 2.2 incompat);
-  swap in the real `RoomDatabase` behind the same DAO interfaces.
-- Fonts are `FontFamily.Default` placeholders; wire Inter/Hanken via the
-  Google Fonts provider + bundled Vazirmatn for Persian.
-- `com.nospam.nospam` rename + legacy `app/src/main/java` deletion at
-  end of project (then drop its Kover exclusion).
+```bash
+./gradlew :koverXmlReport :koverVerify   # total variant: build/reports/kover/
+./gradlew :koverXmlReportCi :koverVerifyCi   # debug-only variant, what CI runs
+```
+
+Merged line coverage **60.39% (3470/5746)**. The ratchet in the root
+`build.gradle.kts` is `minBound(60)` — raise it, never lower it. Its comment
+block carries the history of every raise and why.
+
+**The merged number counts JVM runs only.** Device suites do not feed it, which
+is why `core/database/dao` reads 35.5% here despite 44 instrumented tests
+against it, and `core:telephony` reads 22.3%. Treat those two as better covered
+than the report says; treat everything else as measured.
+
+The root project is the merging module (`kover(project(...))` per module). The
+`ci` variant merges debug variants only; `total` also merges release, which
+compiles the release graph a second time.
+
+## CI
+
+`.github/workflows/android.yml` — JDK 25 + Android SDK, one Gradle invocation:
+debug assemble + `testDebugUnitTest` + `lintDebug`, the two JVM modules' `test`,
+`:app:compileReleaseKotlin` and `:baselineprofile:compileNonMinifiedReleaseKotlin`
+as a release-path compile check, the two instrumented modules'
+`assembleDebugAndroidTest` as a compile check, then `:koverXmlReportCi
+:koverHtmlReportCi :koverVerifyCi` and the report upload.
+
+CI deliberately does **not** run `build`: that also packages release,
+benchmarkRelease and nonMinifiedRelease APKs that nothing consumes, and it made
+up about 43% of the executed tasks. It also does not run connected tests or the
+flows — no emulator. Run those locally before a release.
+
+## Known gaps
+
+Honest list of what has no test, from the merged report:
+
+- `:app` `navigation` (218 lines) and `ui` (64) — `NoSpamNavHost` and the app
+  shell, including the permission gate. The gate is covered end-to-end by
+  `tools/permission_gate_check.sh` instead.
+- `core:notifications` (78 lines, 0%) — the three unit tests assert channel ids
+  and reply-extra constants, not the `NotificationCompat` builders. Those are
+  exercised only through `TelephonyInstrumentedTest`'s reply-action assertion.
+- `core:telephony` `service` and `receiver` (57 lines combined) —
+  `HeadlessSmsSendService` and the WAP-push receiver.
+- `SqliteNoSpamOpenHelper.onUpgrade`: nothing exercises an upgrade from an
+  older schema. The suite covers a fresh create at version 4 only, so a
+  migration bug would ship silently.
+- `feature:export` and `feature:mldebug` — debug-only, not in release builds.
+- Fonts are `FontFamily.Default` placeholders (`Type.kt`), so nothing asserts
+  the real Inter / Hanken Grotesk / Vazirmatn metrics yet.
