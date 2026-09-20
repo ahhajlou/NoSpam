@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # tools/run-e2e.sh — run the Maestro suite against a connected device.
 #
 # Why this exists rather than plain `maestro test .maestro/flows`:

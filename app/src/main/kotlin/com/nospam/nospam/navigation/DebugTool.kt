@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.nospam.nospam.navigation
 
 import androidx.compose.ui.graphics.vector.ImageVector

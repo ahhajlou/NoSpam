@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # tools/permission_gate_check.sh — the half of the permission gate Maestro cannot reach.
 #
 # This lives in a script rather than a Maestro flow because Maestro cannot deny

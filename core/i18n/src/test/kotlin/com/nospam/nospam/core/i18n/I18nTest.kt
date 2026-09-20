@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.nospam.nospam.core.i18n
 
 import org.junit.Assert.*

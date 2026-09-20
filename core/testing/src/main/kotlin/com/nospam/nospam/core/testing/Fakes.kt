@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.nospam.nospam.core.testing
 
 import com.nospam.nospam.core.common.PermissionChecker

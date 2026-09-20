@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # tools/persistence_check.sh — the block/unblock persistence-across-process-death
 # regression check for commit 7256993 ("fix(data): unblocking a sender returns
 # the conversation to the inbox").

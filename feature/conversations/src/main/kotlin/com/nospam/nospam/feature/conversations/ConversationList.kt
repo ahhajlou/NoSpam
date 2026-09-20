@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.nospam.nospam.feature.conversations
 
 import androidx.activity.compose.BackHandler
