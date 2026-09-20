@@ -10,6 +10,7 @@ import com.nospam.nospam.core.database.entity.BlocklistEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
+import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -20,11 +21,15 @@ class BlocklistRepository(
     // Shared with ingress and backfill so the read-decide-write on sender_state
     // in `unblock` cannot interleave with a concurrent inbound message.
     private val spamStateWriter: SpamStateWriter = SpamStateWriter(db.senderStateDao),
+    // Only used to find the conversations of a blocked address so their pin can be
+    // dropped; null (tests, previews) simply skips that.
+    private val telephony: TelephonyDataSource? = null,
 ) {
     fun observe(): Flow<List<BlocklistEntity>> = db.blocklistDao.observeAll()
     suspend fun block(address: String, reason: String? = null) {
         val normalized = if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim()
         db.blocklistDao.insert(BlocklistEntity(address = normalized, reason = reason))
+        unpinConversationsOf(address, normalized)
         // Also insert original form for alphanumeric fallback lookup
         if (normalized != address.trim()) {
             // Ensure raw form also findable via direct match if caller forgot to normalize
@@ -44,6 +49,26 @@ class BlocklistRepository(
             }
         }
     }
+    /**
+     * Blocking moves the sender's conversation to Spam & blocked, and like
+     * Google Messages this drops its pin (checked on the emulator: a pinned,
+     * then blocked, then unblocked conversation came back unpinned).
+     */
+    private suspend fun unpinConversationsOf(address: String, normalized: String) {
+        val source = telephony ?: return
+        runCatching {
+            source.getConversations()
+                .filter { conv ->
+                    conv.participants.any { p ->
+                        p.address.trim().equals(address.trim(), ignoreCase = true) ||
+                            (if (context != null) PhoneNumberNormalizer.normalize(context, p.address) else p.address.trim())
+                                .equals(normalized, ignoreCase = true)
+                    }
+                }
+                .forEach { db.pinnedDao.unpin(it.threadId.value) }
+        }.onFailure { Log.w("BlocklistRepo", "Could not drop pin for blocked sender", it) }
+    }
+
     suspend fun unblock(address: String) {
         val normalized = if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim()
         db.blocklistDao.deleteByAddress(normalized)

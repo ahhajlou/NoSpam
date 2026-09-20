@@ -56,6 +56,9 @@ class SpamRepository(
     }
 
     suspend fun markSenderSpam(threadId: ThreadId, address: String) {
+        // The user put this conversation in Spam; a pin would come back with it if
+        // they later say "Not spam" (Google Messages drops it too).
+        db.pinnedDao.unpin(threadId.value)
         db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = true, score = 1.0, isUserOverride = true))
         val addr = normalizedAddress(address)
         spamStateWriter.withSpamStateLock {
