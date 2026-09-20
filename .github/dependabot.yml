@@ -1,0 +1,24 @@
+# Keeps the SHA-pinned actions in .github/workflows current.
+#
+# Pinning every action to a commit SHA (see either workflow) makes them
+# immutable, which also means they never pick up an upstream security fix on
+# their own. This is the other half of that decision: Dependabot reads the
+# trailing "# vX.Y.Z" comment next to each pin, resolves the newer release, and
+# updates BOTH the SHA and the comment. Remove this file and the pins quietly
+# rot instead.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    # "/" is required and is not a path to the workflows: for this ecosystem it
+    # means "look in /.github/workflows, plus action.yml at the repo root".
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # One pull request for all of them rather than one per action. Seven
+    # separate PRs a week is how a solo maintainer learns to ignore Dependabot,
+    # and an ignored bump is worth no more than an unpinned tag.
+    groups:
+      actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
