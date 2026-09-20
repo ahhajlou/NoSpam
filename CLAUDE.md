@@ -98,6 +98,18 @@ provider with `READ=0` *before* classifying, then updates read state and verdict
 afterwards. Classification is wrapped in `withTimeout(8_000)` so a slow model
 degrades to "unread, no verdict" rather than losing the message.
 
+**Outgoing lifecycle.** A message is inserted as `OUTBOX`, then handed to
+`SmsManager` with a `sentIntent` naming `SmsSentReceiver` (explicit component,
+immutable), which moves the row to `SENT` or `FAILED`. Without that callback
+`sendTextMessage` returns as soon as the request is queued, so a radio-off or
+no-service send looks identical to a delivered one: that was the state until
+2026-09-20, reproduced on the emulator where the old code showed a
+never-delivered message as sent. `MessageType.isOutgoing` is the test for "the
+user's side of the thread"; do not compare against `SENT` alone. Both send
+paths (`RealTelephonyDataSource`, `HeadlessSmsSendService`) go through
+`SmsSender`. When this app is not the default SMS app the `OUTBOX` insert fails
+and the send proceeds without a row (the system stores that message itself).
+
 **Address normalisation is the join key everywhere.** E.164 via
 `PhoneNumberUtils`, falling back to the trimmed upper-cased raw value for
 alphanumeric sender IDs, which are common on Iranian networks. Comparing raw
