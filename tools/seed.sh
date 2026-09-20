@@ -473,6 +473,28 @@ HEAVY_ADDRS=("${PREFIX}LONG1" "${PREFIX}PAGEBUG1" "${PREFIX}HISTORY1")
 # flows asserting on counts or on a single visible row then failed for reasons
 # that looked like flakes. Every seed entry point resets its own addresses
 # first, so running it twice leaves the same state as running it once.
+# seed_cap_flood — one very old conversation plus 3100 newer messages from one sender.
+# The inbox's uncached fallback read only the 3000 newest SMS rows, so past that
+# an old conversation vanished from the inbox although the provider still held
+# it (reproduced 2026-09-21). With this seeded the inbox must still list
+# ${PREFIX}CAPOLD1. Standalone: not part of `seed`/`core`, it adds 3100 rows.
+#
+# Bulk-inserted with sqlite3 straight into the live provider database, because
+# 3100 `content insert`s take about an hour. The live copy is under
+# /data/user/0/; /data/user_de/0/ holds an unused stub, and writing there
+# succeeds and does nothing.
+seed_cap_flood() {
+    local old="${PREFIX}CAPOLD1" flood="${PREFIX}CAPFLOOD1" now tid
+    local db="/data/user/0/com.android.providers.telephony/databases/mmssms.db"
+    now="$(now_ms)"
+    sms_insert "$old" "capold_oldest_message" 1577836800000 1 1
+    # One row through the provider first, so the flood thread exists.
+    sms_insert "$flood" "flood seed" "$((now - 9100000))" 1 1
+    tid="$(thread_id_for "$flood")"
+    [ -n "$tid" ] || { echo "ERROR: no thread for $flood" >&2; return 1; }
+    adbs shell "sqlite3 $db \"WITH RECURSIVE c(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM c WHERE i<3100) INSERT INTO sms (thread_id,address,body,date,date_sent,type,read,seen,sub_id) SELECT $tid,'$flood','flood '||i,$((now - 9000000))+i*1000,0,1,1,1,-1 FROM c;\""
+}
+
 reset_addresses() {
     local addr tid
     for addr in "$@"; do
@@ -493,7 +515,7 @@ reset_addresses() {
 teardown_all() {
     ensure_root
     echo "Tearing down fixtures..."
-    reset_addresses "${CORE_ADDRS[@]}" "${HEAVY_ADDRS[@]}" "$CONTACT_PHONE"
+    reset_addresses "${CORE_ADDRS[@]}" "${HEAVY_ADDRS[@]}" "${PREFIX}CAPOLD1" "${PREFIX}CAPFLOOD1" "$CONTACT_PHONE"
     contact_delete
     echo "Done."
 }
@@ -503,6 +525,7 @@ case "${1:-}" in
     teardown) teardown_all ;;
     status) status_all ;;
     pagebug) ensure_root; ensure_role_and_perms; reset_addresses "${PREFIX}PAGEBUG1"; seed_pagination_bug ;; # standalone re-seed of just the pagination-bug fixture
+    capflood) ensure_root; ensure_role_and_perms; reset_addresses "${PREFIX}CAPOLD1" "${PREFIX}CAPFLOOD1"; seed_cap_flood ;; # >3000 messages: the inbox must still list ${PREFIX}CAPOLD1
     bulkspam) ensure_root; ensure_role_and_perms; reset_addresses "${PREFIX}BULK1"; seed_bulk_spam ;;
     fixup) ensure_root; ensure_role_and_perms; fixup_flags ;;
     core)

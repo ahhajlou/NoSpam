@@ -143,7 +143,12 @@ class RealTelephonyDataSource(
                 Telephony.Threads.READ,
             )
             val metas = mutableListOf<ThreadMeta>()
-            context.contentResolver.query(Telephony.Threads.CONTENT_URI, proj, null, null, "${Telephony.Threads.DATE} DESC")?.use { c ->
+            // The plain conversations URI is a UNION view with no message_count column
+            // on current Android (API 34+ providers: "no such column: message_count"),
+            // which sent every load down the uncached 3000-row fallback. The simple
+            // form reads the threads table itself and has all four columns.
+            val threadsUri = Telephony.Threads.CONTENT_URI.buildUpon().appendQueryParameter("simple", "true").build()
+            context.contentResolver.query(threadsUri, proj, null, null, "${Telephony.Threads.DATE} DESC")?.use { c ->
                 while (c.moveToNext()) {
                     val id = c.getLong(c.getColumnIndexOrThrow(Telephony.Threads._ID))
                     val rawDate = try { c.getLong(c.getColumnIndexOrThrow(Telephony.Threads.DATE)) } catch (_: Exception) { 0L }
@@ -193,7 +198,17 @@ class RealTelephonyDataSource(
                     }
                 }
             }
+            val countById = metas.associate { it.id to it.count }
             idsToQuery.chunked(400).forEach { chunk ->
+                // Rows arrive DATE DESC, so the first row seen for a thread is its
+                // newest and the scan can stop once every thread in this chunk has
+                // one. Only threads that hold messages can ever be found: the
+                // provider lists empty threads too (13 of 282 on the A26), and
+                // counting them meant the scan never stopped and read the whole
+                // message table on every cold load. A thread holding only MMS also
+                // never matches here, so it still costs a full walk.
+                var remaining = chunk.count { (countById[it] ?: 0) > 0 }
+                if (remaining == 0) return@forEach
                 val sel = "${Telephony.Sms.THREAD_ID} IN (${chunk.joinToString(",") { "?" }})"
                 val args = chunk.map { it.toString() }.toTypedArray()
                 context.contentResolver.query(
@@ -209,12 +224,7 @@ class RealTelephonyDataSource(
                             val rawDate = c.getLong(3)
                             val date = if (rawDate in 1 until 1_000_000_0000L) rawDate * 1000 else rawDate
                             latestMap[tid] = SmsLatest(addr, body, date)
-                            // Rows come back DATE DESC, so the first row seen for
-                            // a thread is already its newest. Once every thread has
-                            // one, the rest of the cursor is older messages we
-                            // discard anyway - on this inbox that was ~4000 extra
-                            // rows walked across the CursorWindow for nothing.
-                            if (latestMap.size >= metas.size) return@use
+                            if (--remaining <= 0) return@use
                         }
                     }
                 }
