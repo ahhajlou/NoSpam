@@ -10,10 +10,10 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           # JetBrains, not Temurin: gradle/gradle-daemon-jvm.properties requires
           # a JETBRAINS 25 daemon JVM. With any other vendor installed, Gradle
@@ -23,7 +23,7 @@ jobs:
           java-version: "25"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           # Skip the action's default package list. It asks for the legacy
           # "tools" package, which Google deprecated in 2019 and removed from
@@ -36,7 +36,7 @@ jobs:
           packages: ''
 
       - name: Set up Gradle (caches dependencies, wrapper and build cache)
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           # v6 made the default "enhanced" cache provider a proprietary
           # component under Gradle's commercial Terms of Use; on private repos
@@ -73,7 +73,7 @@ jobs:
 
       - name: Upload merged coverage report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kover-merged-report
           path: |
