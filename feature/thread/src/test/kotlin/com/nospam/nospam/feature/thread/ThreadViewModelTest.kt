@@ -49,6 +49,27 @@ class ThreadViewModelTest {
 
     @After fun tearDown() { Dispatchers.resetMain() }
 
+    @Test fun `can reply in a thread that only holds sent messages`() = runTest {
+        val fake = telephonyWithThread9(
+            Message(MessageId(1), ThreadId(9), "+15550009", "hi", 1L, MessageType.SENT, true),
+        )
+        val vm = ThreadViewModel(fake)
+        vm.loadThread(9L) // opened from the inbox: no address on the route
+        vm.onDraftChanged("second")
+        vm.onSend()
+        assertEquals(listOf("+15550009"), fake.sentMessages.map { it.first })
+    }
+
+    @Test fun `address from a previous thread is not reused`() = runTest {
+        val fake = telephonyWithThread9(
+            Message(MessageId(1), ThreadId(9), "+15550009", "hi", 1L, MessageType.SENT, true),
+        )
+        val vm = ThreadViewModel(fake)
+        vm.loadThread(5L, address = "+15550005")
+        vm.loadThread(9L)
+        assertEquals("+15550009", vm.uiState.value.address)
+    }
+
     @Test fun `initial state has fake messages`() {
         val vm = ThreadViewModel()
         assertTrue(vm.uiState.value.messages.isNotEmpty())

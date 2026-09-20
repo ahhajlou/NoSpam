@@ -52,6 +52,7 @@ class ThreadViewModel(
     // ThreadRoutes (same navigation scope).
     private var pendingAddress: String? = initialAddress
     private var lastContext: android.content.Context? = null
+    private var loadedThreadId: Long? = null
 
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
@@ -72,7 +73,11 @@ class ThreadViewModel(
     }
 
     fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null, forwardBody: String? = null) {
+        // One VM can serve successive routes; an address left over from a
+        // previous thread must not be sent to from this one.
         if (address != null) pendingAddress = address
+        else if (loadedThreadId != null && loadedThreadId != id) pendingAddress = null
+        loadedThreadId = id
         if (context != null) lastContext = context.applicationContext
         // Cancel notification for this thread when user opens it (no core:notifications dep)
         context?.let { ctx ->
@@ -85,7 +90,10 @@ class ThreadViewModel(
         } else if (context != null) {
             viewModelScope.launch {
                 val draft = runCatching { DraftStore.load(context, id) }.getOrNull()
-                if (draft != null) _uiState.value = _uiState.value.copy(draft = draft)
+                // Never overwrite text the user has already started typing.
+                if (draft != null && _uiState.value.draft.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(draft = draft)
+                }
             }
         }
         if (context != null) {
@@ -132,8 +140,7 @@ class ThreadViewModel(
                 // The route carries an address only when the thread was opened
                 // from the recipient picker; otherwise the other party is the
                 // sender of the first incoming message.
-                val other = _uiState.value.address
-                    ?: remote.firstOrNull { it.type == MessageType.INBOX }?.address
+                val other = _uiState.value.address ?: otherParty(remote)
                 if (other != null && _uiState.value.address == null) resolveContact(other)
                 _uiState.value = _uiState.value.copy(
                     threadId = id, messages = merged(), hasMoreOlder = hasOlder, address = other,
@@ -167,6 +174,15 @@ class ThreadViewModel(
             if (name != null) _uiState.value = _uiState.value.copy(contactName = name)
         }
     }
+
+    /**
+     * The other party: the first sender of an incoming message, else the
+     * recipient of a sent one. A thread holding only outgoing messages (sent to
+     * a number that never replied) has no incoming row to read it from.
+     */
+    private fun otherParty(messages: List<Message>): String? =
+        messages.firstOrNull { it.type == MessageType.INBOX }?.address
+            ?: messages.firstOrNull { it.type == MessageType.SENT }?.address
 
     /** Provider rows win; unconfirmed optimistic rows are kept. */
     private fun merged(): List<Message> {
@@ -257,9 +273,7 @@ class ThreadViewModel(
         // Address = the other party: first incoming message's sender,
         // falling back to the address the thread was opened with (new threads
         // reached from New Conversation have no messages yet).
-        val address = current.messages.firstOrNull { it.type == MessageType.INBOX }?.address
-            ?: pendingAddress
-            ?: return
+        val address = otherParty(current.messages) ?: pendingAddress ?: return
         val body = current.draft
         // Negative ids never collide with provider row ids.
         optimistic = optimistic + Message(
@@ -272,6 +286,11 @@ class ThreadViewModel(
             read = true,
         )
         _uiState.value = current.copy(draft = "", messages = merged())
+        // The persisted draft is the text just sent; leaving it would bring the
+        // sent message back as a draft the next time the thread opens.
+        lastContext?.let { ctx ->
+            viewModelScope.launch { runCatching { DraftStore.save(ctx, current.threadId, "") } }
+        }
         val selectedSim = current.selectedSimId
         viewModelScope.launch {
             val sendResult = dataSource.sendMessage(address, body, subscriptionId = selectedSim)
