@@ -71,8 +71,27 @@ echo "$OUT" | grep -qE '^Verifies$' || {
     echo "$OUT" | grep -vE '^WARNING: (A restricted|java.lang.System|Use --enable|Restricted)' >&2
     fail "apksigner could not verify the signature (exit $STATUS)"
 }
-DN="$(echo "$OUT" | sed -n 's/^Signer #1 certificate DN: //p')"
-ACTUAL="$(echo "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | normalise)"
+# Deliberately not anchored on "Signer #1": apksigner also emits
+# "Signer (minSdkVersion=N, maxSdkVersion=M) certificate DN:" depending on
+# version and on how the signature blocks map to SDK ranges. On 2026-09-20 a CI
+# run parsed nothing with the "#1" form, printed an empty fingerprint, and then
+# reported it as a key MISMATCH -- the APK was correctly signed and the build
+# had succeeded. "certificate DN:" is the stable part of both forms.
+# "certificate SHA-256" also keeps this off the "public key SHA-256" line.
+DN="$(echo "$OUT" | sed -n 's/^Signer .*certificate DN: //p' | head -1)"
+ACTUAL="$(echo "$OUT" | sed -n 's/^Signer .*certificate SHA-256 digest: //p' | head -1 | normalise)"
+
+# A fingerprint we could not read is a broken check, never a verdict about the
+# key. Comparing an empty string against the expected one would "fail" for the
+# right exit code and entirely the wrong reason, which is what happened above.
+if [ -z "$ACTUAL" ]; then
+    printf 'apksigner %s\n' "$APKSIGNER" >&2
+    echo "--- raw apksigner output ---" >&2
+    echo "$OUT" | grep -vE '^WARNING: (A restricted|java.lang.System|Use --enable|Restricted)' >&2
+    echo "--- end ---" >&2
+    fail "could not read the signer certificate from apksigner's output (above). This says nothing about whether the APK is correctly signed."
+fi
+
 printf 'Signer    %s\n' "$DN"
 printf 'SHA-256   %s\n' "$ACTUAL"
 
@@ -85,8 +104,8 @@ case "$DN" in
     *"CN=Android Debug"*) fail "signed with the Android debug key — this is not a releasable APK" ;;
 esac
 
-SIGNERS="$(echo "$OUT" | grep -c '^Signer #[0-9]* certificate DN:')"
-[ "$SIGNERS" = "1" ] || warn "$SIGNERS signers — expected exactly 1"
+SIGNERS="$(echo "$OUT" | grep -c '^Signer .*certificate DN:')"
+[ "$SIGNERS" = "1" ] || fail "$SIGNERS signers — expected exactly 1"
 
 V2="$(echo "$OUT" | sed -n 's/^Verified using v2 scheme.*: //p')"
 V3="$(echo "$OUT" | sed -n 's/^Verified using v3 scheme.*: //p')"
