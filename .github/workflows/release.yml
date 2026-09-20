@@ -28,6 +28,7 @@ jobs:
       version_name: ${{ steps.metadata.outputs.version_name }}
       version_code: ${{ steps.metadata.outputs.version_code }}
       apk_name: ${{ steps.metadata.outputs.apk_name }}
+      fingerprint: ${{ steps.verify.outputs.fingerprint }}
     steps:
       - uses: actions/checkout@v7
 
@@ -39,6 +40,10 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           APP="$(sed -n 's/^val appVersionName = "\(.*\)"$/\1/p' app/build.gradle.kts)"
+          if [ -z "$APP" ]; then
+            echo "::error::could not read appVersionName from app/build.gradle.kts — this guard cannot run"
+            exit 1
+          fi
           if [ "$TAG" != "$APP" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match appVersionName '$APP' — bump the version in app/build.gradle.kts before tagging"
             exit 1
@@ -119,14 +124,30 @@ jobs:
           --stacktrace
 
       - name: Verify the APK is signed with our key
+        id: verify
         # apksigner verify alone would only prove the APK is self-consistent — a
-        # debug-signed or throwaway-signed one passes it. The fingerprint is
-        # pinned here as a literal rather than kept in a secret because it is
-        # public (it is in every APK we ship) and because pinning it in the repo
-        # means swapping the signing key shows up in a diff and in review.
-        run: >
-          tools/verify-signing.sh
-          --expect 55869c56eefb9bf16e2f8f2285524d9d93d33f067d54a53dce896a88799dfac1
+        # debug-signed or unsigned-then-resigned one passes it. So the script
+        # also compares the APK's signer against the certificate in the keystore
+        # we just decoded, which it reads through these same variables. No
+        # fingerprint is hardcoded: a constant here would have to be updated by
+        # hand on every key change and would fail the build for the wrong reason
+        # when someone forgot. --require-identity makes an unresolvable
+        # fingerprint a failure, so this can never pass on a warning.
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        # pipefail matters: the default shell is `bash -e`, where a failing
+        # command piped into tee would be masked by tee's exit 0.
+        run: |
+          set -o pipefail
+          tools/verify-signing.sh --require-identity | tee "$RUNNER_TEMP/verify.log"
+          FP="$(sed -n 's/^SHA-256 *//p' "$RUNNER_TEMP/verify.log" | head -1)"
+          if [ -z "$FP" ]; then
+            echo "::error::could not capture the signer fingerprint for the release notes"
+            exit 1
+          fi
+          echo "fingerprint=$FP" >> "$GITHUB_OUTPUT"
 
       - name: Remove the keystore from the runner
         if: always()
@@ -214,7 +235,7 @@ jobs:
           The signer must be:
 
           \`\`\`
-          Signer #1 certificate SHA-256 digest: 55869c56eefb9bf16e2f8f2285524d9d93d33f067d54a53dce896a88799dfac1
+          Signer #1 certificate SHA-256 digest: ${{ needs.build.outputs.fingerprint }}
           \`\`\`
 
           An APK signed with any other key is not from this project. NoSpam is

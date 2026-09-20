@@ -25,6 +25,7 @@
 #   tools/verify-signing.sh                       # newest release APK
 #   tools/verify-signing.sh path/to/some.apk
 #   tools/verify-signing.sh --expect <sha256>     # compare without the keystore
+#   tools/verify-signing.sh --require-identity    # unresolvable fingerprint = failure
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
@@ -32,10 +33,12 @@ cd "$(dirname "$0")/.."
 MIN_SDK=26
 EXPECTED=""
 APK=""
+REQUIRE_IDENTITY=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --expect) EXPECTED="$2"; shift 2 ;;
+        --require-identity) REQUIRE_IDENTITY=1; shift ;;
         -h|--help) sed -n '5,30p' "$0"; exit 0 ;;
         *) APK="$1"; shift ;;
     esac
@@ -59,6 +62,7 @@ if [ -z "$APK" ]; then
 fi
 [ -f "$APK" ] || fail "no such file: $APK"
 printf 'APK       %s\n' "$APK"
+printf 'apksigner %s\n' "$APKSIGNER"
 
 case "$APK" in
     *unsigned*) fail "filename says unsigned — the release signing config did not apply" ;;
@@ -114,19 +118,45 @@ V3="$(echo "$OUT" | sed -n 's/^Verified using v3 scheme.*: //p')"
 pass "signature verifies for minSdk $MIN_SDK (v2 and v3 present)"
 
 # --- 3. is it OUR key? ------------------------------------------------------
-if [ -z "$EXPECTED" ] && [ -f keystore.properties ]; then
-    STORE="$(sed -n 's/^storeFile=//p' keystore.properties)"
-    ALIAS="$(sed -n 's/^keyAlias=//p' keystore.properties)"
-    PASSWD="$(sed -n 's/^storePassword=//p' keystore.properties)"
+# The expected fingerprint is READ FROM THE KEYSTORE, never hardcoded. Locally
+# that is keystore.properties; in CI it is the same four values from the
+# environment (see app/build.gradle.kts). --expect exists for a machine that has
+# the APK but not the key, and as opt-in hardening: a literal pinned in the
+# workflow would also catch a SWAPPED ANDROID_KEYSTORE_BASE64 secret, which this
+# cannot, because it trusts whatever keystore it was handed. That trade is
+# deliberate -- a constant nobody updates when the key changes fails the build
+# for the wrong reason, and secrets and workflow files are edited by the same
+# person on this project.
+KEYTOOL="keytool"
+[ -x "${JAVA_HOME:-}/bin/keytool" ] && KEYTOOL="$JAVA_HOME/bin/keytool"
+
+if [ -z "$EXPECTED" ]; then
+    if [ -f keystore.properties ]; then
+        STORE="$(sed -n 's/^storeFile=//p' keystore.properties)"
+        ALIAS="$(sed -n 's/^keyAlias=//p' keystore.properties)"
+        PASSWD="$(sed -n 's/^storePassword=//p' keystore.properties)"
+    else
+        STORE="${ANDROID_KEYSTORE_FILE:-}"
+        ALIAS="${ANDROID_KEY_ALIAS:-}"
+        PASSWD="${ANDROID_KEYSTORE_PASSWORD:-}"
+    fi
     if [ -n "$STORE" ] && [ -f "$STORE" ] && [ -n "$PASSWD" ]; then
-        EXPECTED="$(keytool -list -v -keystore "$STORE" -alias "$ALIAS" -storepass "$PASSWD" 2>/dev/null \
+        EXPECTED="$("$KEYTOOL" -list -v -keystore "$STORE" -alias "$ALIAS" -storepass "$PASSWD" 2>/dev/null \
             | sed -n 's/.*SHA256: //p' | head -1 | normalise)"
+        [ -n "$EXPECTED" ] || fail "could not read the certificate for alias '$ALIAS' out of $STORE"
     fi
 fi
 
 if [ -z "$EXPECTED" ]; then
+    # Without something to compare against, this script has checked that the APK
+    # is signed, not BY WHOM. In CI that is not good enough to publish on, so the
+    # workflow passes --require-identity and an unresolvable fingerprint stops
+    # the release rather than printing a warning nobody reads.
+    if [ "$REQUIRE_IDENTITY" = "1" ]; then
+        fail "no keystore fingerprint to compare against, and --require-identity was given: cannot confirm who signed this APK"
+    fi
     warn "no keystore fingerprint to compare against — signature is valid, but its IDENTITY is unchecked"
-    warn "pass --expect <sha256>, or fill in keystore.properties, to check it is really our key"
+    warn "pass --expect <sha256>, set ANDROID_KEYSTORE_FILE/_PASSWORD/_KEY_ALIAS, or fill in keystore.properties"
     exit 0
 fi
 
