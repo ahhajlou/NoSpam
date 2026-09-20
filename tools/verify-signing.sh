@@ -71,24 +71,28 @@ echo "$OUT" | grep -qE '^Verifies$' || {
     echo "$OUT" | grep -vE '^WARNING: (A restricted|java.lang.System|Use --enable|Restricted)' >&2
     fail "apksigner could not verify the signature (exit $STATUS)"
 }
-V2="$(echo "$OUT" | sed -n 's/^Verified using v2 scheme.*: //p')"
-V3="$(echo "$OUT" | sed -n 's/^Verified using v3 scheme.*: //p')"
-[ "$V2" = "true" ] || fail "no v2 signature block"
-[ "$V3" = "true" ] || fail "no v3 signature block"
-pass "signature verifies for minSdk $MIN_SDK (v2 and v3 present)"
-
-SIGNERS="$(echo "$OUT" | grep -c '^Signer #[0-9]* certificate DN:')"
-[ "$SIGNERS" = "1" ] || warn "$SIGNERS signers — expected exactly 1"
-
 DN="$(echo "$OUT" | sed -n 's/^Signer #1 certificate DN: //p')"
 ACTUAL="$(echo "$OUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | normalise)"
 printf 'Signer    %s\n' "$DN"
 printf 'SHA-256   %s\n' "$ACTUAL"
 
 # --- 2. is it the DEBUG key? ------------------------------------------------
+# Checked BEFORE the v2/v3 assertions below, not after. AGP signs debug builds
+# with v2 only (verified 2026-09-20: v1 false, v2 true, v3 false), so a debug
+# APK trips the v3 check first and gets rejected with the useless diagnostic
+# "no v3 signature block" instead of being named for what it is.
 case "$DN" in
     *"CN=Android Debug"*) fail "signed with the Android debug key — this is not a releasable APK" ;;
 esac
+
+SIGNERS="$(echo "$OUT" | grep -c '^Signer #[0-9]* certificate DN:')"
+[ "$SIGNERS" = "1" ] || warn "$SIGNERS signers — expected exactly 1"
+
+V2="$(echo "$OUT" | sed -n 's/^Verified using v2 scheme.*: //p')"
+V3="$(echo "$OUT" | sed -n 's/^Verified using v3 scheme.*: //p')"
+[ "$V2" = "true" ] || fail "no v2 signature block"
+[ "$V3" = "true" ] || fail "no v3 signature block"
+pass "signature verifies for minSdk $MIN_SDK (v2 and v3 present)"
 
 # --- 3. is it OUR key? ------------------------------------------------------
 if [ -z "$EXPECTED" ] && [ -f keystore.properties ]; then
