@@ -76,12 +76,20 @@ jobs:
           # Matches android.yml: "basic" is the MIT-licensed cache provider.
           # The default "enhanced" one is under Gradle's commercial terms.
           cache-provider: basic
-          # A tag is not the default branch, so this is read-only anyway. Stated
-          # explicitly because a release must never be able to poison main's
-          # build cache. Replaces the hand-rolled actions/cache block, which
-          # cached only ~/.gradle/caches and ~/.gradle/wrapper and so missed the
-          # configuration cache and the downloaded JDK.
-          cache-read-only: true
+          # cache-read-only is deliberately NOT set. The action already writes
+          # only on the default branch and reads everywhere else, which is the
+          # behaviour wanted here: a tag build can never poison main's cache.
+          # Forcing it to true additionally blocked writes on main, and since
+          # GitHub scopes a cache written on refs/tags/X so that refs/tags/Y
+          # cannot see it, and this workflow otherwise only runs on tags, no
+          # entry could ever be created that a later release could restore --
+          # every release build started from empty state.
+          #
+          # To warm it: run this workflow manually (workflow_dispatch) on main.
+          # That writes the default-branch entry for this job, which every
+          # subsequent tag build restores, and doubles as a dry run of the
+          # signing path without publishing anything (the release job is gated
+          # on github.ref_type == 'tag').
 
       # No `chmod +x ./gradlew`: it is mode 100755 in git, so the checkout is
       # already executable.
