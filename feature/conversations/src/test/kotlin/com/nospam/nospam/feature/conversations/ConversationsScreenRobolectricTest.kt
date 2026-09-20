@@ -1,6 +1,8 @@
 package com.nospam.nospam.feature.conversations
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,5 +77,48 @@ class ConversationsScreenRobolectricTest {
         rule.onNodeWithText("Delete").performClick()
         rule.waitForIdle()
         assertEquals(listOf(2L), deleted)
+    }
+
+    @Test fun `the inbox lists pinned and recent rows and offers the new-message button`() {
+        var newMessageClicked = false
+        rule.setContent {
+            ConversationsScreen(
+                title = "Inbox",
+                viewModel = ConversationsViewModel(),
+                onNewMessage = { newMessageClicked = true },
+            )
+        }
+        rule.onNodeWithText("Alice Smith").assertIsDisplayed()
+        rule.onNodeWithText("Pinned").assertIsDisplayed()
+        rule.onNodeWithText("Recent").assertIsDisplayed()
+        // Icon-only FAB: its label is the content description.
+        rule.onNodeWithContentDescription("Start chat").assertIsDisplayed().performClick()
+        assertTrue(newMessageClicked)
+    }
+
+    @Test fun `choosing a filter chip selects it`() {
+        rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel()) }
+        rule.onNodeWithText("Starred").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Starred").assertIsSelected()
+    }
+
+    @Test fun `the search field takes input`() {
+        rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel()) }
+        rule.onNodeWithText("Search conversations").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Search conversations").performTextInput("alice")
+        rule.onNodeWithText("alice", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test fun `tapping a conversation reports its thread id`() {
+        var clicked: Long? = null
+        rule.setContent {
+            ConversationsScreen(
+                title = "Inbox",
+                viewModel = ConversationsViewModel(),
+                onConversationClick = { clicked = it },
+            )
+        }
+        rule.onNodeWithText("Design Team Sync").performClick()
+        assertEquals(2L, clicked)
     }
 }

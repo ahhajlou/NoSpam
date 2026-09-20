@@ -52,13 +52,11 @@ kover {
         // `:koverVerify` (total) and CI's `:koverVerifyCi` (debug only).
         verify {
             // Ratchet, not the 80% goal: JVM suites alone cannot cover
-            // Compose screens, NotificationCompat builders, or
-            // ContentResolver code. Device suites for exactly that code
-            // are written (AtomsTest, TelephonyMapperDeviceTest,
-            // TelephonyInstrumentedTest, feature UI tests, plus Wave 2A's
-            // nine Sqlite*Dao + SqliteNoSpamOpenHelper androidTest suites)
-            // and raise this once an emulator runs them. Never lower this
-            // bound.
+            // NotificationCompat builders or ContentResolver code. Device
+            // suites for exactly that code are written (TelephonyMapperDeviceTest,
+            // TelephonyInstrumentedTest, plus Wave 2A's nine Sqlite*Dao +
+            // SqliteNoSpamOpenHelper androidTest suites) and raise this once an
+            // emulator runs them. Never lower this bound.
             //
             // Robolectric was previously believed broken on this
             // environment's JDK 25 -- it was actually just pinned to
@@ -82,8 +80,13 @@ kover {
             // line coverage 49.69% (2711/5456); ratchet 37 -> 49. Settings and
             // the compose bar's counter brought their own suites: 54.88%
             // (3100/5649); ratchet 49 -> 54.
+            //
+            // 2026-09-20 (P1.9): the duplicated Compose androidTest suites
+            // were folded into their Robolectric counterparts and three dead
+            // components deleted, so the uncovered Compose surface shrank:
+            // 60.39% (3470/5746); ratchet 54 -> 60.
             rule("Merged line-coverage ratchet") {
-                minBound(54)
+                minBound(60)
             }
         }
     }

@@ -35,7 +35,8 @@ core:common, core:model, core:testing → leaves
 - JDK 25 (Gradle daemon + `kotlin.jvmToolchain(25)` for JVM modules;
   app bytecode target stays 17 for dex compatibility).
 - Android SDK with platform 36 (compile/target) and minSdk 26.
-- An emulator or device for install, UI tests, and instrumented tests.
+- An emulator or device for install, the storage/telephony instrumented
+  suites, and the Maestro flows. Compose UI tests no longer need one (§2).
 
 ## Build
 
@@ -80,29 +81,26 @@ Pure logic with JUnit + fakes from `core:testing`, no device needed:
 | `core:designsystem` | Stitch seed colors, typography, shapes |
 | `feature:*` | `ConversationsViewModel` (incl. duplicate-key crash regression), `ThreadViewModel` send/draft |
 
-### 2. Compose UI tests — need an emulator
+### 2. Compose UI tests — no emulator, they run on the JVM
 
-`createComposeRule` suites under each feature's `src/androidTest`
-(conversations list/filter/search/click, spam not-spam + empty-spam,
-thread send flow, settings sections/switch/language dialog):
-
-```bash
-./gradlew :feature:conversations:connectedDebugAndroidTest \
-  :feature:thread:connectedDebugAndroidTest \
-  :feature:settings:connectedDebugAndroidTest
-```
-
-Compile/package check without a device:
+`createComposeRule` suites live in each module's `src/test` and run under
+Robolectric with the rest of the unit tests (conversations list/filter/search/
+click, spam rows + not-spam + block confirmation, thread send/selection/compose
+bar, settings sections and dialogs, onboarding, avatar semantics):
 
 ```bash
-./gradlew :feature:conversations:assembleDebugAndroidTest \
-  :feature:thread:assembleDebugAndroidTest \
-  :feature:settings:assembleDebugAndroidTest
+./gradlew test          # or a single module, e.g. :feature:thread:testDebugUnitTest
 ```
 
-> Naming rule: test function names must use underscores
-> (`` `not_spam_removes_row` ``). Spaces in backtick names break D8
-> dexing pre-dex-040.
+Since 2026-09-20 there is no `androidTest` source set in any Compose module.
+The instrumented copies asserted the same things and could not run on API 37;
+see CLAUDE.md §9 for the rule on when an instrumented test is still the right
+call. Each suite needs `@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")` —
+Robolectric's default 320x470 window is too small to compose a list row.
+
+> Naming rule for the device suites below: test function names must use
+> underscores (`` `insert_round_trip` ``). Spaces in backtick names break D8
+> dexing pre-dex-040. JVM suites are free to use spaces.
 
 ### 3. Instrumented tests — need an emulator with NoSpam as default SMS app
 
@@ -111,7 +109,6 @@ Compile/package check without a device:
   default-SMS role) + notification reply-action assertion.
 - `core/telephony/.../TelephonyMapperDeviceTest` — real `ContentValues`
   mapping (impossible on JVM: `android.content` is stubbed).
-- `core/designsystem/.../AtomsTest` — Avatar/chip/search composables.
 
 ```bash
 # grant the role first (or set it in Settings), then:
@@ -122,7 +119,7 @@ Compile/package check without a device:
 
 ```bash
 ./gradlew :core:telephony:assembleDebugAndroidTest \
-  :core:designsystem:assembleDebugAndroidTest
+  :core:database:assembleDebugAndroidTest
 ```
 
 ### 4. Maestro E2E smoke test — needs an emulator + Maestro CLI

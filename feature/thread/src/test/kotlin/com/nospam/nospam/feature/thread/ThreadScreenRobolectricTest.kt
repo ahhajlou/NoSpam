@@ -5,7 +5,13 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -130,4 +136,54 @@ class ThreadScreenRobolectricTest {
         rule.waitForIdle()
         rule.onNodeWithText("145/2", substring = true).assertIsDisplayed()
     }
+
+    @Test fun `a typed message is sent and appears in the thread`() {
+        rule.setContent { ThreadScreen(threadId = 44L) }
+        rule.onNodeWithText("SMS message").performTextInput("See you!")
+        rule.onNodeWithContentDescription("Send message").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("See you!").assertIsDisplayed()
+    }
+
+    @Test fun `tapping a message reveals its time`() {
+        rule.setContent { ThreadScreen(threadId = 1L) }
+        // "Perfect! I love Thai food." carries no digits of its own, so any clock
+        // time that appears after the tap is the timestamp row, not the body.
+        val before = rule.clockTimeCount()
+        rule.onNodeWithText("Perfect! I love Thai food.").performClick()
+        rule.waitForIdle()
+        assertEquals(before + 1, rule.clockTimeCount())
+        // The bubble itself is unchanged.
+        assertEquals(1, rule.onAllNodesWithText("Perfect! I love Thai food.").fetchSemanticsNodes().size)
+    }
+
+    @Test fun `the recipient picker reports the address on IME done`() {
+        var entered: String? = null
+        rule.setContent { NewConversationScreen(onAddressEntered = { entered = it }) }
+        rule.onNodeWithText("Type a name, phone number, or email").performTextInput("+989121234567")
+        rule.onNodeWithText("+989121234567", useUnmergedTree = true).performImeAction()
+        rule.waitForIdle()
+        assertEquals("+989121234567", entered)
+    }
+
+    @Test fun `the recipient picker filters contacts as you type`() {
+        rule.setContent { NewConversationScreen() }
+        // Regression: the field used value = "" with a no-op onValueChange, so
+        // keystrokes were discarded (inactive InputConnection in logcat).
+        rule.onNodeWithText("Type a name, phone number, or email").performTextInput("Ben")
+        rule.waitForIdle()
+        rule.onNodeWithText("Ben Carter").assertIsDisplayed()
+        rule.onNodeWithText("Alice Freeman").assertDoesNotExist()
+    }
 }
+
+private val CLOCK_TIME = Regex("""\d{1,2}:\d{2}""")
+
+/** Number of nodes rendering something that looks like a clock time. */
+private fun ComposeContentTestRule.clockTimeCount(): Int =
+    onAllNodes(
+        SemanticsMatcher("text looks like a clock time") { node ->
+            node.config.getOrNull(SemanticsProperties.Text)
+                ?.any { CLOCK_TIME.containsMatchIn(it.text) } == true
+        }
+    ).fetchSemanticsNodes().size

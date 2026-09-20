@@ -301,25 +301,34 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 ## 9. Testing
 
-| Layer | Where | State as of 2026-09-15 |
+| Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit | `src/test` across 16 modules | 311 tests, 54.88% line coverage (2026-09-17) |
+| Unit, including every Compose screen | `src/test` across 16 modules | 330 tests, 60.39% line coverage |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
-| Instrumented, Compose UI | 5 modules | **cannot run on API 37** — see below |
-| End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-17 |
+| Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver` and `SubscriptionManager` |
+| End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |
 
 Tests are written against behaviour, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
 Turbine for Flow assertions. Coverage gate is a ratchet in the root
 `build.gradle.kts`; raise it, never lower it.
 
-**Compose instrumented tests fail on API 37** with
-`NoSuchMethodException: android.hardware.input.InputManager.getInstance`.
-Espresso reflects into a platform method that no longer exists. Not app logic.
-Either bump the test artifacts or keep an older AVD for those suites.
+**Compose UI tests run on the JVM through Robolectric, not on a device.** As of
+2026-09-20 there is no `androidTest` source set in any Compose module: the
+instrumented copies asserted the same behaviour as their JVM counterparts and
+were folded into them, and those modules' `androidTest` dependencies went with
+them. Instrumented tests are for what the JVM cannot tell the truth about —
+`core:database` against real SQLite, `core:telephony` against a real
+`ContentResolver` and `SubscriptionManager`. Add a device suite only for that
+kind of code; a second copy of a screen test costs an emulator and asserts
+nothing new.
 
-**Compose UI tests also run on the JVM through Robolectric**, which is how the
-screens are covered while that stands: `@RunWith(RobolectricTestRunner::class)`
+This is also why Compose UI tests were not blocked by the emulator: **Compose
+instrumented tests fail on API 37** with `NoSuchMethodException:
+android.hardware.input.InputManager.getInstance` — Espresso reflects into a
+platform method that no longer exists, which is not app logic.
+
+The Robolectric setup: `@RunWith(RobolectricTestRunner::class)`
 plus `@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")` in a module's
 `src/test`, with `testOptions.unitTests.isIncludeAndroidResources = true`. The
 qualifiers are not optional: Robolectric's default window is 320x470px, too

@@ -249,23 +249,24 @@ rule for any bulk action that is reintroduced (multi-select Delete / Block):
 - Consider an undo snackbar for Block, which is reversible. Delete is not, so
   confirmation is the only guard available there.
 
-### Compose instrumented tests cannot run on API 37  — tooling
+### Compose instrumented tests cannot run on API 37  — tooling — **resolved 2026-09-20**
 
-All 20 Compose UI tests fail with
+Compose UI tests failed with
 `NoSuchMethodException: android.hardware.input.InputManager.getInstance`.
 Espresso's UI controller reflectively calls a method that no longer exists on
 API 37. Not app logic — the emulator is newer than the test libraries.
 
-The nine `Sqlite*Dao` suites and `SqliteNoSpamOpenHelper` are unaffected and
-pass 44/44 on the same device, so the storage layer is now verified.
+Resolved by removing the need rather than the failure. Every Compose
+`androidTest` suite duplicated a JVM suite, so in P1.9 the device-only
+assertions were ported into the Robolectric suites and the instrumented copies
+deleted; `feature:conversations`, `feature:thread`, `feature:settings` and
+`core:designsystem` no longer have an `androidTest` source set. Nothing is
+waiting on an Espresso bump or a second AVD, and screen coverage is gated on
+every build instead of on an emulator.
 
-- [] Either bump Espresso and the Compose test artifacts, or keep a second AVD
-  on an older API for UI tests. Decide before writing the E2E runner script,
-  since the runner has to target whichever combination works.
-- Partly worked around 2026-09-17: the Compose UI tests for `feature:conversations`
-  and `feature:thread` also exist as JVM tests under Robolectric (`src/test`), so
-  those screens are covered and gated on every build. The `androidTest` copies stay
-  for real-device verification and remain unrunnable on API 37.
+The storage suites (nine `Sqlite*Dao` plus `SqliteNoSpamOpenHelper`, 44/44) and
+`core:telephony`'s were never affected and stay on the device — see CLAUDE.md §9
+for when a new instrumented test is the right call.
 
 ## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
 

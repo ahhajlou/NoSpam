@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.8 done 2026-09-20.** Next: P1.9 (tests), P1.10 (visual check).
+**P1.9 done 2026-09-20.** Next: P1.10 (visual check).
 
 ## 1. Constraints
 
@@ -206,8 +206,25 @@ Order chosen so each step leaves the app building and usable.
         leading "+" to the other end; alphanumeric sender ids are deliberately left alone,
         because isolate characters are still characters and UI tests and flows match ids exactly.
         First cut isolated every address and broke four tests, which is how that was caught.
-- [ ] P1.9 Tests: update Compose UI tests and `.maestro/flows` (they anchor on
-      "NoSpam SMS" and dialog labels), run unit tests + coverage gate.
+- [x] P1.9 Tests: one home per screen test, and the dead code they were keeping alive.
+      - Every Compose `androidTest` suite was a second copy of a JVM suite, so the
+        assertions that existed only on the device side were ported into the Robolectric
+        suites and the instrumented copies deleted: conversations (inbox rows + FAB,
+        filter chip, search input, thread-id click), thread (send a typed message, tap a
+        message for its time, recipient IME action, contact filtering), spam (rows and the
+        Blocked label, not-spam from selection, block confirmation), designsystem (avatar
+        is decorative). `feature:conversations`, `feature:thread`, `feature:settings` and
+        `core:designsystem` now have no `androidTest` source set, and their
+        `androidTestImplementation` lines went with it.
+      - Instrumented tests kept where the JVM cannot tell the truth: `core:database`
+        against real SQLite (44) and `core:telephony` against a real `ContentResolver`
+        and `SubscriptionManager` (4).
+      - Deleted with their last consumer: `ActionMenuDialog`/`ActionMenuItem` (the
+        tap-menu model dropped in Q1), `PillChip` and `SearchBarPlaceholder` (replaced by
+        `FilterChip` and `SearchBarDefaults.InputField` at the call sites). Each was
+        referenced only by its own test.
+      - 330 unit tests, 60.39% line coverage (3470/5746); ratchet 54 → 60. Flows were
+        already brought up to date in P1.2–P1.8; re-run to confirm.
 - [ ] P1.10 Visual check light / dark / Persian RTL on device.
 
 ## 5. Open questions (answers recorded here)
@@ -300,3 +317,8 @@ Order chosen so each step leaves the app building and usable.
   locale set-app-locales com.nospam.nospam --locales fa`), which is how the snippet punctuation
   bug surfaced. 327 unit tests, coverage 55.84%.
 - 2026-09-20 — P1.8 E2E: 8 pass / 0 fail. inbox_filters_and_search needed `.*` around the phone number it asserts, for the same isolate-character reason.
+- 2026-09-20 — P1.9: the four Compose `androidTest` suites folded into their Robolectric
+  counterparts and deleted, along with three components no production code still called.
+  330 unit tests, 60.39% coverage (ratchet 54 → 60). CLAUDE.md §9 rewritten: instrumented
+  tests are now for storage and telephony only, and the rule for adding one is stated.
+- 2026-09-20 — P1.9 E2E: 8 pass / 0 fail, unchanged flows.
