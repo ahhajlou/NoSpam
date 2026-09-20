@@ -39,6 +39,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.designsystem.component.SettingsGroup
+import com.nospam.nospam.core.designsystem.component.isolateIfPhoneNumber
 import com.nospam.nospam.core.designsystem.component.SettingsItem
 import com.nospam.nospam.core.designsystem.component.SettingsSectionHeader
 import com.nospam.nospam.core.designsystem.component.SettingsSwitchItem
@@ -197,7 +198,7 @@ fun SimSettingsScreen(
         SettingsGroup {
             SettingsItem(
                 title = stringResource(R.string.sim_number_title),
-                supportingText = sim?.number ?: stringResource(R.string.sim_number_unknown),
+                supportingText = sim?.number?.let(::isolateIfPhoneNumber) ?: stringResource(R.string.sim_number_unknown),
                 onClick = null,
             )
         }

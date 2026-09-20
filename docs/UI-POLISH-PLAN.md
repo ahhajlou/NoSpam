@@ -8,7 +8,7 @@ Update both as work lands. Delete or archive the file when the branch merges.
 
 ## 0. Status
 
-**P1.7 done 2026-09-20.** Next: P1.8 (strings), P1.9 (tests), P1.10 (visual check).
+**P1.8 done 2026-09-20.** Next: P1.9 (tests), P1.10 (visual check).
 
 ## 1. Constraints
 
@@ -190,7 +190,22 @@ Order chosen so each step leaves the app building and usable.
         Continue is disabled until both steps are done, rather than hidden.
       - Persian throughout; Robolectric UI tests for the steps, the privacy line, the disabled
         Continue, the granted state, and completion.
-- [ ] P1.8 Strings: remove hard-coded English, add Persian translations.
+- [x] P1.8 Strings and RTL (2026-09-20). The sweep found little hardcoded English left —
+      earlier steps translated what they touched — but three real gaps:
+      - `core:notifications` had no Persian at all: channel names and the backfill progress
+        notification were English on a Persian phone.
+      - Relative times were built as `"${'$'}{diff / 60_000}m"`, which is English either way and
+        always writes Latin digits. Now plurals, so the digits follow the locale too.
+      - The clipboard entry's label (shown by the system clipboard UI) was the literal "sms".
+      RTL, found by looking at the app in Persian rather than by grepping:
+      - English snippets and message bodies took the layout's direction, which moved their
+        full stop to the front (".Meeting moved to 3pm"). Text whose language varies now takes
+        its direction from its own content (`TextDirection.Content`): snippets, message bodies,
+        names, thread title.
+      - Phone numbers are isolated (`isolateIfPhoneNumber`), so a Persian layout cannot move a
+        leading "+" to the other end; alphanumeric sender ids are deliberately left alone,
+        because isolate characters are still characters and UI tests and flows match ids exactly.
+        First cut isolated every address and broke four tests, which is how that was caught.
 - [ ] P1.9 Tests: update Compose UI tests and `.maestro/flows` (they anchor on
       "NoSpam SMS" and dialog labels), run unit tests + coverage gate.
 - [ ] P1.10 Visual check light / dark / Persian RTL on device.
@@ -281,3 +296,7 @@ Order chosen so each step leaves the app building and usable.
   and dark. Labels tightened after the screenshot pass: the done states read "Granted" and
   "Set as default" rather than a bare "Set", which looked like a button.
 - 2026-09-20 — P1.7 E2E: 8 pass / 0 fail (onboarding flow updated for the new step strings).
+- 2026-09-20 — P1.8: verified by running the app in Persian on emulator-5554 (`adb shell cmd
+  locale set-app-locales com.nospam.nospam --locales fa`), which is how the snippet punctuation
+  bug surfaced. 327 unit tests, coverage 55.84%.
+- 2026-09-20 — P1.8 E2E: 8 pass / 0 fail. inbox_filters_and_search needed `.*` around the phone number it asserts, for the same isolate-character reason.

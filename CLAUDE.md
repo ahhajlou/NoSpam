@@ -188,8 +188,19 @@ uppercase. Lowercase silently fails with "Unknown role".
 - Always `padding(start=, end=)`, never `left`/`right`. Use
   `Icons.AutoMirrored.*` for directional icons.
 - `android:supportsRtl="true"`. Compose needs no extra flag.
-- Test with real Persian strings, not placeholder text. Latin numbers inside
-  Persian text need bidi isolation in places.
+- Test with real Persian strings, not placeholder text, and look at the running
+  app: `adb shell cmd locale set-app-locales com.nospam.nospam --locales fa`.
+- **Text whose language varies takes its direction from its content**, not from
+  the layout: snippets, message bodies, names and the thread title set
+  `TextDirection.Content`. Without it an English message in a Persian inbox
+  renders as ".Meeting moved to 3pm" — the layout's direction moves its full
+  stop to the front.
+- **Phone numbers are isolated** through `isolateIfPhoneNumber` (core:designsystem),
+  so a right-to-left layout cannot move a leading "+" to the other end. Only
+  phone-like values: isolate characters are invisible but still characters, and
+  UI tests and Maestro flows match sender ids by exact text.
+- Anything with digits that the user reads as one unit — the SMS part counter,
+  a SIM's number — goes through `isolateLtr` for the same reason.
 - Gregorian versus Jalali dates is still undecided in fact: `DateFormatter`
   comments mention a flag that does not exist, and the behaviour is Gregorian
   always. That is a silent default, which the i18n notes explicitly wanted to

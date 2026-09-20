@@ -56,12 +56,14 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.designsystem.component.Avatar
 import com.nospam.nospam.core.designsystem.component.ConfirmationDialog
+import com.nospam.nospam.core.designsystem.component.isolateIfPhoneNumber
 import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
 import com.nospam.nospam.core.designsystem.component.PruneSelection
 import com.nospam.nospam.core.designsystem.component.SelectionTopAppBar
@@ -136,7 +138,7 @@ fun ThreadScreen(
     var timestampFor by remember { mutableStateOf<Long?>(null) }
     var confirm by rememberSaveable { mutableStateOf<ThreadConfirm?>(null) }
 
-    val title = uiState.contactName ?: uiState.address ?: address.orEmpty()
+    val title = uiState.contactName ?: (uiState.address ?: address)?.let(::isolateIfPhoneNumber) ?: ""
     val conversationActions = buildList {
         val target = uiState.address
         if (target != null) {
@@ -321,10 +323,15 @@ private fun ThreadTitle(title: String, contactKnown: Boolean, address: String?) 
         Avatar(name = title, colorKey = address.orEmpty(), size = 36.dp)
         Spacer(Modifier.width(12.dp))
         Column {
-            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (contactKnown && address != null) {
                 Text(
-                    address,
+                    isolateIfPhoneNumber(address),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -382,7 +389,9 @@ private fun MessageBubble(
             Text(
                 msg.body,
                 color = if (isMe) colors.onPrimary else colors.onSurface,
-                style = MaterialTheme.typography.bodyLarge,
+                // The message decides its own direction: an English message in a
+                // Persian thread would otherwise have its punctuation moved.
+                style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content),
             )
         }
         if (showTimestamp) {
@@ -445,7 +454,10 @@ private fun formatMessageTime(millis: Long): String {
 
 internal fun copyToClipboard(context: android.content.Context, text: String) {
     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("sms", text))
+    // The label is what the system clipboard UI shows for the entry, so it is
+    // translated like anything else the user reads.
+    val label = context.getString(R.string.clipboard_label)
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
 }
 
 internal fun shareText(context: android.content.Context, text: String) {

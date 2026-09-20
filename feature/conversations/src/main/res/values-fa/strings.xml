@@ -61,4 +61,12 @@
     <string name="spam_empty_subtitle">گفت‌وگوهایی که هرزنامه تشخیص داده شده‌اند و فرستندگانی که مسدود می‌کنید اینجا نمایش داده می‌شوند.</string>
     <string name="badge_blocked">مسدود</string>
     <string name="clear_search">پاک کردن جست‌وجو</string>
+    <plurals name="time_minutes">
+        <item quantity="one">%d دقیقه</item>
+        <item quantity="other">%d دقیقه</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="one">%d ساعت</item>
+        <item quantity="other">%d ساعت</item>
+    </plurals>
 </resources>

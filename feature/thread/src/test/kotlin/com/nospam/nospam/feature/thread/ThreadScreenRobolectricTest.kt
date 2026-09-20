@@ -116,18 +116,18 @@ class ThreadScreenRobolectricTest {
         rule.setContent { ThreadScreen(threadId = 42L) }
         rule.onNodeWithText("SMS message").performTextInput("short")
         rule.waitForIdle()
-        rule.onNodeWithText("155/1").assertDoesNotExist()
+        rule.onNodeWithText("155/1", substring = true).assertDoesNotExist()
 
         // 150 latin characters: 10 left in a single 160-character part.
         rule.onNodeWithText("short").performTextInput("a".repeat(145))
         rule.waitForIdle()
-        rule.onNodeWithText("10/1").assertIsDisplayed()
+        rule.onNodeWithText("10/1", substring = true).assertIsDisplayed()
     }
 
     @Test fun `going past one part shows the part count`() {
         rule.setContent { ThreadScreen(threadId = 43L) }
         rule.onNodeWithText("SMS message").performTextInput("a".repeat(161))
         rule.waitForIdle()
-        rule.onNodeWithText("145/2").assertIsDisplayed()
+        rule.onNodeWithText("145/2", substring = true).assertIsDisplayed()
     }
 }

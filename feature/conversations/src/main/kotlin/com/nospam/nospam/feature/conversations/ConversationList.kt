@@ -43,11 +43,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nospam.nospam.core.designsystem.component.Avatar
 import com.nospam.nospam.core.designsystem.component.ConfirmationDialog
+import com.nospam.nospam.core.designsystem.component.isolateIfPhoneNumber
 import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
 import com.nospam.nospam.core.designsystem.component.SelectionState
 import com.nospam.nospam.core.designsystem.component.SelectionTopAppBar
@@ -120,7 +122,11 @@ internal fun ConversationRow(
 ) {
     val participant = conv.participants.firstOrNull()
     val address = participant?.address.orEmpty()
-    val name = participant?.displayName ?: participant?.address ?: stringResource(R.string.unknown_sender)
+    // A contact name keeps the layout's direction; a bare phone number is
+    // isolated so a Persian inbox does not move its leading "+" to the wrong end.
+    val name = participant?.displayName
+        ?: participant?.address?.let(::isolateIfPhoneNumber)
+        ?: stringResource(R.string.unknown_sender)
     val unread = !conv.read
     val colors = MaterialTheme.colorScheme
     Row(
@@ -141,7 +147,7 @@ internal fun ConversationRow(
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         name,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium.copy(textDirection = TextDirection.Content),
                         fontWeight = if (unread) FontWeight.Bold else null,
                         color = colors.onSurface,
                         maxLines = 1,
@@ -166,7 +172,9 @@ internal fun ConversationRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     conv.snippet,
-                    style = MaterialTheme.typography.bodyMedium,
+                    // An English message in a Persian inbox otherwise takes the
+                    // layout's direction, which moves its full stop to the front.
+                    style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),
                     fontWeight = if (unread) FontWeight.SemiBold else null,
                     color = if (unread) colors.onSurface else colors.onSurfaceVariant,
                     maxLines = 1,
@@ -302,12 +310,21 @@ internal fun addToContacts(context: android.content.Context, address: String) {
     }
 }
 
+/**
+ * Row timestamp: minutes, hours, "Yesterday", then a date.
+ *
+ * The minute and hour forms go through plurals rather than string templates:
+ * "${'$'}{diff / 60_000}m" was English either way and always wrote Latin digits, so a
+ * Persian inbox showed "5m" next to Persian text. `getQuantityString` formats
+ * with the current locale, which also gives Persian digits.
+ */
 @Composable
 internal fun formatTime(millis: Long): String {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val now = stringResource(R.string.time_now)
     val yesterday = stringResource(R.string.time_yesterday)
-    return remember(millis, now, yesterday) {
+    return remember(millis, now, yesterday, resources) {
         val diff = System.currentTimeMillis() - millis
         val currentYear = isCurrentYear(millis)
         val dateFlags = android.text.format.DateUtils.FORMAT_SHOW_DATE or
@@ -316,8 +333,14 @@ internal fun formatTime(millis: Long): String {
         when {
             diff < -60_000 -> android.text.format.DateUtils.formatDateTime(context, millis, dateFlags)
             diff < 60_000 -> now
-            diff < 3_600_000 -> "${diff / 60_000}m"
-            diff < 86_400_000 -> "${diff / 3_600_000}h"
+            diff < 3_600_000 -> {
+                val minutes = (diff / 60_000).toInt()
+                resources.getQuantityString(R.plurals.time_minutes, minutes, minutes)
+            }
+            diff < 86_400_000 -> {
+                val hours = (diff / 3_600_000).toInt()
+                resources.getQuantityString(R.plurals.time_hours, hours, hours)
+            }
             diff < 172_800_000 -> yesterday
             else -> android.text.format.DateUtils.formatDateTime(context, millis, dateFlags)
         }

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.emoji2.emojipicker.EmojiPickerView
+import com.nospam.nospam.core.designsystem.component.isolateLtr
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 
 /** Roughly a keyboard's height, so the panel swap does not move the compose bar. */
@@ -144,7 +145,7 @@ private fun SmsCounter(text: String, modifier: Modifier = Modifier) {
     if (length.segments == 0 || !nearLimit) return
     val resources = LocalResources.current
     Text(
-        text = stringResource(R.string.sms_counter, length.remainingInSegment, length.segments),
+        text = isolateLtr(stringResource(R.string.sms_counter, length.remainingInSegment, length.segments)),
         style = MaterialTheme.typography.labelSmall,
         color = if (length.segments > 1) MaterialTheme.colorScheme.primary
         else MaterialTheme.colorScheme.onSurfaceVariant,

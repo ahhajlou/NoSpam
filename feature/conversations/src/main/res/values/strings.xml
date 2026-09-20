@@ -61,4 +61,12 @@
     <string name="spam_empty_subtitle">Conversations flagged as spam and senders you block appear here.</string>
     <string name="badge_blocked">Blocked</string>
     <string name="clear_search">Clear search</string>
+    <plurals name="time_minutes">
+        <item quantity="one">%d min</item>
+        <item quantity="other">%d min</item>
+    </plurals>
+    <plurals name="time_hours">
+        <item quantity="one">%d hr</item>
+        <item quantity="other">%d hr</item>
+    </plurals>
 </resources>

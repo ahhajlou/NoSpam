@@ -42,4 +42,5 @@
         <item quantity="one">%1$d نویسه باقی مانده، در %2$d پیامک ارسال می‌شود</item>
         <item quantity="other">%1$d نویسه باقی مانده، در %2$d پیامک ارسال می‌شود</item>
     </plurals>
+    <string name="clipboard_label">پیام</string>
 </resources>

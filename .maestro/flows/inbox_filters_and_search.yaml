@@ -37,7 +37,10 @@ tags:
 
 # --- Unread ---
 - tapOn: "Unread"
-- assertVisible: "+15551110001"          # seed_contact_clean's newest message is read:0
+# Phone numbers are wrapped in invisible bidi isolate characters so a
+# right-to-left layout cannot move the leading "+" (core:designsystem Bidi.kt),
+# and Maestro matches the whole text, so this needs .* around it.
+- assertVisible: ".*\\+15551110001.*"      # seed_contact_clean's newest message is read:0
 - tapOn: "All"
 
 # --- Known ---
@@ -45,7 +48,7 @@ tags:
 # The seeded contact conversation should surface here by display name once
 # tools/seed.sh's contact insert succeeds on this device/build of `content`.
 - assertVisible:
-    text: "NoSpam QA Contact|\\+15551110001"
+    text: "NoSpam QA Contact|.*\\+15551110001.*"
     optional: true
 - tapOn: "All"
 

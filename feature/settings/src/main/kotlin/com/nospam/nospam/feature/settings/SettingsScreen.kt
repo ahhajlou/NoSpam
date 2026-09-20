@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.designsystem.component.SettingsGroup
+import com.nospam.nospam.core.designsystem.component.isolateIfPhoneNumber
 import com.nospam.nospam.core.designsystem.component.SettingsItem
 import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
@@ -52,7 +53,7 @@ fun SettingsScreen(
                     title = sim.displayName,
                     // Carriers often leave the number out of the SIM; the page
                     // says so rather than showing an empty line.
-                    supportingText = sim.number ?: stringResource(R.string.sim_number_unknown),
+                    supportingText = sim.number?.let(::isolateIfPhoneNumber) ?: stringResource(R.string.sim_number_unknown),
                     icon = Icons.Outlined.SimCard,
                     onClick = { onOpenSim(sim.subscriptionId) },
                 )
