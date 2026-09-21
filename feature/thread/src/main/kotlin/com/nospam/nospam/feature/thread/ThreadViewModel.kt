@@ -9,6 +9,7 @@ import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.model.isOutgoing
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.Job
@@ -52,6 +53,7 @@ class ThreadViewModel(
     // ThreadRoutes (same navigation scope).
     private var pendingAddress: String? = initialAddress
     private var lastContext: android.content.Context? = null
+    private var simPickedByUser = false
 
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
@@ -85,14 +87,18 @@ class ThreadViewModel(
         } else if (context != null) {
             viewModelScope.launch {
                 val draft = runCatching { DraftStore.load(context, id) }.getOrNull()
-                if (draft != null) _uiState.value = _uiState.value.copy(draft = draft)
+                // Never overwrite text the user has already started typing.
+                if (draft != null && _uiState.value.draft.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(draft = draft)
+                }
             }
         }
         if (context != null) {
             // Load SIMs for dual-SIM picker
             viewModelScope.launch {
                 val sims = dataSource?.getActiveSubscriptions() ?: emptyList()
-                _uiState.value = _uiState.value.copy(sims = sims, selectedSimId = sims.firstOrNull()?.subscriptionId)
+                _uiState.value = _uiState.value.copy(sims = sims)
+                syncSelectedSim()
             }
         }
         val dataSource = this.dataSource
@@ -132,12 +138,12 @@ class ThreadViewModel(
                 // The route carries an address only when the thread was opened
                 // from the recipient picker; otherwise the other party is the
                 // sender of the first incoming message.
-                val other = _uiState.value.address
-                    ?: remote.firstOrNull { it.type == MessageType.INBOX }?.address
+                val other = _uiState.value.address ?: otherParty(remote)
                 if (other != null && _uiState.value.address == null) resolveContact(other)
                 _uiState.value = _uiState.value.copy(
                     threadId = id, messages = merged(), hasMoreOlder = hasOlder, address = other,
                 )
+                syncSelectedSim()
             }
         }
         // Per-message "Not spam"/"Report spam" inside a MIXED thread (no sender override).
@@ -168,19 +174,28 @@ class ThreadViewModel(
         }
     }
 
+    /**
+     * The other party: the first sender of an incoming message, else the
+     * recipient of a sent one. A thread holding only outgoing messages (sent to
+     * a number that never replied) has no incoming row to read it from.
+     */
+    private fun otherParty(messages: List<Message>): String? =
+        messages.firstOrNull { it.type == MessageType.INBOX }?.address
+            ?: messages.firstOrNull { it.type.isOutgoing }?.address
+
     /** Provider rows win; unconfirmed optimistic rows are kept. */
     private fun merged(): List<Message> {
         val confirmed = lastRemote
-            .filter { it.type == MessageType.SENT }
+            .filter { it.type.isOutgoing }
             .map { it.body to it.address }
             .toSet()
         optimistic = optimistic.filterNot { (it.body to it.address) in confirmed }
         // The provider emits only the newest page; drop any older-page row that
         // the sliding window has caught up with (re-emit after a new message).
-        lastRemote.minOfOrNull { it.id.value }?.let { newestPageMinId ->
-            if (olderMessages.isNotEmpty()) {
-                olderMessages = olderMessages.filter { it.id.value < newestPageMinId }
-            }
+        // By id, not by position: ids need not follow dates.
+        if (olderMessages.isNotEmpty()) {
+            val inWindow = lastRemote.map { it.id.value }.toSet()
+            olderMessages = olderMessages.filterNot { it.id.value in inWindow }
         }
         return (olderMessages + lastRemote + optimistic).sortedWith(compareBy({ it.date }, { it.id.value }))
     }
@@ -193,12 +208,13 @@ class ThreadViewModel(
         if (loadingOlder || !hasOlder) return
         val threadId = _uiState.value.threadId
         if (threadId == 0L) return
-        val beforeId = (olderMessages + lastRemote).minOfOrNull { it.id.value } ?: return
+        // The oldest loaded message by the provider's own sort key (date, id).
+        val oldest = (olderMessages + lastRemote).minWithOrNull(compareBy({ it.date }, { it.id.value })) ?: return
         loadingOlder = true
         _uiState.value = _uiState.value.copy(loadingOlder = true)
         viewModelScope.launch {
             val page = runCatching {
-                dataSource?.getMessages(ThreadId(threadId), TelephonyDataSource.MESSAGES_PAGE_SIZE, beforeId)
+                dataSource?.getMessages(ThreadId(threadId), TelephonyDataSource.MESSAGES_PAGE_SIZE, oldest)
             }.getOrNull().orEmpty()
             olderMessages = olderMessages + page
             hasOlder = page.size >= TelephonyDataSource.MESSAGES_PAGE_SIZE
@@ -220,7 +236,25 @@ class ThreadViewModel(
     }
 
     fun onSimSelected(subId: Int) {
+        simPickedByUser = true
         _uiState.value = _uiState.value.copy(selectedSimId = subId)
+    }
+
+    /**
+     * Replies go out on the SIM the conversation last used, as the provider
+     * recorded it, not always on the first SIM. Falls back to the first SIM when
+     * the thread has no history on an active one. Never overrides the user's pick.
+     */
+    private fun syncSelectedSim() {
+        if (simPickedByUser) return
+        val state = _uiState.value
+        if (state.sims.isEmpty()) return
+        val active = state.sims.map { it.subscriptionId }.toSet()
+        val threadSim = state.messages
+            .lastOrNull { it.subscriptionId != null && it.subscriptionId in active && it.id.value > 0 }
+            ?.subscriptionId
+        val chosen = threadSim ?: state.selectedSimId?.takeIf { it in active } ?: state.sims.first().subscriptionId
+        if (chosen != state.selectedSimId) _uiState.value = state.copy(selectedSimId = chosen)
     }
 
     fun onDeleteMessages(messageIds: Collection<Long>) = messageIds.forEach(::onDeleteMessage)
@@ -257,9 +291,7 @@ class ThreadViewModel(
         // Address = the other party: first incoming message's sender,
         // falling back to the address the thread was opened with (new threads
         // reached from New Conversation have no messages yet).
-        val address = current.messages.firstOrNull { it.type == MessageType.INBOX }?.address
-            ?: pendingAddress
-            ?: return
+        val address = otherParty(current.messages) ?: pendingAddress ?: return
         val body = current.draft
         // Negative ids never collide with provider row ids.
         optimistic = optimistic + Message(
@@ -272,17 +304,53 @@ class ThreadViewModel(
             read = true,
         )
         _uiState.value = current.copy(draft = "", messages = merged())
+        // The persisted draft is the text just sent; leaving it would bring the
+        // sent message back as a draft the next time the thread opens.
+        lastContext?.let { ctx ->
+            viewModelScope.launch { runCatching { DraftStore.save(ctx, current.threadId, "") } }
+        }
         val selectedSim = current.selectedSimId
+        viewModelScope.launch { deliver(address, body, selectedSim, existingId = null) }
+    }
+
+    /**
+     * Writes the message as OUTBOX, then sends it. The provider row is what the
+     * user sees from then on: it turns SENT or FAILED when the radio reports,
+     * so a message that did not go out says so instead of looking sent.
+     */
+    private suspend fun deliver(address: String, body: String, sim: Int?, existingId: Long?) {
+        val dataSource = this.dataSource ?: return
+        val rowId = existingId ?: dataSource.insertOutboxMessage(address, body, System.currentTimeMillis(), sim)
+        val result = dataSource.sendMessage(address, body, subscriptionId = sim, messageId = rowId)
+        if (result.isFailure) {
+            Log.w(TAG, "SmsManager send failed", result.exceptionOrNull())
+            if (rowId == null) restoreUnsent(address, body)
+        }
+        // No manual reload: the provider observer re-emits and reconciles.
+    }
+
+    /**
+     * No row could be written (this app is not the default SMS app), so a failed
+     * send has nowhere to show as failed. Take the optimistic row back and give
+     * the text back to the compose box instead of leaving a phantom "sent".
+     */
+    private fun restoreUnsent(address: String, body: String) {
+        optimistic = optimistic.filterNot { it.body == body && it.address == address }
+        val current = _uiState.value
+        _uiState.value = current.copy(
+            messages = merged(),
+            draft = if (current.draft.isEmpty()) body else current.draft,
+        )
+    }
+
+    /** Sends a FAILED message again, keeping its row and place in the thread. */
+    fun onRetry(messageId: Long) {
+        val dataSource = this.dataSource ?: return
+        val failed = _uiState.value.messages.firstOrNull { it.id.value == messageId && it.type == MessageType.FAILED } ?: return
+        val sim = _uiState.value.selectedSimId
         viewModelScope.launch {
-            val sendResult = dataSource.sendMessage(address, body, subscriptionId = selectedSim)
-            if (sendResult.isFailure) {
-                Log.w(TAG, "SmsManager send failed", sendResult.exceptionOrNull())
-            }
-            val rowId = dataSource.insertSentMessage(
-                address, body, System.currentTimeMillis(), subscriptionId = selectedSim
-            )
-            if (rowId == null) Log.w(TAG, "insertSentMessage failed")
-            // No manual reload: the provider observer re-emits and reconciles.
+            dataSource.updateMessageType(messageId, MessageType.OUTBOX)
+            deliver(failed.address, failed.body, sim, existingId = messageId)
         }
     }
 

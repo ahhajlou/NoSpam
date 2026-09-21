@@ -71,7 +71,7 @@ class FakesTest {
         assertEquals(listOf(7L), fake.deletedThreadIds)
     }
 
-    @Test fun `FakeTelephonyDataSource paginates backwards from a message id`() = runTest {
+    @Test fun `FakeTelephonyDataSource paginates backwards from a message`() = runTest {
         val fake = FakeTelephonyDataSource()
         val messages = (1L..5L).map {
             Message(
@@ -89,8 +89,25 @@ class FakesTest {
         val newest = fake.getMessages(ThreadId(1), limit = 2)
         assertEquals(listOf("m4", "m5"), newest.map { it.body })
 
-        val older = fake.getMessages(ThreadId(1), limit = 2, beforeId = 4L)
+        val older = fake.getMessages(ThreadId(1), limit = 2, before = messages[3])
         assertEquals(listOf("m2", "m3"), older.map { it.body })
+    }
+
+    @Test fun `FakeTelephonyDataSource pages by date even when row ids disagree`() = runTest {
+        val fake = FakeTelephonyDataSource()
+        // Ids follow insertion order, dates follow when a message was sent: the
+        // two oldest messages were inserted last, so they carry the highest ids.
+        fun msg(id: Long, date: Long) = Message(
+            MessageId(id), ThreadId(1), "+989121234567", "m$id", date, MessageType.INBOX, true,
+        )
+        val messages = listOf(msg(1, 100), msg(2, 101), msg(3, 102), msg(4, 10), msg(5, 11))
+        fake.emitMessages(ThreadId(1), messages)
+
+        val newest = fake.getMessages(ThreadId(1), limit = 3)
+        assertEquals(listOf("m1", "m2", "m3"), newest.map { it.body })
+
+        val older = fake.getMessages(ThreadId(1), limit = 3, before = newest.first())
+        assertEquals(listOf("m4", "m5"), older.map { it.body })
     }
 
     @Test fun `FakeTelephonyDataSource reports only the addresses it was told about`() = runTest {

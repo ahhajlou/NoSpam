@@ -159,4 +159,45 @@ class ConversationsRepositoryTest {
         assertTrue(repo.observeSpam().first().isEmpty())
         assertEquals(listOf(9L), repo.observeConversations().first().map { it.threadId.value })
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `spam page lists the newest message first whatever order telephony returns`() = runTest {
+        val tele = FakeTelephonyDataSource(listOf(
+            conv(1, "+98911", date = 10), conv(2, "+98912", date = 30), conv(3, "+98913", date = 20),
+        ))
+        val db = NoSpamDatabase.inMemory()
+        listOf("+98911", "+98912", "+98913").forEach {
+            db.senderStateDao.upsert(SenderStateEntity(it, ThreadSpamState.SPAM, isUserOverride = true))
+        }
+        val repo = ConversationsRepository(tele, db, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        assertEquals(listOf(2L, 3L, 1L), repo.observeSpam().first().map { it.threadId.value })
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `archived page lists the newest message first and ignores pins and archive order`() = runTest {
+        val tele = FakeTelephonyDataSource(listOf(
+            conv(1, "+98911", date = 10), conv(2, "+98912", date = 30), conv(3, "+98913", date = 20),
+        ))
+        val db = NoSpamDatabase.inMemory()
+        val repo = ConversationsRepository(tele, db, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        // Archived oldest-message-first, the way that would expose a sort by archive time.
+        repo.archive(ThreadId(1)); repo.archive(ThreadId(3)); repo.archive(ThreadId(2))
+        assertEquals(listOf(2L, 3L, 1L), repo.observeArchived().first().map { it.threadId.value })
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `archiving drops the pin, and it stays dropped after unarchiving`() = runTest {
+        val tele = FakeTelephonyDataSource(listOf(conv(1, "+98911", date = 10), conv(2, "+98912", date = 20)))
+        val db = NoSpamDatabase.inMemory()
+        val repo = ConversationsRepository(tele, db, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        repo.setPin(ThreadId(1), true)
+        assertTrue(repo.observeConversations().first().first { it.threadId.value == 1L }.isPinned)
+
+        repo.archive(ThreadId(1))
+        repo.unarchive(ThreadId(1))
+        val back = repo.observeConversations().first()
+        assertFalse(back.first { it.threadId.value == 1L }.isPinned)
+        // Back to its date position: the pin no longer floats it above the newer one.
+        assertEquals(listOf(2L, 1L), back.map { it.threadId.value })
+    }
 }

@@ -11,6 +11,7 @@ import android.provider.Telephony
 import android.util.Log
 import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.Message
+import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -143,7 +144,12 @@ class RealTelephonyDataSource(
                 Telephony.Threads.READ,
             )
             val metas = mutableListOf<ThreadMeta>()
-            context.contentResolver.query(Telephony.Threads.CONTENT_URI, proj, null, null, "${Telephony.Threads.DATE} DESC")?.use { c ->
+            // The plain conversations URI is a UNION view with no message_count column
+            // on current Android (API 34+ providers: "no such column: message_count"),
+            // which sent every load down the uncached 3000-row fallback. The simple
+            // form reads the threads table itself and has all four columns.
+            val threadsUri = Telephony.Threads.CONTENT_URI.buildUpon().appendQueryParameter("simple", "true").build()
+            context.contentResolver.query(threadsUri, proj, null, null, "${Telephony.Threads.DATE} DESC")?.use { c ->
                 while (c.moveToNext()) {
                     val id = c.getLong(c.getColumnIndexOrThrow(Telephony.Threads._ID))
                     val rawDate = try { c.getLong(c.getColumnIndexOrThrow(Telephony.Threads.DATE)) } catch (_: Exception) { 0L }
@@ -193,7 +199,17 @@ class RealTelephonyDataSource(
                     }
                 }
             }
+            val countById = metas.associate { it.id to it.count }
             idsToQuery.chunked(400).forEach { chunk ->
+                // Rows arrive DATE DESC, so the first row seen for a thread is its
+                // newest and the scan can stop once every thread in this chunk has
+                // one. Only threads that hold messages can ever be found: the
+                // provider lists empty threads too (13 of 282 on the A26), and
+                // counting them meant the scan never stopped and read the whole
+                // message table on every cold load. A thread holding only MMS also
+                // never matches here, so it still costs a full walk.
+                var remaining = chunk.count { (countById[it] ?: 0) > 0 }
+                if (remaining == 0) return@forEach
                 val sel = "${Telephony.Sms.THREAD_ID} IN (${chunk.joinToString(",") { "?" }})"
                 val args = chunk.map { it.toString() }.toTypedArray()
                 context.contentResolver.query(
@@ -209,12 +225,7 @@ class RealTelephonyDataSource(
                             val rawDate = c.getLong(3)
                             val date = if (rawDate in 1 until 1_000_000_0000L) rawDate * 1000 else rawDate
                             latestMap[tid] = SmsLatest(addr, body, date)
-                            // Rows come back DATE DESC, so the first row seen for
-                            // a thread is already its newest. Once every thread has
-                            // one, the rest of the cursor is older messages we
-                            // discard anyway - on this inbox that was ~4000 extra
-                            // rows walked across the CursorWindow for nothing.
-                            if (latestMap.size >= metas.size) return@use
+                            if (--remaining <= 0) return@use
                         }
                     }
                 }
@@ -262,10 +273,10 @@ class RealTelephonyDataSource(
     override suspend fun getMessages(
         threadId: ThreadId,
         limit: Int,
-        beforeId: Long?,
+        before: Message?,
     ): List<Message> = withContext(Dispatchers.IO) {
         try {
-            queryMessages(threadId, limit, beforeId)
+            queryMessages(threadId, limit, before)
         } catch (e: Exception) {
             // SecurityException (no permission) or SQLiteException (provider
             // column differences) — surface as empty, never crash the UI.
@@ -274,7 +285,7 @@ class RealTelephonyDataSource(
         }
     }
 
-    private fun queryMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> {
+    private fun queryMessages(threadId: ThreadId, limit: Int, before: Message?): List<Message> {
         val list = mutableListOf<Message>()
         val uri = Telephony.Sms.CONTENT_URI
         val projection = arrayOf(
@@ -284,17 +295,19 @@ class RealTelephonyDataSource(
             Telephony.Sms.BODY,
             Telephony.Sms.DATE,
             Telephony.Sms.TYPE,
-            Telephony.Sms.READ
+            Telephony.Sms.READ,
+            Telephony.Sms.SUBSCRIPTION_ID,
         )
         // Backward pagination: newest [limit] rows, or rows strictly older than
-        // [beforeId] (exclusive) when scrolling up — never a hard thread truncation.
-        val sel = if (beforeId != null) {
-            "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms._ID} < ?"
+        // [before] when scrolling up — never a hard thread truncation. The cursor
+        // is (date, _id), the same key as the ORDER BY below.
+        val sel = if (before != null) {
+            "${Telephony.Sms.THREAD_ID} = ? AND (${Telephony.Sms.DATE} < ? OR (${Telephony.Sms.DATE} = ? AND ${Telephony.Sms._ID} < ?))"
         } else {
             "${Telephony.Sms.THREAD_ID} = ?"
         }
-        val args = if (beforeId != null) {
-            arrayOf(threadId.value.toString(), beforeId.toString())
+        val args = if (before != null) {
+            arrayOf(threadId.value.toString(), before.date.toString(), before.date.toString(), before.id.value.toString())
         } else {
             arrayOf(threadId.value.toString())
         }
@@ -307,19 +320,31 @@ class RealTelephonyDataSource(
         return list.sortedWith(compareBy({ it.date }, { it.id.value }))
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?, messageId: Long?): Result<Unit> = withContext(Dispatchers.IO) {
+        val uri = messageId?.let(SmsSender::rowUri)
         try {
-            val mgr = context.resolveSmsManager(subscriptionId)
-            val parts = mgr.divideMessage(body)
-            if (parts.size <= 1) {
-                mgr.sendTextMessage(address, null, body, null, null)
-            } else {
-                mgr.sendMultipartTextMessage(address, null, parts, null, null)
-            }
+            SmsSender.send(context, address, body, subscriptionId, uri)
             Result.success(Unit)
         } catch (e: Exception) {
+            if (uri != null) SmsSender.setType(context, uri, MessageType.FAILED)
             Result.failure(e)
         }
+    }
+
+    override suspend fun insertOutboxMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? =
+        withContext(Dispatchers.IO) {
+            try {
+                val values = TelephonyMapper.buildOutboxValues(address, body, date, subscriptionId)
+                context.contentResolver.insert(Telephony.Sms.Outbox.CONTENT_URI, values)?.lastPathSegment?.toLongOrNull()
+            } catch (e: Exception) {
+                // Not the default SMS app: the system stores the message itself.
+                Log.w(TAG, "insertOutboxMessage failed", e)
+                null
+            }
+        }
+
+    override suspend fun updateMessageType(messageId: Long, type: MessageType) = withContext(Dispatchers.IO) {
+        SmsSender.setType(context, SmsSender.rowUri(messageId), type)
     }
 
     override suspend fun markAsRead(threadId: ThreadId) = withContext(Dispatchers.IO) {

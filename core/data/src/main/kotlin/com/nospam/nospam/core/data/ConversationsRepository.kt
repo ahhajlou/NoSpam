@@ -176,6 +176,10 @@ class ConversationsRepository(
 
     // Spam/Archived also share the hot telephony upstream so navigating
     // to those tabs doesn't re-trigger the 3.6s query.
+    // Spam and Archived list newest message first, sorted here rather than trusting
+    // the telephony order: adjustMixedSnippet can change a conversation's date after
+    // that order was fixed, and the threads table's own date is truncated to seconds.
+    // No pinned-first: Google Messages does not apply pins on these pages either.
     // Single source of truth: sender_state (SPAM/BLOCKED) + app blocklist.
     // Legacy spam_verdict (threadId-keyed) is deliberately not consulted here —
     // including it was what let a conversation appear in both lists (see CLAUDE.md §15).
@@ -195,6 +199,7 @@ class ConversationsRepository(
                 .map { conv ->
                     conv.copy(isBlocked = isBlockedAddress(conv, blockedRaw))
                 }
+                .sortedByDescending { it.date }
         }.flowOn(Dispatchers.IO)
     }
 
@@ -207,6 +212,7 @@ class ConversationsRepository(
             conversations
                 .filter { it.threadId.value in archivedIds }
                 .map { it.copy(isArchived = true) }
+                .sortedByDescending { it.date }
         }.flowOn(Dispatchers.IO)
     }
 
@@ -214,7 +220,16 @@ class ConversationsRepository(
         if (read) telephony.markAsRead(threadId) else telephony.markAsUnread(threadId)
     }
 
-    suspend fun archive(threadId: ThreadId) = db.archivedDao.archive(threadId.value)
+    /**
+     * Archiving also drops the pin, as Google Messages does (checked on the
+     * emulator: an archived conversation comes back from Archived unpinned).
+     * A pin on a conversation the user has put away would otherwise reappear
+     * the day they unarchive it.
+     */
+    suspend fun archive(threadId: ThreadId) {
+        db.pinnedDao.unpin(threadId.value)
+        db.archivedDao.archive(threadId.value)
+    }
 
     suspend fun unarchive(threadId: ThreadId) = db.archivedDao.unarchive(threadId.value)
 

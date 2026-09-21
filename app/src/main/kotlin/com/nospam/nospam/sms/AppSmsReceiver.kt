@@ -34,7 +34,11 @@ class AppSmsReceiver : BroadcastReceiver() {
         val sender = messages[0].displayOriginatingAddress
         val body = messages.joinToString("") { it.messageBody ?: "" }
         if (body.isEmpty()) return
-        val timestamp = messages[0].timestampMillis
+        // Arrival time on this device, not the carrier's timestamp: that one is
+        // truncated to whole seconds and stamped by another clock, so a reply
+        // could sort before the message it answers (a same-phone SIM1->SIM2
+        // message landed 202ms *before* its own sent row).
+        val timestamp = System.currentTimeMillis()
         val subscriptionId = intent.getIntExtra(
             SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
             SubscriptionManager.INVALID_SUBSCRIPTION_ID,

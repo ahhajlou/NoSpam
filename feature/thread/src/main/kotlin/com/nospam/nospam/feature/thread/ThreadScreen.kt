@@ -5,6 +5,7 @@ package com.nospam.nospam.feature.thread
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,6 +79,7 @@ import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.model.isOutgoing
 import kotlinx.coroutines.launch
 
 /** Three icons plus the overflow, as in the conversation lists. */
@@ -234,7 +236,7 @@ fun ThreadScreen(
                             MessageBubble(
                                 msg = msg,
                                 selected = id in selection.ids,
-                                suspected = id in uiState.spamMessageIds && msg.type != MessageType.SENT,
+                                suspected = id in uiState.spamMessageIds && !msg.type.isOutgoing,
                                 showTimestamp = timestampFor == id,
                                 onClick = {
                                     if (selection.isActive) selection.toggle(id)
@@ -243,6 +245,7 @@ fun ThreadScreen(
                                 onLongClick = { selection.toggle(id) },
                                 onMarkNotSpam = { uiState.onMarkNotSpam?.invoke(id) },
                                 onReportSpam = { uiState.onReportSpam?.invoke(id) },
+                                onRetry = { viewModel.onRetry(id) },
                                 modifier = Modifier.animateItem(),
                             )
                         }
@@ -355,9 +358,10 @@ private fun MessageBubble(
     onLongClick: () -> Unit,
     onMarkNotSpam: () -> Unit,
     onReportSpam: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isMe = msg.type == MessageType.SENT
+    val isMe = msg.type.isOutgoing
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = modifier
@@ -395,6 +399,23 @@ private fun MessageBubble(
                 // Persian thread would otherwise have its punctuation moved.
                 style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content),
             )
+        }
+        when (msg.type) {
+            MessageType.FAILED -> Text(
+                stringResource(R.string.message_failed_retry),
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.error,
+                modifier = Modifier
+                    .clickable(onClick = onRetry)
+                    .padding(top = 2.dp),
+            )
+            MessageType.OUTBOX, MessageType.QUEUED -> Text(
+                stringResource(R.string.message_sending),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            else -> Unit
         }
         if (showTimestamp) {
             Text(

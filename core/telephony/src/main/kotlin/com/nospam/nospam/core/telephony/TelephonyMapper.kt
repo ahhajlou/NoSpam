@@ -30,8 +30,14 @@ object TelephonyMapper {
             Telephony.Sms.MESSAGE_TYPE_DRAFT -> MessageType.DRAFT
             Telephony.Sms.MESSAGE_TYPE_OUTBOX -> MessageType.OUTBOX
             Telephony.Sms.MESSAGE_TYPE_FAILED -> MessageType.FAILED
+            Telephony.Sms.MESSAGE_TYPE_QUEUED -> MessageType.QUEUED
             else -> MessageType.INBOX
         }
+        // Optional: not every projection asks for it.
+        val subIndex = cursor.getColumnIndex(Telephony.Sms.SUBSCRIPTION_ID)
+        val subscriptionId = if (subIndex >= 0 && !cursor.isNull(subIndex)) {
+            cursor.getInt(subIndex).takeIf { it >= 0 }
+        } else null
         return Message(
             id = MessageId(id),
             threadId = ThreadId(threadId),
@@ -39,7 +45,8 @@ object TelephonyMapper {
             body = body,
             date = date,
             type = type,
-            read = read
+            read = read,
+            subscriptionId = subscriptionId,
         )
     }
 
@@ -89,6 +96,22 @@ object TelephonyMapper {
             if (subscriptionId != null) put(Telephony.Sms.SUBSCRIPTION_ID, subscriptionId)
         }
     }
+
+    /** Provider type for [type]; the inverse of the mapping in [mapCursorToMessage]. */
+    fun providerType(type: MessageType): Int = when (type) {
+        MessageType.INBOX -> Telephony.Sms.MESSAGE_TYPE_INBOX
+        MessageType.SENT -> Telephony.Sms.MESSAGE_TYPE_SENT
+        MessageType.DRAFT -> Telephony.Sms.MESSAGE_TYPE_DRAFT
+        MessageType.OUTBOX -> Telephony.Sms.MESSAGE_TYPE_OUTBOX
+        MessageType.FAILED -> Telephony.Sms.MESSAGE_TYPE_FAILED
+        MessageType.QUEUED -> Telephony.Sms.MESSAGE_TYPE_QUEUED
+    }
+
+    /** An outgoing message that has not been handed to the radio yet; see [SmsSender]. */
+    fun buildOutboxValues(address: String, body: String, date: Long, subscriptionId: Int? = null): android.content.ContentValues =
+        buildSentValues(address, body, date, subscriptionId).apply {
+            put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_OUTBOX)
+        }
 
     fun buildSentValues(address: String, body: String, date: Long, subscriptionId: Int? = null): android.content.ContentValues {
         return android.content.ContentValues().apply {

@@ -17,6 +17,11 @@ enum class MessageType {
     INBOX, SENT, DRAFT, OUTBOX, FAILED, QUEUED
 }
 
+/** Written by this user: sent, still sending, waiting to send, or failed to send. */
+val MessageType.isOutgoing: Boolean
+    get() = this == MessageType.SENT || this == MessageType.OUTBOX ||
+        this == MessageType.FAILED || this == MessageType.QUEUED
+
 enum class SpamLabel {
     SPAM, HAM
 }

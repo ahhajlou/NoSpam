@@ -10,6 +10,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import com.nospam.nospam.core.model.Conversation
+import com.nospam.nospam.core.model.Participant
+import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.testing.FakeTelephonyDataSource
 import org.junit.Test
 
 /** BlocklistRepository, split out of the original RepositoryTest (Wave 2A). */
@@ -89,5 +93,27 @@ class BlocklistRepositoryTest {
         val db = NoSpamDatabase.inMemory()
         val repo = BlocklistRepository(db)
         assertFalse(repo.isBlocked("+98999"))
+    }
+
+    @Test fun `blocking a sender drops the pin of their conversation only`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val tele = FakeTelephonyDataSource(listOf(
+            Conversation(ThreadId(1), listOf(Participant("+98911")), "a", 1L, 1, true),
+            Conversation(ThreadId(2), listOf(Participant("+98912")), "b", 2L, 1, true),
+        ))
+        db.pinnedDao.pin(1)
+        db.pinnedDao.pin(2)
+        BlocklistRepository(db, telephony = tele).block("+98911")
+        assertFalse(db.pinnedDao.isPinned(1))
+        assertTrue(db.pinnedDao.isPinned(2))
+    }
+
+    @Test fun `blocking still works when the conversation cannot be looked up`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val repo = BlocklistRepository(db)
+        db.pinnedDao.pin(1)
+        repo.block("+98911")
+        assertTrue(repo.isBlocked("+98911"))
+        assertTrue(db.pinnedDao.isPinned(1))
     }
 }

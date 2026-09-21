@@ -38,6 +38,42 @@ import org.robolectric.annotation.Config
 class ThreadScreenRobolectricTest {
     @get:Rule val rule = createComposeRule()
 
+    @Test fun `a failed message says it was not sent and retries when tapped`() {
+        val fake = com.nospam.nospam.core.testing.FakeTelephonyDataSource()
+        fake.emitMessages(
+            com.nospam.nospam.core.model.ThreadId(9),
+            listOf(
+                com.nospam.nospam.core.model.Message(
+                    com.nospam.nospam.core.model.MessageId(7), com.nospam.nospam.core.model.ThreadId(9),
+                    "+15550009", "did not go", 1L, com.nospam.nospam.core.model.MessageType.FAILED, true,
+                ),
+            ),
+        )
+        val vm = ThreadViewModel(fake)
+        rule.setContent { ThreadScreen(threadId = 9L, viewModel = vm) }
+        rule.waitForIdle()
+        rule.onNodeWithText("did not go").assertIsDisplayed()
+        rule.onNodeWithText("Not sent · Tap to retry").assertIsDisplayed().performClick()
+        rule.waitForIdle()
+        assertEquals(listOf("did not go"), fake.sentMessages.map { it.second })
+    }
+
+    @Test fun `a message that is still sending says so`() {
+        val fake = com.nospam.nospam.core.testing.FakeTelephonyDataSource()
+        fake.emitMessages(
+            com.nospam.nospam.core.model.ThreadId(9),
+            listOf(
+                com.nospam.nospam.core.model.Message(
+                    com.nospam.nospam.core.model.MessageId(7), com.nospam.nospam.core.model.ThreadId(9),
+                    "+15550009", "on its way", 1L, com.nospam.nospam.core.model.MessageType.OUTBOX, true,
+                ),
+            ),
+        )
+        rule.setContent { ThreadScreen(threadId = 9L, viewModel = ThreadViewModel(fake)) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Sending…").assertIsDisplayed()
+    }
+
     @Test fun `the title shows the contact name and the conversation actions`() {
         rule.setContent { ThreadScreen(threadId = 1L) }
         rule.onNodeWithText("Alice").assertIsDisplayed()

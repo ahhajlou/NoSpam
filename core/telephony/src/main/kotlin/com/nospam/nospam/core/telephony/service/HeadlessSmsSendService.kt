@@ -6,13 +6,13 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.provider.Telephony
-import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
 import android.util.Log
 import androidx.core.app.RemoteInput
 import com.nospam.nospam.core.model.TelephonyConstants
 import com.nospam.nospam.core.telephony.TelephonyMapper
-import com.nospam.nospam.core.telephony.resolveSmsManager
+import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.telephony.SmsSender
 
 /**
  * Handles notification direct-reply (RESPOND_VIA_MESSAGE) with the correct
@@ -39,22 +39,24 @@ class HeadlessSmsSendService : Service() {
             Log.w(TAG, "Ignoring reply with invalid subscription_id: $rawSubscriptionId")
             return START_NOT_STICKY
         }
-        try {
-            smsManagerFor(subscriptionId).sendTextMessage(address, null, text, null, null)
-            // Default SMS app must persist its own sent messages.
+        // The default SMS app persists its own messages: as OUTBOX first, then
+        // SENT or FAILED once the radio reports. No row (not the default app)
+        // must not stop the send; the system stores that message itself.
+        val row = runCatching {
             contentResolver.insert(
-                Telephony.Sms.Sent.CONTENT_URI,
-                TelephonyMapper.buildSentValues(address, text, System.currentTimeMillis(), subscriptionId),
+                Telephony.Sms.Outbox.CONTENT_URI,
+                TelephonyMapper.buildOutboxValues(address, text, System.currentTimeMillis(), subscriptionId),
             )
+        }.getOrNull()
+        try {
+            SmsSender.send(this, address, text, subscriptionId, row)
             cancelNotificationFor(address)
         } catch (e: Exception) {
             Log.e(TAG, "Direct reply failed", e)
+            if (row != null) SmsSender.setType(this, row, MessageType.FAILED)
         }
         return START_NOT_STICKY
     }
-
-    private fun smsManagerFor(subscriptionId: Int?): SmsManager =
-        resolveSmsManager(subscriptionId)
 
     private fun cancelNotificationFor(address: String) {
         val manager = getSystemService(android.app.NotificationManager::class.java) ?: return

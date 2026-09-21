@@ -85,6 +85,14 @@ class FakeTelephonyDataSource(
     val markedReadThreadIds = mutableListOf<Long>()
     /** Every `sendMessage` call, in order: address, body, subscriptionId. */
     val sentMessages = mutableListOf<Triple<String, String, Int?>>()
+    /** The `messageId` passed to each `sendMessage`, in order; null when there was no OUTBOX row. */
+    val sentMessageIds = mutableListOf<Long?>()
+    /** Every `insertOutboxMessage` call, in order: address, body. */
+    val insertedOutbox = mutableListOf<Pair<String, String>>()
+    /** Every `updateMessageType` call, in order: message id, new type. */
+    val updatedMessageTypes = mutableListOf<Pair<Long, MessageType>>()
+    /** False models an app that is not the default SMS app: provider writes return null. */
+    var writable = true
     /** Messages returned by `getAllMessages`. */
     val allMessages = mutableListOf<Message>()
     /** Addresses reported by `getOutboundSenderAddresses`. */
@@ -124,24 +132,40 @@ class FakeTelephonyDataSource(
 
     /**
      * Mirrors RealTelephonyDataSource: observeMessages always serves just the
-     * newest page (it's backed by `getMessages(threadId)` with no `beforeId`),
+     * newest page (it's backed by `getMessages(threadId)` with no `before`),
      * never the full seeded history. Use [emitMessages] to seed/update the
-     * full store and [getMessages] with `beforeId` for older pages.
+     * full store and [getMessages] with `before` for older pages.
      */
     override fun observeMessages(threadId: ThreadId): Flow<List<Message>> =
-        flowFor(threadId.value).map { it.takeLast(TelephonyDataSource.MESSAGES_PAGE_SIZE) }
+        flowFor(threadId.value).map {
+            it.sortedWith(compareBy({ m -> m.date }, { m -> m.id.value })).takeLast(TelephonyDataSource.MESSAGES_PAGE_SIZE)
+        }
 
     override suspend fun getConversations(): List<Conversation> = conversationsFlow.value
 
-    override suspend fun getMessages(threadId: ThreadId, limit: Int, beforeId: Long?): List<Message> {
-        val all = flowFor(threadId.value).value
-        val older = if (beforeId == null) all else all.filter { it.id.value < beforeId }
+    override suspend fun getMessages(threadId: ThreadId, limit: Int, before: Message?): List<Message> {
+        // Same (date, id) key as the real query, so a fixture whose ids disagree
+        // with its dates pages the way the provider does.
+        val all = flowFor(threadId.value).value.sortedWith(compareBy({ it.date }, { it.id.value }))
+        val older = if (before == null) all else all.filter {
+            it.date < before.date || (it.date == before.date && it.id.value < before.id.value)
+        }
         return older.takeLast(limit)
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?): Result<Unit> {
+    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?, messageId: Long?): Result<Unit> {
         sentMessages.add(Triple(address, body, subscriptionId))
+        sentMessageIds.add(messageId)
         return sendResult
+    }
+
+    override suspend fun insertOutboxMessage(address: String, body: String, date: Long, subscriptionId: Int?): Long? {
+        insertedOutbox.add(address to body)
+        return if (writable) 1000L + insertedOutbox.size else null
+    }
+
+    override suspend fun updateMessageType(messageId: Long, type: MessageType) {
+        updatedMessageTypes.add(messageId to type)
     }
 
     override suspend fun markAsRead(threadId: ThreadId) {

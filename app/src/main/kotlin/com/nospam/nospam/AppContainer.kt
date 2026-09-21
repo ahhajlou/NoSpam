@@ -45,7 +45,7 @@ class AppContainer(private val context: Context) {
     val spamStateWriter: SpamStateWriter by lazy { SpamStateWriter(database.senderStateDao) }
 
     val spamRepository: SpamRepository by lazy { SpamRepository(database, classifier, appContext, spamStateWriter) }
-    val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database, appContext) }
+    val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database, appContext, telephony = telephony) }
     val conversationsRepository: ConversationsRepository by lazy {
         // Normalize in the same way SmsIngressUseCase/BlocklistRepository key
         // their rows, so inbox/spam-section lookups agree (§15 single key).

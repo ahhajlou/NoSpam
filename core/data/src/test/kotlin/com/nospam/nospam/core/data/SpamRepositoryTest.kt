@@ -25,4 +25,14 @@ class SpamRepositoryTest {
         assertFalse(v.isSpam)
         assertTrue(v.isUserOverride)
     }
+
+    @Test fun `reporting a conversation as spam drops its pin`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val repo = SpamRepository(db, FakeSpamClassifier.alwaysSpam())
+        db.pinnedDao.pin(5)
+        db.pinnedDao.pin(6)
+        repo.markSpam(ThreadId(5), "+98912")
+        assertFalse(db.pinnedDao.isPinned(5))
+        assertTrue(db.pinnedDao.isPinned(6))
+    }
 }
