@@ -4,11 +4,13 @@ package com.nospam.nospam.feature.thread
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.nospam.nospam.core.data.DraftRepository
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.telephony.TelephonyDataSource
+import com.nospam.nospam.core.testing.FakePreferencesDataSource
 import com.nospam.nospam.core.testing.FakeTelephonyDataSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,6 +38,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class ThreadViewModelContextTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
+    private val drafts = DraftRepository(FakePreferencesDataSource())
 
     @Before fun setUp() { Dispatchers.setMain(Dispatchers.Unconfined) }
 
@@ -74,13 +77,13 @@ class ThreadViewModelContextTest {
 
     @Test fun `sending clears the saved draft so the sent text does not come back`() = runBlocking {
         val fake = fakeWith(incoming(1, sim = 1))
-        val vm = ThreadViewModel(fake)
+        val vm = ThreadViewModel(fake, drafts = drafts)
         vm.loadThread(9L, context = context)
         vm.onDraftChanged("about to send")
         awaitDraft { it == "about to send" }
         vm.onSend()
         awaitDraft { it == null }
-        assertNull(DraftStore.load(context, 9L))
+        assertNull(drafts.load(9L))
     }
 
     @Test fun `a failed send with no row to mark returns the text to the compose box`() = runTest {
@@ -96,6 +99,6 @@ class ThreadViewModelContextTest {
     }
 
     private suspend fun awaitDraft(until: (String?) -> Boolean) = withTimeout(5_000) {
-        while (!until(DraftStore.load(context, 9L))) delay(20)
+        while (!until(drafts.load(9L))) delay(20)
     }
 }

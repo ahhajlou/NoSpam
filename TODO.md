@@ -173,8 +173,7 @@ Worth having:
   **Decided 2026-09-22:** the disabled placeholder row phase 1 added is removed
   in phase 2 step 3. It comes back, if ever, with the routing rework above,
   because until contacts actually bypass the classifier it has nothing to turn on.
-- Master spam protection on/off — already exists (`SpamPreferences.isEnabled`;
-  moves to `SettingsRepository` in phase 2 step 1).
+- Master spam protection on/off — already exists (`SettingsRepository.spamProtection`).
 
 Deliberately not offering: sensitivity sliders or aggressive/balanced/relaxed
 presets. Users cannot reason about a threshold they cannot see the effect of,
@@ -336,7 +335,7 @@ left open deliberately.
 
 `ThreadViewModel.loadThread(id, address, context, forwardBody)` only ever
 overwrites `uiState.draft` in two cases: `forwardBody != null` (synchronous),
-or a persisted draft is found via `DraftStore.load(context, id)` on the live
+or a persisted draft is found via `DraftRepository.load(id)` on the live
 path (`dataSource != null`), and only if that thread actually has a saved
 draft. If neither applies — the common case of a plain reload with
 `forwardBody == null` and no persisted draft for the *target* thread — nothing
@@ -356,19 +355,19 @@ without sending.
 
 **Analyze again before touching `ThreadViewModel` code here.** In particular:
 whether a fresh thread with no persisted draft should explicitly reset to
-`""` up front, and whether doing so can race the async `DraftStore.load` (it
+`""` up front, and whether doing so can race the async `DraftRepository.load` (it
 runs in `viewModelScope.launch`, so an eager synchronous reset plus a later
 async overwrite needs to be ordered correctly, not just patched to "clear
 first").
 
 - [x] **Not reproducible through navigation (checked 2026-09-20 on the emulator).** Typing an unsent draft in one thread, going back and opening another leaves the second compose box empty: `composable<ThreadRoute>` creates its `ThreadViewModel` per back-stack entry, so no instance is ever reused across threads. The "one VM can serve successive routes" comment in `ThreadViewModel` is out of date. The code path described above still exists if a VM were ever shared; original item: draft carries over between threads when neither
-  `forwardBody` nor a persisted `DraftStore` entry exists for the
+  `forwardBody` nor a persisted `DraftRepository` entry exists for the
   newly-opened thread. `feature/thread/src/main/kotlin/com/nospam/nospam/feature/thread/ThreadViewModel.kt`, `loadThread()`.
 
 ## Drafts in the inbox — agreed model (2026-09-18)
 
-Today a draft is invisible outside its own thread: `DraftStore` is a DataStore
-in `feature:thread` keyed by thread id, the inbox shows no sign of it, and
+Today a draft is invisible outside its own thread: drafts are stored per thread
+id (`DraftRepository`, `core:data`, since 2026-09-23), the inbox shows no sign of it, and
 `Conversation.hasDraft` exists but is never set or rendered.
 
 **Verified on the emulator (Google Messages 20260331, as default SMS app):**
@@ -386,10 +385,11 @@ Agreed for a later phase:
   user is most likely to return to.
 - [] Set `Conversation.hasDraft` from the draft store rather than leaving the
   field unused.
-- [] Needs a home the inbox can read: `DraftStore` lives in `feature:thread`,
-  and `feature:conversations` must not depend on it. Move it to `core:data` (or
-  `core:database`) when this is built — that is also where the draft-carryover
-  bug below gets fixed.
+- [x] Needs a home the inbox can read. **Done 2026-09-23 (phase 2, P2.1):**
+  `DraftRepository` in `core:data`, same DataStore file and `draft_<id>` keys,
+  with `observeAll()` for the inbox. The old `DraftStore` in `feature:thread` is
+  gone; the draft-carryover bug below still has to be fixed against the new
+  class.
 - [] Decide then whether to also write drafts to the provider as `type=3`. It
   would make drafts visible to other SMS apps and survive a reinstall, which
   Messages does not bother with; weigh that against a second source of truth,
@@ -401,6 +401,7 @@ Agreed for a later phase:
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
 - [] Add instrumented tests for `core:telephony` provider query/write logic. Two device suites exist (`TelephonyInstrumentedTest`: one SMS insert/query round trip plus a notification build; `TelephonyMapperDeviceTest`: two `ContentValues` mappers) but nothing covers pagination, delete, mark-read or the SIM path. The thread pagination cursor bug above is exactly the kind this would have caught
 - [] MMS: extend history scan to MMS when the MMS-parsing architecture is ready (currently SMS-only in backfill)
+- [] `tools/run-e2e.sh` on a fresh install: the first flow (`archived_unarchive`) fails with an empty Archived page. Found 2026-09-23 after an `adb uninstall`: `seed.sh` writes its flags into `nospam.db` with `sqlite3`, and before the app's first launch there is no schema for them to land in; later flows pass because the app has created it by then. The runner never launches the app before seeding. Fix: launch once (or `am start` and wait for the inbox) after `installDebug` and before the first reseed. The flow passes run alone
 - [] Rename `com.nospam.nospam` applicationId/package before publishing
 - [] Onboarding does not react to permissions granted outside the app. Fresh install → onboarding shows → user grants the permissions from system Settings (App info → Permissions) instead of the in-app dialog → returns to the app: onboarding still shows the old state and the inbox is never reached until the app is force-closed and reopened. Check first: `NoSpamNavHost`'s resume check (CLAUDE.md §6) may only route *to* onboarding when permissions are missing and never route *away* from it once they are all granted, and the onboarding screen may compute its granted state once instead of re-reading on `ON_RESUME`. Expected: on resume, re-evaluate `requiredPermissions()` and continue to the inbox (or to the next step, the default-SMS role) without a restart. Not covered today — `tools/permission_gate_check.sh` only tests the revoke → resume direction; add the grant → resume direction there and a Robolectric test on the onboarding screen. Searched TODO.md, TASKS.md, REVIEW.md and docs/ on 2026-09-20: no existing report of this
 - [] Sideloaded installs hit Android's "restricted settings" block, with no in-app explanation. Verified 2026-09-20 on a Galaxy A26: the release APK downloaded from GitHub and installed from Samsung My Files (not a store, so Android restricts SMS-related permissions until the user allows it) showed "App was denied access to be default SMS app… restricted permissions", and the permission requests were declined twice so onboarding read "Android will not ask again". Play Protect's "This app looks safe" is a separate malware scan and does not lift it. The app cannot remove the restriction; only a store installer (Play, F-Droid, possibly Galaxy Store) or adb avoids it. Two pieces to build, both for the GitHub-APK route:

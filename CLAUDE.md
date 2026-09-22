@@ -21,13 +21,13 @@ A full replacement SMS/MMS messenger for Android.
 
 ## 2. Modules
 
-18 Gradle modules. They are not all the same kind of thing, and the distinction
+19 Gradle modules. They are not all the same kind of thing, and the distinction
 matters more than the count:
 
 | Tier | Modules | Rule |
 |---|---|---|
 | Leaf | `core:model`, `core:common`, `core:designsystem` | No project dependencies at all. Anything may depend on them. |
-| Capability | `core:database`, `core:telephony`, `core:ml`, `core:notifications`, `core:i18n` | One platform capability each. Depend only on leaf modules, **never on each other**. |
+| Capability | `core:database`, `core:telephony`, `core:ml`, `core:notifications`, `core:i18n`, `core:preferences` | One platform capability each. Depend only on leaf modules, **never on each other**. |
 | Aggregator | `core:data` | The repository layer. Depends on leaf plus every capability module it needs. |
 | Test support | `core:testing` | Fakes. Depends on leaf plus the capability modules whose interfaces it implements. Never on a production classpath. |
 | Shipping feature | `feature:conversations`, `feature:thread`, `feature:settings`, `feature:onboarding` | One navigable area each. |
@@ -41,7 +41,7 @@ here rather than restate a count, which is how the previous file drifted.
 **The real dependency rule**, as the code actually enforces it: a capability
 module never depends on another capability module. Verified — `core:database`
 sees only `core:model`; `core:telephony`, `core:ml` and `core:i18n` see only
-leaves. `core:data` depending on four capability modules is the point of
+leaves; `core:preferences` sees nothing. `core:data` depending on five capability modules is the point of
 `core:data`, not a violation.
 
 The previous file claimed no `core` module depended on any other `core` module,
@@ -92,6 +92,22 @@ starred/pinned/muted/archived flags, and model metadata. Persistent
 DAOs never query in `<init>`. They expose a `MutableStateFlow` initialised
 lazily via `onStart { withContext(IO) { … } }` behind an `AtomicBoolean`, so
 building the DI container does not touch disk on the main thread.
+
+**Preferences live in `core:preferences`**, an untyped key-value
+`PreferencesDataSource` over DataStore, one file per `PreferenceFile`. What the
+keys mean, their defaults and the failure policy belong to the repositories in
+`core:data` (`SettingsRepository`, `DraftRepository`); features and `:app` use
+only those, never DataStore directly. Two rules: a `PreferenceFile.fileName` is
+the on-disk name installed apps already have, so never rename one; and each file
+has exactly one `preferencesDataStore` delegate in the process, because DataStore
+fails when two instances open the same file. Storage errors never reach callers:
+a failed read is the default (chosen so that degrading is safe, e.g. spam
+protection on), a failed write is logged and dropped.
+
+**Nothing is backed up or transferred.** `allowBackup="false"` plus
+`data_extraction_rules.xml` excluding every domain; the second is what stops
+device-to-device transfer on Android 12+. The app's data is keyed by phone
+number, and subscription ids mean nothing on another phone.
 
 **Ingress ordering.** `SmsIngressUseCase` inserts the incoming message into the
 provider with `READ=0` *before* classifying, then updates read state and verdict
@@ -315,7 +331,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 17 modules | 339 tests, 60.49% line coverage |
+| Unit, including every Compose screen | `src/test` across 18 modules | 390 tests, 60.89% line coverage (2026-09-23) |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
 | End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |
@@ -420,7 +436,7 @@ reader could not tell which were safe to change.
 | `core:testing` is an Android library, not JVM | **Deliberate** | Its fakes must implement interfaces that live in Android modules. See §2. |
 | No `build-logic` convention plugins | **Accidental drift** | 16 near-identical build files repeat the same `compileSdk`/`minSdk`/`jvmTarget` block. The threshold for doing this was passed long ago. |
 | R8 disabled in release | **Accidental drift** | `isMinifyEnabled = false` and an empty keep-rules file. The largest available size win, and it needs a keep-rule pass for the `@Serializable` routes. |
-| `allowBackup="true"` with template rules | **Accidental drift** | Both backup XML files are untouched Android Studio templates with everything commented out, so the effective policy is "back up everything", including a verdict database keyed by phone number. |
+| `allowBackup="false"` and no device transfer | **Deliberate** (2026-09-23) | Was accidental "back up everything" through untouched template rules. See §4. |
 | Spam graduation ratio | **Accidental, decided against** | See §5 and `TODO.md`. |
 
 ## 12. Intent and PendingIntent rules

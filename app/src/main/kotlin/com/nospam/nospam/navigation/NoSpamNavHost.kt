@@ -56,7 +56,7 @@ import com.nospam.nospam.feature.settings.SettingsScreen
 import com.nospam.nospam.feature.settings.SettingsViewModel
 import com.nospam.nospam.feature.settings.SimSettingsScreen
 import com.nospam.nospam.feature.settings.SpamSettingsScreen
-import com.nospam.nospam.feature.settings.SpamPreferences
+import com.nospam.nospam.feature.settings.SpamSettingsViewModel
 import com.nospam.nospam.feature.thread.NewConversationScreen
 import com.nospam.nospam.feature.thread.ThreadScreen
 import com.nospam.nospam.feature.thread.ThreadViewModel
@@ -272,7 +272,10 @@ fun NoSpamNavHost(
             )
         }
         composable<SettingsSpamRoute> {
-            SpamSettingsScreen(onNavigateUp = { navController.navigateUp() })
+            val vm: SpamSettingsViewModel = viewModel(
+                factory = vmFactory { SpamSettingsViewModel(container?.settingsRepository) }
+            )
+            SpamSettingsScreen(onNavigateUp = { navController.navigateUp() }, viewModel = vm)
         }
         composable<SettingsAdvancedRoute> {
             AdvancedSettingsScreen(
@@ -288,7 +291,7 @@ fun NoSpamNavHost(
             OnboardingScreen(
                 onComplete = {
                     scope.launch {
-                        SpamPreferences.setBackfillPending(context, true)
+                        container?.settingsRepository?.setBackfillPending(true)
                         container?.spamBackfill?.ensureStarted()
                     }
                     navController.navigate(ConversationsRoute) {
@@ -315,7 +318,9 @@ fun NoSpamNavHost(
             val args = backStackEntry.toRoute<ThreadRoute>()
             val vm: ThreadViewModel = viewModel(
                 factory = vmFactory {
-                    container?.let { ThreadViewModel(it.telephony, args.address, it.spamRepository) } ?: ThreadViewModel()
+                    container?.let {
+                        ThreadViewModel(it.telephony, args.address, it.spamRepository, it.draftRepository)
+                    } ?: ThreadViewModel()
                 }
             )
             val scope = rememberCoroutineScope()

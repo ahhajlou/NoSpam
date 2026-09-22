@@ -43,7 +43,7 @@ In short: **ON = quiet but never lose a real message.**
 
 - **Storage:** `MessageVerdict` (per-message, immutable) + `SenderState` (per-normalized-address, `E.164` via `PhoneNumberUtils` or raw alphanumeric) in `core/database` (`SqliteNoSpamOpenHelper` v2). 30-day pruning affects only auto `MessageVerdict` rows; user overrides and `SenderState` are kept forever.
 - **Address key:** normalized address, not `threadId` (threads are recycled after deletion). See `CLAUDE.md §15`.
-- **Persistence:** `SpamPreferences.kt` (`preferencesDataStore("settings")`, key `spam_protection_enabled`). `SettingsScreen.kt` uses `collectAsState` + `setEnabled`; `SmsIngressUseCase.kt` reads it before `ThreadSpamPolicy.decideWithAddress` and short-circuits to `CLEAN/NORMAL` when disabled.
+- **Persistence:** `SettingsRepository` in `core:data` over `core:preferences` (DataStore file `settings`, key `spam_protection_enabled`, default on; a failed read also means on). `SpamSettingsViewModel` drives the switch; `SmsIngressUseCase.kt` reads it before `ThreadSpamPolicy.decideWithAddress` and short-circuits to `CLEAN/NORMAL` when disabled.
 
 ## FAQ
 

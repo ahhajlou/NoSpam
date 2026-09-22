@@ -36,9 +36,9 @@ base {
 }
 
 tasks.withType<Test> {
-    // AppContainer wiring touches PhoneNumberNormalizer's and SpamPreferences'
-    // process-lifetime singleton caches (see core:telephony's and
-    // feature:settings' build.gradle.kts for the same fix/reasoning). One JVM
+    // AppContainer wiring touches PhoneNumberNormalizer's cache and the
+    // process-wide DataStore delegates in core:preferences, both singletons for
+    // the life of the process (see core:telephony's build.gradle.kts). One JVM
     // fork per test class keeps that state from leaking between test classes.
     forkEvery = 1
 }
@@ -134,6 +134,7 @@ dependencies {
     implementation(project(":core:telephony"))
     implementation(project(":core:ml"))
     implementation(project(":core:notifications"))
+    implementation(project(":core:preferences"))
     implementation(project(":feature:conversations"))
     implementation(project(":feature:thread"))
     implementation(project(":feature:settings"))

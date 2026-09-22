@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). Next: step P2.1, the `core:preferences` foundation.
+**P2 planned 2026-09-22** (§3). P2.1 done 2026-09-23. Next: P2.2, notification tap and `ACTION_SENDTO`.
 
 ## 1. Constraints
 
@@ -101,8 +101,8 @@ User decisions:
 
 Design decisions:
 
-- **D1 — preferences get a capability module, `core:preferences`.** It depends on
-  `core:model` only and exposes `PreferencesDataSource` (DataStore behind it),
+- **D1 — preferences get a capability module, `core:preferences`.** It has no
+  project dependencies (the untyped store needs none) and exposes `PreferencesDataSource` (DataStore behind it),
   with a fake in `core:testing`. `core:data` adds `SettingsRepository` and
   `DraftRepository`; features and `:app` use only those. Existing file names and
   keys are kept (`settings`: `spam_protection_enabled`, `history_backfill_pending`,
@@ -129,7 +129,10 @@ Design decisions:
   hold phone numbers and message text, subscription ids do not carry to a new
   device, and a restored `install_id` breaks its reset-on-uninstall promise.
   Closes ARCHITECTURE-REVIEW P-1 and REVIEW L-13. Selective backup of
-  `ui_settings` can be added later if wanted.
+  `ui_settings` can be added later if wanted. *Corrected while implementing:*
+  `allowBackup="false"` does not stop device-to-device transfer on Android 12+,
+  so `data_extraction_rules.xml` is rewritten to exclude every domain from both
+  cloud backup and device transfer, not deleted; only `backup_rules.xml` goes.
 
 ### 3.3 Rules for every step
 
@@ -148,7 +151,7 @@ Design decisions:
 ### 3.4 Work breakdown
 
 - [x] P2.0 This plan, and TODO.md: MMS project, removed settings, decisions.
-- [ ] P2.1 **`core:preferences` foundation, backup off.** No visible change.
+- [x] P2.1 **`core:preferences` foundation, backup off.** No visible change.
       New module (capability tier), `SettingsRepository`, `DraftRepository`,
       `FakePreferencesDataSource`. Callers migrated: `AppContainer`,
       `NoSpamApplication`, `NoSpamNavHost`, `DebugTools`, `SettingsPages`,
@@ -234,6 +237,23 @@ None at the moment. Record new ones here with the answer when given.
 - 2026-09-22 — Research: docs, `git log c01a7a6..HEAD`, settings/theme/send paths,
   blocklist/bulk/contacts/tests. Four scope questions answered (§3.2). Branch
   created. Plan written; TODO.md updated. Next: P2.1.
+- 2026-09-23 — P2.1 done. `core:preferences` (capability tier: `PreferencesDataSource`
+  + DataStore implementation, one delegate per file), `SettingsRepository` and
+  `DraftRepository` in `core:data`, `FakePreferencesDataSource` in `core:testing`.
+  `SpamPreferences` and `DraftStore` deleted; the spam page got
+  `SpamSettingsViewModel`, and `ThreadViewModel` takes a `DraftRepository`. With no
+  process-wide DataStore left in `feature:settings`, its `forkEvery = 1` went too.
+  Backup and device transfer off (D5, corrected above).
+  Tests: 44 black-box tests written from the spec by an isolated agent (Sonnet),
+  all passing first time against the implementation; its one change was a harness
+  fix (real time, not virtual, around real file I/O). Build, lint, 390 unit tests,
+  coverage 60.89% (ratchet stays 60), all green.
+  Device (emulator-5554): installed `main`'s build, turned spam protection off and
+  left a draft, upgraded in place to this build: both survived. Package flags no
+  longer include `ALLOW_BACKUP`. E2E after a clean install: 7 pass, 1 fail
+  (`archived_unarchive`, which passes on rerun). Cause: the runner seeds
+  `nospam.db` before the app's first launch has created it. Pre-existing runner
+  gap exposed by the uninstall, not by this change; recorded in TODO.md.
 
 ## 4. Phase 1 work breakdown
 

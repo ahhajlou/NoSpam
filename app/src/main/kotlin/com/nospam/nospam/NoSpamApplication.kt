@@ -7,7 +7,6 @@ import android.os.StrictMode
 import android.util.Log
 import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.notifications.NotificationHelper
-import com.nospam.nospam.feature.settings.SpamPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -78,7 +77,7 @@ class NoSpamApplication : Application() {
         // died mid-scan. When nothing is pending we never touch SMS or the
         // classifier here, so an ordinary launch adds no scan overhead.
         appScope.launch {
-            if (SpamPreferences.isBackfillPending(this@NoSpamApplication)) {
+            if (container.settingsRepository.isBackfillPending()) {
                 container.spamBackfill.ensureStarted()
             }
         }
@@ -88,7 +87,7 @@ class NoSpamApplication : Application() {
             container.spamBackfill.status
                 .dropWhile { it is BackfillStatus.Idle }
                 .first { it is BackfillStatus.Done || it is BackfillStatus.Cancelled || it is BackfillStatus.Failed }
-            SpamPreferences.setBackfillPending(this@NoSpamApplication, false)
+            container.settingsRepository.setBackfillPending(false)
         }
     }
 }

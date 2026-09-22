@@ -5,6 +5,7 @@ package com.nospam.nospam.feature.thread
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nospam.nospam.core.data.DraftRepository
 import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
@@ -42,17 +43,19 @@ data class ThreadUiState(
  * system provider via [TelephonyDataSource.observeMessages], so incoming SMS
  * appear without leaving the screen; sending goes through SmsManager +
  * sent-box write with an optimistic row for instant feedback.
+ * @param drafts when null (previews, tests that do not care), drafts are not
+ * persisted.
  */
 class ThreadViewModel(
     private val dataSource: TelephonyDataSource? = null,
     initialAddress: String? = null,
     private val spamRepository: SpamRepository? = null,
+    private val drafts: DraftRepository? = null,
 ) : ViewModel() {
     // The other party for threads reached from New Conversation, which have
     // no messages yet. Mutable because one VM instance can serve successive
     // ThreadRoutes (same navigation scope).
     private var pendingAddress: String? = initialAddress
-    private var lastContext: android.content.Context? = null
     private var simPickedByUser = false
 
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
@@ -75,18 +78,18 @@ class ThreadViewModel(
 
     fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null, forwardBody: String? = null) {
         if (address != null) pendingAddress = address
-        if (context != null) lastContext = context.applicationContext
         // Cancel notification for this thread when user opens it (no core:notifications dep)
         context?.let { ctx ->
             runCatching { androidx.core.app.NotificationManagerCompat.from(ctx).cancel(id.toInt()) }
         }
         // A forwarded message's body wins over any previously-saved draft for
-        // this thread; skip the DataStore load so it doesn't get overwritten.
+        // this thread; skip the saved-draft load so it doesn't get overwritten.
+        val drafts = this.drafts
         if (forwardBody != null) {
             _uiState.value = _uiState.value.copy(draft = forwardBody)
-        } else if (context != null) {
+        } else if (drafts != null) {
             viewModelScope.launch {
-                val draft = runCatching { DraftStore.load(context, id) }.getOrNull()
+                val draft = drafts.load(id)
                 // Never overwrite text the user has already started typing.
                 if (draft != null && _uiState.value.draft.isEmpty()) {
                     _uiState.value = _uiState.value.copy(draft = draft)
@@ -229,9 +232,9 @@ class ThreadViewModel(
 
     fun onDraftChanged(text: String) {
         _uiState.value = _uiState.value.copy(draft = text)
-        lastContext?.let { ctx ->
+        drafts?.let { store ->
             val id = _uiState.value.threadId
-            viewModelScope.launch { runCatching { DraftStore.save(ctx, id, text) } }
+            viewModelScope.launch { store.save(id, text) }
         }
     }
 
@@ -306,8 +309,8 @@ class ThreadViewModel(
         _uiState.value = current.copy(draft = "", messages = merged())
         // The persisted draft is the text just sent; leaving it would bring the
         // sent message back as a draft the next time the thread opens.
-        lastContext?.let { ctx ->
-            viewModelScope.launch { runCatching { DraftStore.save(ctx, current.threadId, "") } }
+        drafts?.let { store ->
+            viewModelScope.launch { store.save(current.threadId, "") }
         }
         val selectedSim = current.selectedSimId
         viewModelScope.launch { deliver(address, body, selectedSim, existingId = null) }

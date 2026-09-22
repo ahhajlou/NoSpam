@@ -18,7 +18,6 @@ import com.nospam.nospam.feature.export.ExportScreen
 import com.nospam.nospam.feature.export.ExportViewModel
 import com.nospam.nospam.feature.mldebug.MlDebugScreen
 import com.nospam.nospam.feature.mldebug.MlDebugViewModel
-import com.nospam.nospam.feature.settings.SpamPreferences
 import kotlinx.serialization.Serializable
 
 @Serializable object ExportRoute
@@ -47,7 +46,7 @@ fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Con
                 container?.let {
                     ExportViewModel(
                         repository = it.exportRepository,
-                        installIdProvider = { SpamPreferences.installId(context) },
+                        installIdProvider = { it.settingsRepository.installId() },
                     )
                 } ?: ExportViewModel()
             }

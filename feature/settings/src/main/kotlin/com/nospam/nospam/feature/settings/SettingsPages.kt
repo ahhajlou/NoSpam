@@ -221,10 +221,9 @@ fun SimSettingsScreen(
 @Composable
 fun SpamSettingsScreen(
     onNavigateUp: () -> Unit = {},
+    viewModel: SpamSettingsViewModel = viewModel(),
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val spamEnabled by remember { SpamPreferences.flow(context) }.collectAsState(initial = true)
+    val state by viewModel.uiState.collectAsState()
 
     SettingsScaffold(
         title = stringResource(R.string.section_spam),
@@ -234,8 +233,8 @@ fun SpamSettingsScreen(
             SettingsSwitchItem(
                 title = stringResource(R.string.spam_title),
                 supportingText = stringResource(R.string.spam_sub),
-                checked = spamEnabled,
-                onCheckedChange = { scope.launch { SpamPreferences.setEnabled(context, it) } },
+                checked = state.spamProtection,
+                onCheckedChange = viewModel::setSpamProtection,
             )
             SettingsItem(
                 title = stringResource(R.string.blocked_senders_title),

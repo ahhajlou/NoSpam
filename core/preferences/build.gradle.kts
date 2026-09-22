@@ -4,8 +4,11 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
+// Capability tier (CLAUDE.md §2): key-value preferences on disk, DataStore behind
+// the PreferencesDataSource interface. No project dependencies; what the keys
+// mean belongs to core:data's repositories, not here.
 android {
-    namespace = "com.nospam.nospam.core.data"
+    namespace = "com.nospam.nospam.core.preferences"
     compileSdk = 37
 
     defaultConfig {
@@ -25,17 +28,8 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:model"))
-    implementation(project(":core:database"))
-    implementation(project(":core:telephony"))
-    implementation(project(":core:ml"))
-    implementation(project(":core:preferences"))
-    implementation(project(":core:common"))
-    implementation(libs.kotlinx.coroutines.core)
-    testImplementation(project(":core:testing"))
+    api(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.datastore.preferences)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.turbine)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
 }

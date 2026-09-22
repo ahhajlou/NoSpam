@@ -2,6 +2,8 @@
 
 package com.nospam.nospam.feature.settings
 
+import com.nospam.nospam.core.data.SettingsRepository
+import com.nospam.nospam.core.testing.FakePreferencesDataSource
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
@@ -74,10 +76,11 @@ class SettingsScreenRobolectricTest {
     }
 
     @Test fun `spam protection toggles off and back on`() {
-        rule.setContent { SpamSettingsScreen() }
+        val vm = SpamSettingsViewModel(SettingsRepository(FakePreferencesDataSource()))
+        rule.setContent { SpamSettingsScreen(viewModel = vm) }
         toggleables()[0].assertIsOn()
         toggleables()[0].performClick()
-        // The switch follows DataStore, which writes on its own dispatcher.
+        // The switch follows the stored value, not the click.
         rule.waitUntil(5_000) { toggleables()[0].fetchSemanticsNode().config
             .getOrNull(SemanticsProperties.ToggleableState) == ToggleableState.Off }
         toggleables()[0].performClick()

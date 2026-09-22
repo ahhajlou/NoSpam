@@ -106,6 +106,7 @@ dependencies {
     kover(project(":core:ml"))
     kover(project(":core:notifications"))
     kover(project(":core:i18n"))
+    kover(project(":core:preferences"))
     kover(project(":core:data"))
     kover(project(":core:testing"))
     kover(project(":feature:conversations"))
