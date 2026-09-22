@@ -165,15 +165,55 @@ Worth having:
   Sticky rules are keyed to the sender and survive thread deletion, so today a
   user can block a number, delete the thread, and have no way to find or undo
   that rule. There is no such screen in `SettingsScreen.kt` today.
+  **Scheduled: phase 2 step 6** (`docs/UI-POLISH-PLAN.md` §3).
 - [] **"Warn about suspicious messages from contacts"** (default OFF, and only
   if users ask for it). Contacts bypass the classifier by default, so this
   toggle turns labelling on. Safe under the rule above because it can only add
   a warning, never hide a message. Not worth building speculatively.
-- Master spam protection on/off — already exists (`SpamPreferences.isEnabled`).
+  **Decided 2026-09-22:** the disabled placeholder row phase 1 added is removed
+  in phase 2 step 3. It comes back, if ever, with the routing rework above,
+  because until contacts actually bypass the classifier it has nothing to turn on.
+- Master spam protection on/off — already exists (`SpamPreferences.isEnabled`;
+  moves to `SettingsRepository` in phase 2 step 1).
 
 Deliberately not offering: sensitivity sliders or aggressive/balanced/relaxed
 presets. Users cannot reason about a threshold they cannot see the effect of,
 and each preset needs its own correctness argument and test matrix.
+
+Also deliberately not offering (decided 2026-09-22):
+- **"Auto-delete spam after 30 days."** Phase 1 added it as a disabled row; phase 2
+  step 3 removes it. It would hide (in fact delete) more, which the rule above
+  forbids, and a 30-day auto-delete was already removed once as contradictory
+  (see "Bulk spam actions are irreversible and unconfirmed" below). Deleted SMS
+  cannot be recovered. `SpamRepository.pruneOldSpam` is unrelated: it drops old
+  automatic verdict rows and never touches messages.
+- **"Use simple characters"** (strip accents so a message fits GSM-7). The usual
+  implementation (NFD, then drop combining marks) also strips Persian harakat,
+  and Persian is sent as UCS-2 whatever we do, so for the first audience it
+  would damage text and save nothing. Revisit only with a GSM-7-aware
+  transliteration table that leaves non-Latin scripts alone.
+
+## MMS — its own project, not started (recorded 2026-09-22)
+
+MMS today is a stub: `core/telephony/.../receiver/MmsReceiver.kt` answers
+`WAP_PUSH_DELIVER` by inserting a fake SMS row from "MMS" reading "Media message
+not supported yet". There is no PDU parsing, no `downloadMultimediaMessage`, no
+MMS sending, no attachments. It was kept out of phase 2 on purpose: it needs its
+own architecture and a device on a carrier with a working MMSC to verify.
+
+Settings that depend on it stay **visible but disabled**, labelled as needing MMS
+support, until this lands: auto-download MMS, auto-download while roaming, and
+group messaging (which is sent as MMS). Scope when it starts:
+- [] Parse the WAP push notification indication, download through
+      `SmsManager.downloadMultimediaMessage` (per subscription), write to the
+      provider's `mms` tables, notify like SMS. Respect the auto-download and
+      roaming settings.
+- [] Classify MMS text parts through the same ingress and spam policy as SMS.
+- [] Render MMS in the thread (text + image parts first), and read MMS rows in
+      the inbox and the history backfill (see "Project-wide" below).
+- [] Send MMS: attachment picker in the compose bar (the dead attachment button
+      was removed in phase 1), `sendMultimediaMessage`, group conversations.
+- [] Persist the group-messaging choice per SIM (today `rememberSaveable` only).
 
 ## Found during the E2E wave (2026-09-14) — verified, not yet fixed
 

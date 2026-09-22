@@ -1,14 +1,18 @@
 # UI polish and complete UI features — working plan
 
-Branch: `ui/m3-polish` (from `main` at `c060f0c`). Started 2026-09-17.
+Phase 1 branch: `ui/m3-polish` (from `main` at `c060f0c`), started 2026-09-17,
+merged as PR #11 (`c01a7a6`).
+Phase 2 branch: `feat/phase2-backend-wiring` (from `main` at `7ed77dd`), started 2026-09-22.
 
 This file is the durable tracker for this work. If a session runs out of
-context, resume from **§6 Progress log** and the first unchecked box in **§4**.
-Update both as work lands. Delete or archive the file when the branch merges.
+context, resume from the progress log (**§6** for phase 1, **§3.6** for phase 2)
+and the first unchecked box in **§3.4**. Update both as work lands. Delete or
+archive the file when phase 2 merges.
 
 ## 0. Status
 
-**P1 complete 2026-09-20.** All twelve steps done; branch ready for review.
+**P1 complete 2026-09-20**, merged in PR #11.
+**P2 planned 2026-09-22** (§3). Next: step P2.1, the `core:preferences` foundation.
 
 ## 1. Constraints
 
@@ -45,21 +49,191 @@ Source review against the Material 3 skill. Ordered by user impact.
 | A13 | Semantics | "Suspected spam" is an `AssistChip` with a no-op click (announces as a button). Empty-archive illustration uses a Delete icon. | `ThreadScreen.kt:130`, `:463` |
 | A14 | Toolchain | Compose BOM `2024.09.00` (material3 1.3.0) predates the current search bar APIs, expressive components and `MotionScheme`. | `libs.versions.toml` |
 
-## 3. Phase 2 — backend wiring (deferred, collected as we go)
+## 3. Phase 2 — backend wiring
 
-Items the phase 1 UI will need but the backend does not provide. Add to this
-list whenever a UI element is built ahead of its backend.
+### 3.1 Scope and what changed since phase 1
 
-- [ ] Per-SIM preferences storage (delivery reports, auto-download MMS, roaming
-      MMS, simple characters) and applying them in `core:telephony` send paths.
-- [ ] User-entered phone number per SIM when `SubscriptionManager` returns none.
-- [ ] Theme preference (system / light / dark, dynamic color) persistence read by `:app`.
-- [ ] Contact display-name + photo lookup for a thread opened without a
-      `Conversation` in hand (notification / `ACTION_SENDTO` entry).
-- [ ] Bulk operations as single repository calls (today: loop of per-id calls).
-- [ ] Manage blocked and allowed senders screen data source (TODO.md "Settings").
-- [ ] Message sounds, swipe-action configuration, and any other settings the
-      Settings redesign surfaces without storage.
+Phase 1 collected here the backend its UI was built ahead of: per-SIM
+preferences, a user-entered SIM number, theme persistence, contact name and
+photo for a thread opened without a `Conversation`, bulk operations as single
+calls, a manage-blocked-and-allowed-senders screen, message sounds and swipe
+configuration. Phase 2 wires them.
+
+The code moved after PR #11, and the plan is built on the current state:
+
+- **One send path** (`bd867bd`): `SmsSender.send` in `core:telephony`, used by
+  both `RealTelephonyDataSource.sendMessage` and `HeadlessSmsSendService`; rows go
+  `OUTBOX` → `SENT`/`FAILED` through `SmsSentReceiver`. Its `deliveryIntent` is
+  always `null`. Any per-SIM send option lands here.
+- **Reply on the thread's SIM** (`bd867bd`): done for threads with history. A new
+  conversation still starts on the first SIM, not the system default (TODO.md
+  "Project-wide").
+- **Pin-drop side effects** (`f04112a`): `archive()`, `markSenderSpam()` and
+  `BlocklistRepository.block()` unpin; Archived and Spam sort newest first. Bulk
+  calls must keep these.
+- **Threads table read, paging by date, arrival-time timestamps** (`fbdac17`,
+  `730e3ac`, `bd867bd`).
+- **SPDX headers** (`09a5457`): every new file needs one; `REUSE.toml` for assets.
+
+Found while planning, in scope because they are how a thread gets opened
+without a `Conversation`:
+
+- Tapping a message notification does not open its thread: the content intent
+  carries a `thread_id` extra that nothing in `:app` reads.
+- `ACTION_SENDTO` is advertised but `MainActivity.handleSendToIntent` only logs.
+- `SettingsViewModel.simById()` reads `_uiState.value` once, before the SIMs
+  have loaded, so a SIM page can open with no SIM.
+
+### 3.2 Decisions (2026-09-22)
+
+User decisions:
+
+- **Auto-delete spam** row: removed. It would hide more (TODO.md "Settings"), and a
+  30-day auto-delete was removed once already.
+- **MMS**: out of scope, its own project in TODO.md. The MMS rows (auto-download,
+  roaming, group messaging) stay visible but disabled.
+- **Warn about suspicious messages from contacts**: removed. The spam-routing
+  rework it depends on stays a separate project.
+- **Message sounds** and **configurable swipe actions**: built.
+- **Tests** follow the `blackbox-unit-tests` skill. The test-writing agent runs on
+  Sonnet by default and on Opus for P2.5, P2.6 and P2.8, where the contract has
+  the most edge cases. Spec packets and failure triage stay with the main session.
+
+Design decisions:
+
+- **D1 — preferences get a capability module, `core:preferences`.** It depends on
+  `core:model` only and exposes `PreferencesDataSource` (DataStore behind it),
+  with a fake in `core:testing`. `core:data` adds `SettingsRepository` and
+  `DraftRepository`; features and `:app` use only those. Existing file names and
+  keys are kept (`settings`: `spam_protection_enabled`, `history_backfill_pending`,
+  `install_id`; `drafts`: `draft_<id>`) so installed apps keep their values, and
+  the old `preferencesDataStore` delegates are deleted in the same commit — two
+  delegates on one file crash at runtime. New files: `ui_settings`, and
+  `sim_settings` keyed `sim_<subId>_*`. `ThemeSetting` lives in `core:model`;
+  `:app` maps it to the designsystem's `ThemeMode`.
+- **D2 — send options reach `core:telephony` without it reading preferences.**
+  `SendOptions(deliveryReport)` is a parameter of `TelephonyDataSource.sendMessage`,
+  passed on to `SmsSender.send`. `HeadlessSmsSendService` cannot take a parameter,
+  so `core:telephony` defines `fun interface SendOptionsProvider` and a
+  `SendOptionsRegistry` that `NoSpamApplication.onCreate` fills from
+  `SettingsRepository` (`Application.onCreate` always runs before a service
+  starts). Telephony keeps its own manifest and never depends on another
+  capability module.
+- **D3 — "simple characters" dropped**, reasoning in TODO.md "Settings".
+- **D4 — the drawer opens from the menu button only** on list screens
+  (`gesturesEnabled = drawerState.isOpen`; dragging and the scrim still close it).
+  Frees both swipe directions on rows, fixes the conflict that already exists
+  with the Archived and Spam row swipes, and keeps clear of the system back
+  gesture. Not a preference.
+- **D5 — `allowBackup="false"`.** The database, drafts and the new SIM settings
+  hold phone numbers and message text, subscription ids do not carry to a new
+  device, and a restored `install_id` breaks its reset-on-uninstall promise.
+  Closes ARCHITECTURE-REVIEW P-1 and REVIEW L-13. Selective backup of
+  `ui_settings` can be added later if wanted.
+
+### 3.3 Rules for every step
+
+- One commit per step on `feat/phase2-backend-wiring`; each builds and passes on
+  its own. Push and PR only when asked; split into several PRs at step
+  boundaries if the branch grows too large to review.
+- Unit tests through `blackbox-unit-tests`: spec packet from the step's spec
+  bullets → isolated test writer that never reads the implementation → every
+  failure triaged as bug, spec gap or wrong assumption.
+- `./gradlew build` and `./gradlew :koverXmlReport :koverVerify` green; the
+  step's device check; `tools/run-e2e.sh` stays 8/8 plus any new flows.
+- SPDX header on new files, strings in en and fa, CLAUDE.md rules (one
+  `XxxUiState`, start/end padding, fakes in `core:testing`, no mutable
+  `PendingIntent` without an explicit component).
+
+### 3.4 Work breakdown
+
+- [x] P2.0 This plan, and TODO.md: MMS project, removed settings, decisions.
+- [ ] P2.1 **`core:preferences` foundation, backup off.** No visible change.
+      New module (capability tier), `SettingsRepository`, `DraftRepository`,
+      `FakePreferencesDataSource`. Callers migrated: `AppContainer`,
+      `NoSpamApplication`, `NoSpamNavHost`, `DebugTools`, `SettingsPages`,
+      `ThreadViewModel`. Deleted: `SpamPreferences.kt`, `DraftStore.kt`, the
+      template backup XMLs.
+      Spec: spam protection defaults on and backfill off; `installId` is stable,
+      including under concurrent first calls; saving a blank draft removes it;
+      `observeAll` follows saves and removals; a read failure returns the default.
+      Device: install the previous APK, turn spam protection off and leave a
+      draft, upgrade, both survive.
+- [ ] P2.2 **Notification tap and `ACTION_SENDTO` open the thread.** A pure
+      `parseLaunchIntent(action, data, extras): LaunchTarget?` (`Thread(id)` or
+      `Compose(address, body?)`); `MainActivity` exposes it as a `StateFlow`,
+      including from `onNewIntent`; the NavHost consumes it once, after the
+      onboarding gate. The extra's key becomes a constant shared with
+      `NotificationHelper`.
+      Spec: `sms:`/`smsto:`/`mms:` URIs with an optional `sms_body`; `thread_id > 0`;
+      garbage gives null; `smsto:a,b` takes the first recipient; navigates once and
+      not again after rotation.
+      Device: `adb shell am start -a android.intent.action.SENDTO -d smsto:+15551234 --es sms_body hi`,
+      notification tap from cold and warm start; new flow `sendto_intent.yaml`.
+- [ ] P2.3 **Settings cleanup and theme.** Remove the auto-delete and
+      warn-contacts rows; MMS rows disabled with "Needs MMS support"; `simById`
+      becomes a flow; theme and dynamic color persist and apply (dynamic hidden
+      below Android 12); `MainActivity` re-applies `enableEdgeToEdge` with the
+      matching `SystemBarStyle` when the theme changes.
+      Device: forced Dark on a light system, relaunch, status bar legible; Persian.
+- [ ] P2.4 **Contact name and photo** in the thread title and inbox rows.
+      `TelephonyDataSource.loadContactPhoto(uri, sizePx)`, `Avatar(image: ImageBitmap?)`,
+      `ThreadUiState.contact: Participant?`, a small LRU.
+      Spec: a thread opened with only an address shows name and photo; no contact
+      shows the number and the initial; a failed photo load falls back to the initial.
+- [ ] P2.5 **Bulk operations as single transactional calls.** Test writer: Opus.
+      `NoSpamDatabase.transaction {}`, `*All(ids)` DAO methods, repository
+      `archive/unarchive/setRead/setStarred/setPinned/setMuted/delete(ids)`,
+      `blockAll`, `markSendersNotSpam`; telephony `deleteConversations` and
+      `setRead` as one `thread_id IN (…)` call per 500 ids. Loops removed from
+      `ConversationsViewModel` and the NavHost callbacks.
+      Spec: archive and block unpin; delete keeps `sender_state`; an empty
+      collection does nothing; a failure part-way leaves no partial flags;
+      Archived and Spam ordering unchanged.
+- [ ] P2.6 **Manage blocked and allowed senders.** Test writer: Opus.
+      `SenderStateDao.observeUserOverrides()`; `SpamRepository.removeAllow` clears
+      the override and re-derives the state through `ThreadSpamPolicy`, keeping the
+      counts; `TelephonyDataSource.getSystemBlockedNumbers()`; screen, ViewModel
+      and route in `feature:settings`.
+      Spec: the list is app blocks plus system blocks, deduplicated by normalised
+      address; unblock removes from both; rules survive thread deletion; removing
+      a rule never deletes a thread. New flow `manage_senders.yaml`.
+- [ ] P2.7 **Per-SIM: the user's own number, and the default SIM.**
+      `SettingsRepository.simPreferences(subId)`, `setSimNumber`,
+      `TelephonyDataSource.getDefaultSmsSubscriptionId()`. A new conversation
+      starts on the system default SMS SIM (closes that half of TODO.md's SIM item).
+      Spec: an entered number overrides the carrier's; clearing it falls back;
+      values are per SIM.
+- [ ] P2.8 **Delivery reports.** Test writer: Opus. `deliveryIntent` to a new
+      explicit, immutable, non-exported `SmsDeliveredReceiver`; `STATUS` pending on
+      insert; `Message.deliveryStatus`; "Delivered" under the newest delivered
+      outgoing message; the headless path through D2.
+      Spec: status mapping (0–31 complete, 32–63 pending, 64+ failed); a failed
+      part stays failed across a multipart message; the receiver ignores foreign
+      URIs and ids ≤ 0; reports off sends no delivery intent.
+      Device: send to the emulator's own number; then a real SIM.
+- [ ] P2.9 **Swipe actions, and the drawer gesture (D4).**
+      `SwipeAction {NONE, ARCHIVE, DELETE, TOGGLE_READ}` per direction, default
+      ARCHIVE both ways as in Google Messages; DELETE confirms; ARCHIVE offers undo;
+      directions follow the layout (RTL). Archived and Spam keep their fixed actions.
+- [ ] P2.10 **Message sounds.** `MessageSoundPlayer` (SoundPool) in
+      `core:notifications`, silent when the ringer is silent or on vibrate; bundled
+      sounds with licences in `REUSE.toml`; foreground only (`ProcessLifecycleOwner`),
+      background stays with the notification channel; the sent sound plays when a
+      send is queued.
+- [ ] P2.11 **Close-out.** Raise the coverage ratchet to the measured value, run
+      the full E2E suite, update CLAUDE.md (§2 module count and tier table, §4
+      preferences, bulk and delivery, §6 `ACTION_SENDTO` implemented) and TODO.md.
+
+### 3.5 Open questions
+
+None at the moment. Record new ones here with the answer when given.
+
+### 3.6 Phase 2 progress log
+
+- 2026-09-22 — Research: docs, `git log c01a7a6..HEAD`, settings/theme/send paths,
+  blocklist/bulk/contacts/tests. Four scope questions answered (§3.2). Branch
+  created. Plan written; TODO.md updated. Next: P2.1.
 
 ## 4. Phase 1 work breakdown
 
