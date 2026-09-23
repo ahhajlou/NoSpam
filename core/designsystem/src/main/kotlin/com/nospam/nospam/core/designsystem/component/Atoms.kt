@@ -3,6 +3,7 @@
 package com.nospam.nospam.core.designsystem.component
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -19,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -26,8 +29,10 @@ import androidx.compose.ui.unit.dp
 /**
  * Circular sender avatar.
  *
- * Shows the first letter of [name] when it has one, and a person icon
- * otherwise — so a bare number renders an icon, not "+". The color is derived
+ * Shows the contact's photo when [photoUri] is set and loads (through
+ * [LocalContactPhotoLoader]); otherwise, and while it loads, the first letter
+ * of [name] when it has one, and a person icon otherwise — so a bare number
+ * renders an icon, not "+". The color is derived
  * from [colorKey] (pass the normalised address), so one sender keeps one color
  * everywhere and across launches. With [selected] it flips to a check mark,
  * which is how selection mode marks a row.
@@ -42,7 +47,9 @@ fun Avatar(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
     selected: Boolean = false,
+    photoUri: String? = null,
 ) {
+    val photo = rememberContactPhoto(photoUri, with(LocalDensity.current) { size.roundToPx() })
     val palette = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) AvatarPaletteDark else AvatarPaletteLight
     val (container, content) = palette[avatarPaletteIndex(colorKey, palette.size)]
     val initial = avatarInitial(name)
@@ -64,6 +71,12 @@ fun Avatar(
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(size * 0.5f),
+                )
+                photo != null -> Image(
+                    bitmap = photo,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(size),
                 )
                 initial != null -> Text(
                     text = initial,

@@ -212,6 +212,20 @@ class FakeTelephonyDataSource(
 
     override suspend fun lookupContact(address: String): Participant? = contacts[address]
 
+    /** Photo bytes by photo URI; a URI not in the map has no photo. */
+    val contactPhotos = mutableMapOf<String, ByteArray>()
+    /** Every URI [loadContactPhoto] was asked for, in order. */
+    val loadedContactPhotos = mutableListOf<String>()
+
+    /** When set, [loadContactPhoto] throws it: a stand-in for a provider failure. */
+    var contactPhotoError: Exception? = null
+
+    override suspend fun loadContactPhoto(photoUri: String): ByteArray? {
+        loadedContactPhotos += photoUri
+        contactPhotoError?.let { throw it }
+        return contactPhotos[photoUri]
+    }
+
     override suspend fun hasOutboundMessages(threadId: ThreadId): Boolean = false
 
     override suspend fun getOutboundSenderAddresses(): Set<String> = outboundAddresses

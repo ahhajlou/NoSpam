@@ -33,6 +33,8 @@ class RealTelephonyDataSource(
 ) : TelephonyDataSource {
     companion object {
         private const val TAG = "RealTelephony"
+        /** A contact's display photo is well under this; anything larger is not one. */
+        private const val MAX_CONTACT_PHOTO_BYTES = 2 * 1024 * 1024
     }
 
     private val contactLookup by lazy { ContactLookup(context) }
@@ -485,6 +487,32 @@ class RealTelephonyDataSource(
 
     override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = withContext(Dispatchers.IO) {
         contactLookup.lookup(address)
+    }
+
+    override suspend fun loadContactPhoto(photoUri: String): ByteArray? = withContext(Dispatchers.IO) {
+        val uri = runCatching { android.net.Uri.parse(photoUri) }.getOrNull()
+        // Only the contacts provider's own photos: a URI arriving here from
+        // anywhere else is not something to open.
+        if (uri == null || uri.scheme != "content" ||
+            uri.authority != android.provider.ContactsContract.AUTHORITY
+        ) return@withContext null
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                // Bounded by hand: InputStream.readNBytes is API 33+.
+                val out = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(16 * 1024)
+                while (true) {
+                    val n = stream.read(buffer)
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                    if (out.size() > MAX_CONTACT_PHOTO_BYTES) return@use null
+                }
+                out.toByteArray().takeIf { it.isNotEmpty() }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Contact photo load failed", e)
+            null
+        }
     }
 
     override suspend fun hasOutboundMessages(threadId: ThreadId): Boolean = withContext(Dispatchers.IO) {

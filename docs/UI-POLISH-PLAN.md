@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.3 done 2026-09-23. Next: P2.4, contact name and photo.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.4 done 2026-09-23. Next: P2.5, bulk operations as single calls.
 
 ## 1. Constraints
 
@@ -181,7 +181,7 @@ Design decisions:
       below Android 12); `MainActivity` re-applies `enableEdgeToEdge` with the
       matching `SystemBarStyle` when the theme changes.
       Device: forced Dark on a light system, relaunch, status bar legible; Persian.
-- [ ] P2.4 **Contact name and photo** in the thread title and inbox rows.
+- [x] P2.4 **Contact name and photo** in the thread title and inbox rows.
       `TelephonyDataSource.loadContactPhoto(uri, sizePx)`, `Avatar(image: ImageBitmap?)`,
       `ThreadUiState.contact: Participant?`, a small LRU.
       Spec: a thread opened with only an address shows name and photo; no contact
@@ -305,6 +305,27 @@ None at the moment. Record new ones here with the answer when given.
   disabled MMS rows, isolated number). Note: `./gradlew build` ran out of daemon
   heap once after several parallel agent builds; `--max-workers=2` passes, as in
   phase 1.
+- 2026-09-23 — P2.4 done. Photo URIs already reached the models (`Participant`,
+  `Conversation`, `ContactEntry`); what was missing was loading and drawing.
+  `TelephonyDataSource.loadContactPhoto` reads the bytes, contacts-provider URIs
+  only, capped at 2 MB, bounded by hand because `readNBytes` is API 33+.
+  `core:designsystem` gets a `ContactPhotoLoader` interface and
+  `LocalContactPhotoLoader`; `Avatar(photoUri = …)` loads through it and falls
+  back to the letter while loading, with no loader, or on failure. So the inbox
+  rows, the thread header and the new-conversation contact list all show photos
+  with no per-feature wiring. `:app`'s `ContactPhotoCache` decodes at the
+  avatar's pixel size (`sampleSizeFor`) and remembers hits and misses for the
+  process. `ThreadUiState.contactPhotoUri` sits beside `contactName`. As built,
+  the plan's `ThreadUiState.contact: Participant?` became that one field.
+  Tests: 31 + 1 black-box tests (Sonnet); the fake gained `contactPhotos`,
+  `loadedContactPhotos` and `contactPhotoError`. Under this Robolectric setup
+  `ImageBitmap(w, h)` throws; tests use `Bitmap.createBitmap(...).asImageBitmap()`.
+  Device (emulator-5554): the photo shows in the inbox row and in the header of
+  a thread opened by SENDTO with only the number. To reproduce: `adb root`, then
+  in `contacts2.db` insert a `data` row (mimetype `vnd.android.cursor.item/photo`,
+  `data15` = a small PNG) for the contact's raw contact and set `contacts.photo_id`
+  to it, then kill `android.process.acore`. `content read` cannot fetch the photo
+  (the provider serves it through `openAssetFile`, not `openFile`); the app can.
 
 ## 4. Phase 1 work breakdown
 

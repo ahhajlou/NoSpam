@@ -65,17 +65,17 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=�
 | `core:database` | 31 | DAO logic against `NoSpamDatabase.inMemory()` |
 | `core:data` | 109 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune); `SettingsRepository`/`DraftRepository` defaults, stored key names and failure fallbacks |
 | `core:ml` | 10 | Preprocessing (URL/NUM tokens, Persian normalisation, ZWNJ), `char_wb` n-grams, classifier parity |
-| `core:telephony` | 24 | Address normalisation, default-SMS detection, `SmsManager` resolution |
+| `core:telephony` | 30 | Address normalisation, default-SMS detection, `SmsManager` resolution |
 | `core:preferences` | 12 | The DataStore source against real files: type round-trips, removal, serialised edits, unsupported types |
 | `core:notifications` | 3 | Channel ids and reply-extra constants **only** — see Known gaps |
 | `core:i18n` | 3 | RTL detection, date formatting |
-| `core:designsystem` | 29 | Color roles, type scale, shapes, avatar palette, top-bar action partition, bidi isolation, avatar semantics |
+| `core:designsystem` | 36 | Color roles, type scale, shapes, avatar palette, top-bar action partition, bidi isolation, avatar semantics and contact photos |
 | `feature:conversations` | 37 | `ConversationsViewModel` + the inbox/spam screens |
-| `feature:thread` | 69 | `ThreadViewModel`, SMS segment counting, emoji insertion + the thread and new-conversation screens |
+| `feature:thread` | 73 | `ThreadViewModel`, SMS segment counting, emoji insertion + the thread and new-conversation screens |
 | `feature:settings` | 30 | `SettingsViewModel`, `SpamSettingsViewModel`, `GeneralSettingsViewModel` + the settings pages and dialogs |
 | `feature:onboarding` | 12 | The permission list and the onboarding screen |
 | `feature:export`, `feature:mldebug` | 21 | Debug-only features; absent from release |
-| `:app` | 54 | `AppContainer` wiring, `AppSmsReceiver`, and launch-intent parsing (`SENDTO`, notification taps) |
+| `:app` | 69 | `AppContainer` wiring, `AppSmsReceiver`, and launch-intent parsing (`SENDTO`, notification taps) |
 
 **Compose screens are tested here, not on a device.** Suites use
 `createComposeRule` under Robolectric:

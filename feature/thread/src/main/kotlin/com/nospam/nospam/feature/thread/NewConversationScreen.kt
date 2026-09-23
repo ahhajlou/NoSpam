@@ -50,7 +50,7 @@ import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
 import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 
-internal data class Contact(val name: String, val detail: String, val phone: String)
+internal data class Contact(val name: String, val detail: String, val phone: String, val photoUri: String? = null)
 
 // Fallback seed for previews/tests when no provider is available.
 internal fun fakeContacts() = listOf(
@@ -65,7 +65,8 @@ internal fun fakeContacts() = listOf(
 private fun contactEntryToUi(e: com.nospam.nospam.core.model.ContactEntry) = Contact(
     name = e.displayName,
     detail = "${e.label ?: "Mobile"} • ${e.phone}",
-    phone = e.phone
+    phone = e.phone,
+    photoUri = e.photoUri,
 )
 
 /**
@@ -201,7 +202,7 @@ fun NewConversationScreen(
                             .widthIn(max = 88.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                            Avatar(name = contact.name, colorKey = contact.phone, size = 56.dp)
+                            Avatar(name = contact.name, colorKey = contact.phone, size = 56.dp, photoUri = contact.photoUri)
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 contact.name.substringBefore(" "),
@@ -221,7 +222,7 @@ fun NewConversationScreen(
                         ListItem(
                             headlineContent = { Text(contact.name) },
                             supportingContent = { Text(contact.detail) },
-                            leadingContent = { Avatar(name = contact.name, colorKey = contact.phone) },
+                            leadingContent = { Avatar(name = contact.name, colorKey = contact.phone, photoUri = contact.photoUri) },
                             colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                             modifier = Modifier.clickable { onAddressEntered(contact.phone) },
                         )

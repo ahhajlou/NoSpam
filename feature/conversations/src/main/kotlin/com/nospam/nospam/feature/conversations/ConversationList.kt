@@ -143,7 +143,13 @@ internal fun ConversationRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(name = participant?.displayName ?: address, colorKey = address, size = 48.dp, selected = selected)
+        Avatar(
+            name = participant?.displayName ?: address,
+            colorKey = address,
+            size = 48.dp,
+            selected = selected,
+            photoUri = participant?.photoUri ?: conv.photoUri,
+        )
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

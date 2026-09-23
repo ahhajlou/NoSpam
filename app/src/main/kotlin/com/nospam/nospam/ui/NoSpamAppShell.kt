@@ -2,6 +2,9 @@
 
 package com.nospam.nospam.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
+import com.nospam.nospam.core.designsystem.component.LocalContactPhotoLoader
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -57,6 +60,7 @@ import kotlin.reflect.KClass
 @Composable
 fun NoSpamAppShell(
     dynamicColor: Boolean = false,
+    photoLoader: ContactPhotoLoader? = null,
     launchTarget: LaunchTarget? = null,
     onLaunchTargetHandled: () -> Unit = {},
 ) {
@@ -67,55 +71,57 @@ fun NoSpamAppShell(
     val destination = backStack?.destination
 
     NoSpamTheme(dynamicColor = dynamicColor) {
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            // Only drawer destinations can open it; a thread, the recipient
-            // picker and onboarding use back navigation instead.
-            gesturesEnabled = drawerState.isOpen || destination.isDrawerDestination(),
-            drawerContent = {
-                ModalDrawerSheet {
-                    Text(
-                        stringResource(R.string.drawer_messages),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 16.dp),
-                    )
-                    fun go(route: Any) {
-                        scope.launch { drawerState.close() }
-                        navController.navigateTopLevel(route)
-                    }
-                    TopLevelItem(R.string.drawer_inbox, Icons.Filled.Inbox, Icons.Outlined.Inbox,
-                        destination.isOn(ConversationsRoute::class)) { go(ConversationsRoute) }
-                    TopLevelItem(R.string.drawer_archived, Icons.Filled.Archive, Icons.Outlined.Archive,
-                        destination.isOn(ArchivedRoute::class)) { go(ArchivedRoute) }
-                    TopLevelItem(R.string.drawer_spam_blocked, Icons.Filled.Report, Icons.Outlined.Report,
-                        destination.isOn(SpamRoute::class)) { go(SpamRoute) }
-                    // Developer tools. Empty in release: the feature modules are
-                    // debugImplementation, so nothing to show and nothing linked.
-                    if (debugTools.isNotEmpty()) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
-                    }
-                    debugTools.forEach { tool ->
-                        TopLevelItem(tool.labelRes, tool.icon, tool.icon,
-                            destination.isOnDebugTool(tool.routeTag)) {
+        CompositionLocalProvider(LocalContactPhotoLoader provides photoLoader) {
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                // Only drawer destinations can open it; a thread, the recipient
+                // picker and onboarding use back navigation instead.
+                gesturesEnabled = drawerState.isOpen || destination.isDrawerDestination(),
+                drawerContent = {
+                    ModalDrawerSheet {
+                        Text(
+                            stringResource(R.string.drawer_messages),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 16.dp),
+                        )
+                        fun go(route: Any) {
                             scope.launch { drawerState.close() }
-                            tool.navigate(navController)
+                            navController.navigateTopLevel(route)
                         }
+                        TopLevelItem(R.string.drawer_inbox, Icons.Filled.Inbox, Icons.Outlined.Inbox,
+                            destination.isOn(ConversationsRoute::class)) { go(ConversationsRoute) }
+                        TopLevelItem(R.string.drawer_archived, Icons.Filled.Archive, Icons.Outlined.Archive,
+                            destination.isOn(ArchivedRoute::class)) { go(ArchivedRoute) }
+                        TopLevelItem(R.string.drawer_spam_blocked, Icons.Filled.Report, Icons.Outlined.Report,
+                            destination.isOn(SpamRoute::class)) { go(SpamRoute) }
+                        // Developer tools. Empty in release: the feature modules are
+                        // debugImplementation, so nothing to show and nothing linked.
+                        if (debugTools.isNotEmpty()) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                        }
+                        debugTools.forEach { tool ->
+                            TopLevelItem(tool.labelRes, tool.icon, tool.icon,
+                                destination.isOnDebugTool(tool.routeTag)) {
+                                scope.launch { drawerState.close() }
+                                tool.navigate(navController)
+                            }
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                        TopLevelItem(R.string.drawer_settings, Icons.Filled.Settings, Icons.Outlined.Settings,
+                            destination.isOn(SettingsRoute::class)) { go(SettingsRoute) }
+                        Spacer(modifier = Modifier.padding(bottom = 12.dp))
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
-                    TopLevelItem(R.string.drawer_settings, Icons.Filled.Settings, Icons.Outlined.Settings,
-                        destination.isOn(SettingsRoute::class)) { go(SettingsRoute) }
-                    Spacer(modifier = Modifier.padding(bottom = 12.dp))
                 }
+            ) {
+                NoSpamNavHost(
+                    navController = navController,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    launchTarget = launchTarget,
+                    onLaunchTargetHandled = onLaunchTargetHandled,
+                )
             }
-        ) {
-            NoSpamNavHost(
-                navController = navController,
-                onOpenDrawer = { scope.launch { drawerState.open() } },
-                launchTarget = launchTarget,
-                onLaunchTargetHandled = onLaunchTargetHandled,
-            )
         }
     }
 }

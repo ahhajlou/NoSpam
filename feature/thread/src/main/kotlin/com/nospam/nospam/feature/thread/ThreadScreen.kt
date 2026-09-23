@@ -202,7 +202,14 @@ fun ThreadScreen(
                 )
             } else {
                 NoSpamTopAppBar(
-                    title = { ThreadTitle(title = title, contactKnown = uiState.contactName != null, address = uiState.address) },
+                    title = {
+                        ThreadTitle(
+                            title = title,
+                            contactKnown = uiState.contactName != null,
+                            address = uiState.address,
+                            photoUri = uiState.contactPhotoUri,
+                        )
+                    },
                     navigation = TopBarNavigation.Back(onNavigateUp),
                     // Call stays in the bar; everything else lives in the ⋮ menu,
                     // so the title keeps its room even with a long contact name.
@@ -323,9 +330,9 @@ fun ThreadScreen(
 
 /** Avatar plus name, with the number underneath when the name came from contacts. */
 @Composable
-private fun ThreadTitle(title: String, contactKnown: Boolean, address: String?) {
+private fun ThreadTitle(title: String, contactKnown: Boolean, address: String?, photoUri: String?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Avatar(name = title, colorKey = address.orEmpty(), size = 36.dp)
+        Avatar(name = title, colorKey = address.orEmpty(), size = 36.dp, photoUri = photoUri)
         Spacer(Modifier.width(12.dp))
         Column {
             Text(

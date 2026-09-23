@@ -42,6 +42,12 @@ interface TelephonyDataSource {
     suspend fun updateMessageRead(messageId: Long, read: Boolean)
     suspend fun isSystemBlocked(address: String): Boolean
     suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant?
+    /**
+     * The encoded image behind a contact's photo URI (as found in
+     * [com.nospam.nospam.core.model.Participant.photoUri]), or null when there is
+     * none, it cannot be read, or the URI is not a contacts-provider URI.
+     */
+    suspend fun loadContactPhoto(photoUri: String): ByteArray?
     suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean
     /** All sender addresses this app has sent to — batch protectFromSpam signal for history scans. */
     suspend fun getOutboundSenderAddresses(): Set<String>

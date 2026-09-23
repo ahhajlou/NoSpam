@@ -26,6 +26,8 @@ data class ThreadUiState(
     val address: String? = null,
     /** Contact name for [address], when the address is in the user's contacts. */
     val contactName: String? = null,
+    /** That contact's photo, when they have one. */
+    val contactPhotoUri: String? = null,
     val draft: String = "",
     val spamMessageIds: Set<Long> = emptySet(),
     val onMarkNotSpam: ((Long) -> Unit)? = null,
@@ -125,7 +127,7 @@ class ThreadViewModel(
         _uiState.value = _uiState.value.copy(
             threadId = id, messages = emptyList(), spamMessageIds = emptySet(),
             hasMoreOlder = false, loadingOlder = false,
-            address = pendingAddress, contactName = null,
+            address = pendingAddress, contactName = null, contactPhotoUri = null,
         )
         pendingAddress?.let(::resolveContact)
         messagesJob?.cancel()
@@ -165,15 +167,21 @@ class ThreadViewModel(
     }
 
     /**
-     * Contact name for the title. A miss (unknown number, no permission) leaves
-     * [ThreadUiState.contactName] null and the screen falls back to the address.
+     * Contact name and photo for the title. A miss (unknown number, no
+     * permission) leaves both null and the screen falls back to the address and
+     * a letter avatar.
      */
     private fun resolveContact(address: String) {
         val dataSource = this.dataSource ?: return
         contactJob?.cancel()
         contactJob = viewModelScope.launch {
-            val name = runCatching { dataSource.lookupContact(address)?.displayName }.getOrNull()
-            if (name != null) _uiState.value = _uiState.value.copy(contactName = name)
+            val contact = runCatching { dataSource.lookupContact(address) }.getOrNull()
+            if (contact?.displayName != null) {
+                _uiState.value = _uiState.value.copy(
+                    contactName = contact.displayName,
+                    contactPhotoUri = contact.photoUri,
+                )
+            }
         }
     }
 
