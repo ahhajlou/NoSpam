@@ -13,6 +13,7 @@ import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.isOutgoing
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.telephony.SendOptions
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -352,7 +353,10 @@ class ThreadViewModel(
     private suspend fun deliver(address: String, body: String, sim: Int?, existingId: Long?) {
         val dataSource = this.dataSource ?: return
         val rowId = existingId ?: dataSource.insertOutboxMessage(address, body, System.currentTimeMillis(), sim)
-        val result = dataSource.sendMessage(address, body, subscriptionId = sim, messageId = rowId)
+        val reports = sim != null && settings?.deliveryReportSims?.first()?.contains(sim) == true
+        val result = dataSource.sendMessage(
+            address, body, subscriptionId = sim, messageId = rowId, options = SendOptions(deliveryReport = reports),
+        )
         if (result.isFailure) {
             Log.w(TAG, "SmsManager send failed", result.exceptionOrNull())
             if (rowId == null) restoreUnsent(address, body)

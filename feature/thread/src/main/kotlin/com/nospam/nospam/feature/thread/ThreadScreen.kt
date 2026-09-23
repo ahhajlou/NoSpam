@@ -79,6 +79,7 @@ import com.nospam.nospam.core.designsystem.theme.MessageBubbleShapeOutgoing
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.model.DeliveryStatus
 import com.nospam.nospam.core.model.isOutgoing
 import kotlinx.coroutines.launch
 
@@ -230,6 +231,7 @@ fun ThreadScreen(
                 }
                 // Reverse the grouped map so the latest date group sits at the bottom (index 0)
                 val reversedGrouped = remember(grouped) { grouped.entries.reversed() }
+                val deliveredId = remember(uiState.messages) { newestDeliveredId(uiState.messages) }
                 LazyColumn(
                     state = lazyState,
                     modifier = Modifier.weight(1f),
@@ -245,6 +247,7 @@ fun ThreadScreen(
                                 selected = id in selection.ids,
                                 suspected = id in uiState.spamMessageIds && !msg.type.isOutgoing,
                                 showTimestamp = timestampFor == id,
+                                showDelivered = id == deliveredId,
                                 onClick = {
                                     if (selection.isActive) selection.toggle(id)
                                     else timestampFor = if (timestampFor == id) null else id
@@ -361,6 +364,7 @@ private fun MessageBubble(
     selected: Boolean,
     suspected: Boolean,
     showTimestamp: Boolean,
+    showDelivered: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onMarkNotSpam: () -> Unit,
@@ -422,7 +426,23 @@ private fun MessageBubble(
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),
             )
-            else -> Unit
+            // Sent, and a delivery report was asked for. A failure is shown on
+            // every message it happened to; "Delivered" only on the newest, as
+            // Google Messages does, since the ones before it are implied.
+            else -> when {
+                msg.deliveryStatus == DeliveryStatus.FAILED -> Text(
+                    stringResource(R.string.message_not_delivered),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.error,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                showDelivered -> Text(
+                    stringResource(R.string.message_delivered),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
         if (showTimestamp) {
             Text(
@@ -528,3 +548,13 @@ fun ThreadScreenPreview() {
         ThreadScreen(threadId = 1)
     }
 }
+
+/**
+ * The newest outgoing message the network reported as delivered, which is the
+ * one that gets the "Delivered" label; null when there is none.
+ */
+internal fun newestDeliveredId(messages: List<Message>): Long? =
+    messages
+        .filter { it.type.isOutgoing && it.deliveryStatus == DeliveryStatus.DELIVERED }
+        .maxWithOrNull(compareBy<Message>({ it.date }, { it.id.value }))
+        ?.id?.value

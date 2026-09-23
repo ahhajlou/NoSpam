@@ -313,6 +313,7 @@ class RealTelephonyDataSource(
             Telephony.Sms.TYPE,
             Telephony.Sms.READ,
             Telephony.Sms.SUBSCRIPTION_ID,
+            Telephony.Sms.STATUS,
         )
         // Backward pagination: newest [limit] rows, or rows strictly older than
         // [before] when scrolling up — never a hard thread truncation. The cursor
@@ -336,10 +337,16 @@ class RealTelephonyDataSource(
         return list.sortedWith(compareBy({ it.date }, { it.id.value }))
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?, messageId: Long?): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun sendMessage(
+        address: String,
+        body: String,
+        subscriptionId: Int?,
+        messageId: Long?,
+        options: SendOptions,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         val uri = messageId?.let(SmsSender::rowUri)
         try {
-            SmsSender.send(context, address, body, subscriptionId, uri)
+            SmsSender.send(context, address, body, subscriptionId, uri, options)
             Result.success(Unit)
         } catch (e: Exception) {
             if (uri != null) SmsSender.setType(context, uri, MessageType.FAILED)

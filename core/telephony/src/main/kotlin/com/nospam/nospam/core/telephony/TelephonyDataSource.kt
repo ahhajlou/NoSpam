@@ -24,7 +24,13 @@ interface TelephonyDataSource {
      * truncated and never loaded in one query.
      */
     suspend fun getMessages(threadId: ThreadId, limit: Int = MESSAGES_PAGE_SIZE, before: Message? = null): List<Message>
-    suspend fun sendMessage(address: String, body: String, subscriptionId: Int? = null, messageId: Long? = null): Result<Unit>
+    suspend fun sendMessage(
+        address: String,
+        body: String,
+        subscriptionId: Int? = null,
+        messageId: Long? = null,
+        options: SendOptions = SendOptions(),
+    ): Result<Unit>
     /** Writes an outgoing message as OUTBOX (sending) before it is sent. Null when this app may not write the provider. */
     suspend fun insertOutboxMessage(address: String, body: String, date: Long, subscriptionId: Int? = null): Long?
     suspend fun updateMessageType(messageId: Long, type: com.nospam.nospam.core.model.MessageType)

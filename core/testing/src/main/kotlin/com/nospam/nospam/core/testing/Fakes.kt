@@ -160,7 +160,17 @@ class FakeTelephonyDataSource(
         return older.takeLast(limit)
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?, messageId: Long?): Result<Unit> {
+    /** The [SendOptions] passed to each `sendMessage`, in order. */
+    val sentOptions = mutableListOf<com.nospam.nospam.core.telephony.SendOptions>()
+
+    override suspend fun sendMessage(
+        address: String,
+        body: String,
+        subscriptionId: Int?,
+        messageId: Long?,
+        options: com.nospam.nospam.core.telephony.SendOptions,
+    ): Result<Unit> {
+        sentOptions.add(options)
         sentMessages.add(Triple(address, body, subscriptionId))
         sentMessageIds.add(messageId)
         return sendResult

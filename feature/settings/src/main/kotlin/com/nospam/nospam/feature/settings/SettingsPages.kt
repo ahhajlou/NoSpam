@@ -223,9 +223,8 @@ fun SimSettingsScreen(
             SettingsSwitchItem(
                 title = stringResource(R.string.delivery_reports_title),
                 supportingText = stringResource(R.string.delivery_reports_sub),
-                checked = false,
-                onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
+                checked = subscriptionId in state.deliveryReportSims,
+                onCheckedChange = { viewModel.setDeliveryReports(subscriptionId, it) },
             )
         }
 

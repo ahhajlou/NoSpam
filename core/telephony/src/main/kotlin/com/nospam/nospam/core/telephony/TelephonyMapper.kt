@@ -38,6 +38,10 @@ object TelephonyMapper {
         val subscriptionId = if (subIndex >= 0 && !cursor.isNull(subIndex)) {
             cursor.getInt(subIndex).takeIf { it >= 0 }
         } else null
+        val statusIndex = cursor.getColumnIndex(Telephony.Sms.STATUS)
+        val deliveryStatus = if (statusIndex >= 0 && !cursor.isNull(statusIndex)) {
+            deliveryStatusOf(cursor.getInt(statusIndex))
+        } else com.nospam.nospam.core.model.DeliveryStatus.NONE
         return Message(
             id = MessageId(id),
             threadId = ThreadId(threadId),
@@ -47,6 +51,7 @@ object TelephonyMapper {
             type = type,
             read = read,
             subscriptionId = subscriptionId,
+            deliveryStatus = deliveryStatus,
         )
     }
 

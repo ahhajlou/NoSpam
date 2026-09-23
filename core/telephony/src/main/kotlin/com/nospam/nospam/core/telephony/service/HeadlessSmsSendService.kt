@@ -12,6 +12,7 @@ import androidx.core.app.RemoteInput
 import com.nospam.nospam.core.model.TelephonyConstants
 import com.nospam.nospam.core.telephony.TelephonyMapper
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.telephony.SendOptionsRegistry
 import com.nospam.nospam.core.telephony.SmsSender
 
 /**
@@ -49,7 +50,7 @@ class HeadlessSmsSendService : Service() {
             )
         }.getOrNull()
         try {
-            SmsSender.send(this, address, text, subscriptionId, row)
+            SmsSender.send(this, address, text, subscriptionId, row, SendOptionsRegistry.provider.forSubscription(subscriptionId))
             cancelNotificationFor(address)
         } catch (e: Exception) {
             Log.e(TAG, "Direct reply failed", e)

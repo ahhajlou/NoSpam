@@ -8,4 +8,33 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- Only the default SMS app may write the provider, and a package only
+         qualifies for the SMS role with an SMS_DELIVER receiver and a SENDTO
+         activity. :app owns the real ones, so the test APK declares inert stubs
+         (DeliveryReportDeviceTest.kt) to let a device test take the role. -->
+    <application>
+        <receiver
+            android:name="com.nospam.nospam.core.telephony.TestSmsDeliverReceiver"
+            android:permission="android.permission.BROADCAST_SMS"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_DELIVER" />
+            </intent-filter>
+        </receiver>
+        <activity
+            android:name="com.nospam.nospam.core.telephony.TestSendToActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SENDTO" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sms" />
+                <data android:scheme="smsto" />
+                <data android:scheme="mms" />
+                <data android:scheme="mmsto" />
+            </intent-filter>
+        </activity>
+    </application>
 </manifest>

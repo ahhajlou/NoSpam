@@ -126,6 +126,18 @@ paths (`RealTelephonyDataSource`, `HeadlessSmsSendService`) go through
 `SmsSender`. When this app is not the default SMS app the `OUTBOX` insert fails
 and the send proceeds without a row (the system stores that message itself).
 
+**Delivery reports** are per SIM and off by default (`SettingsRepository
+.deliveryReportSims`). When on, `SmsSender` marks the row `status = PENDING` and
+passes a `deliveryIntent` naming `SmsDeliveredReceiver` (explicit, immutable,
+not exported), which reads the report's TP-Status from its PDU and updates
+`status`. Parts of a long message report separately against one row, so a
+failure sticks and "delivered" never overwrites it (`nextDeliveryStatus`).
+`HeadlessSmsSendService` cannot take parameters, so it reads the setting from
+`SendOptionsRegistry`, which `:app` fills from memory at startup: the service
+must not block on a DataStore read. The emulator's network never sends
+status reports, so on an emulator a requested report stays PENDING; the parsing
+is covered by a device test that builds a real status-report PDU.
+
 **Multi-select actions are one call with the whole selection**, never a loop
 of single calls from the UI. Each flag table (archived, pinned, starred, muted)
 takes the selection in one transaction and publishes once, so the inbox changes
@@ -360,9 +372,9 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 18 modules | 657 tests, 63.65% line coverage (2026-09-23) |
+| Unit, including every Compose screen | `src/test` across 18 modules | 715 tests, 63.57% line coverage (2026-09-23) |
 | Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
-| Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
+| Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, real `ContentResolver`: 9 delivery-report tests (2026-09-23, they take the SMS role through two stub components in the test manifest and hand it back), plus the older 4 of which 1 always skips (see `docs/TESTING.md` §2) |
 | End-to-end | `.maestro/flows` | 17 flows; 10 run by default (debug, destructive and manual-only tags are skipped), all 10 passing on 2026-09-23 |
 
 Tests are written against behaviour, not implementation. The shared fakes in

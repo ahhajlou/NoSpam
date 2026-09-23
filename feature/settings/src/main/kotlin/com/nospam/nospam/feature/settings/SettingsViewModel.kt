@@ -16,6 +16,8 @@ data class SettingsUiState(
     val sims: List<TelephonyDataSource.SimInfo> = emptyList(),
     /** Numbers the user entered, by subscription id; they win over the carrier's. */
     val enteredNumbers: Map<Int, String> = emptyMap(),
+    /** SIMs that ask for delivery reports. */
+    val deliveryReportSims: Set<Int> = emptySet(),
 ) {
     /** The number to show for [sim]: the user's, else the carrier's, else null. */
     fun numberOf(sim: TelephonyDataSource.SimInfo): String? = enteredNumbers[sim.subscriptionId] ?: sim.number
@@ -45,6 +47,9 @@ class SettingsViewModel(
             viewModelScope.launch {
                 repo.simNumbers.collect { _uiState.value = _uiState.value.copy(enteredNumbers = it) }
             }
+            viewModelScope.launch {
+                repo.deliveryReportSims.collect { _uiState.value = _uiState.value.copy(deliveryReportSims = it) }
+            }
         }
     }
 
@@ -59,6 +64,16 @@ class SettingsViewModel(
             _uiState.value = _uiState.value.copy(enteredNumbers = numbers)
         } else {
             viewModelScope.launch { repo.setSimNumber(subscriptionId, number) }
+        }
+    }
+
+    fun setDeliveryReports(subscriptionId: Int, enabled: Boolean) {
+        val repo = settings
+        if (repo == null) {
+            val sims = _uiState.value.deliveryReportSims
+            _uiState.value = _uiState.value.copy(deliveryReportSims = if (enabled) sims + subscriptionId else sims - subscriptionId)
+        } else {
+            viewModelScope.launch { repo.setDeliveryReports(subscriptionId, enabled) }
         }
     }
 }

@@ -10,6 +10,9 @@ import androidx.appcompat.app.AppCompatDelegate
 import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.notifications.NotificationHelper
+import com.nospam.nospam.core.telephony.SendOptions
+import com.nospam.nospam.core.telephony.SendOptionsProvider
+import com.nospam.nospam.core.telephony.SendOptionsRegistry
 import com.nospam.nospam.ui.toNightMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +68,7 @@ class NoSpamApplication : Application() {
         }
         container = AppContainer(this)
         applyAppearance()
+        installSendOptions()
         NotificationHelper.createChannels(this)
         // Progress notification for the one-time history scan (silently no-ops
         // when notifications are denied on API 33+).
@@ -132,6 +136,19 @@ class NoSpamApplication : Application() {
             settings.theme.collect {
                 withContext(Dispatchers.Main) { AppCompatDelegate.setDefaultNightMode(it.toNightMode()) }
             }
+        }
+    }
+
+    /**
+     * Lets the direct-reply service, which the system starts with only an
+     * intent, send with the user's per-SIM options. It asks synchronously, so
+     * the settings are kept current in memory rather than read on demand.
+     */
+    private fun installSendOptions() {
+        val reportSims = container.settingsRepository.deliveryReportSims
+            .stateIn(appScope, SharingStarted.Eagerly, emptySet())
+        SendOptionsRegistry.provider = SendOptionsProvider { subscriptionId ->
+            SendOptions(deliveryReport = subscriptionId != null && subscriptionId in reportSims.value)
         }
     }
 

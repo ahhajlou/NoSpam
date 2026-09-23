@@ -8,6 +8,8 @@
     <string name="new_all">All contacts</string>
     <string name="message_sending">Sending…</string>
     <string name="message_failed_retry">Not sent · Tap to retry</string>
+    <string name="message_delivered">Delivered</string>
+    <string name="message_not_delivered">Not delivered</string>
     <string name="suspected_spam">Suspected spam</string>
     <string name="jump_to_latest_desc">Jump to latest</string>
     <string name="action_copy">Copy</string>

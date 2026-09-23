@@ -122,6 +122,25 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         if (trimmed.isNullOrEmpty()) it.remove(key) else it[key] = trimmed
     }
 
+    /**
+     * The SIMs sending with a delivery report requested, by subscription id.
+     * Off unless turned on, as in Google Messages: a report can cost the
+     * sender on some networks and most people never look at it.
+     */
+    val deliveryReportSims: Flow<Set<Int>> = prefs.data(PreferenceFile.SIM_SETTINGS)
+        .map { all ->
+            all.entries
+                .filter { (key, value) -> key.startsWith(SIM_PREFIX) && key.endsWith(SIM_DELIVERY_SUFFIX) && value == true }
+                .mapNotNull { (key, _) -> key.removePrefix(SIM_PREFIX).removeSuffix(SIM_DELIVERY_SUFFIX).toIntOrNull() }
+                .toSet()
+        }
+        .catch { emit(emptySet()) }
+
+    suspend fun setDeliveryReports(subscriptionId: Int, enabled: Boolean) = write(PreferenceFile.SIM_SETTINGS) {
+        val key = "$SIM_PREFIX$subscriptionId$SIM_DELIVERY_SUFFIX"
+        if (enabled) it[key] = true else it.remove(key)
+    }
+
     private suspend fun write(
         file: PreferenceFile = PreferenceFile.SETTINGS,
         transform: (MutableMap<String, Any>) -> Unit,
@@ -144,5 +163,6 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val SIM_PREFIX = "sim_"
         const val SIM_NUMBER_SUFFIX = "_number"
+        const val SIM_DELIVERY_SUFFIX = "_delivery_reports"
     }
 }

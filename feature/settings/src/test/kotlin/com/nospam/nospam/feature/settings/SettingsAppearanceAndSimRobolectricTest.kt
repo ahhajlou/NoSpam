@@ -156,22 +156,6 @@ class SettingsAppearanceAndSimRobolectricTest {
         rule.onNode(hasText("Auto-download MMS when roaming") and hasText("Needs MMS support")).assertIsNotEnabled()
     }
 
-    @Test fun `SIM page delivery reports row is shown but disabled`() {
-        val fake = FakeTelephonyDataSource().apply {
-            subscriptions = listOf(
-                TelephonyDataSource.SimInfo(subscriptionId = 3, displayName = "Work SIM", number = "+15557654321"),
-            )
-        }
-        val vm = SettingsViewModel(fake)
-        rule.setContent { SimSettingsScreen(subscriptionId = 3, viewModel = vm) }
-        rule.waitForIdle()
-
-        rule.onNodeWithText("Get SMS delivery reports").apply {
-            assertIsDisplayed()
-            assertIsNotEnabled()
-        }
-    }
-
     // --- Removed rows -----------------------------------------------------
 
     @Test fun `spam protection page has no contacts bypass warning row`() {

@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.7 done 2026-09-23. Next: P2.8, delivery reports.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.8 done 2026-09-23. Next: P2.9, swipe actions and the drawer gesture.
 
 ## 1. Constraints
 
@@ -209,7 +209,7 @@ Design decisions:
       starts on the system default SMS SIM (closes that half of TODO.md's SIM item).
       Spec: an entered number overrides the carrier's; clearing it falls back;
       values are per SIM.
-- [ ] P2.8 **Delivery reports.** Test writer: Opus. `deliveryIntent` to a new
+- [x] P2.8 **Delivery reports.** Test writer: Opus. `deliveryIntent` to a new
       explicit, immutable, non-exported `SmsDeliveredReceiver`; `STATUS` pending on
       insert; `Message.deliveryStatus`; "Delivered" under the newest delivered
       outgoing message; the headless path through D2.
@@ -394,6 +394,32 @@ None at the moment. Record new ones here with the answer when given.
   field is fine, a bare field hangs). So its behaviour is the new flow
   `sim_number.yaml` on the emulator, and the Save rule is a pure function with
   19 tests. The default-SIM rule is unit-tested only: the emulator has one SIM.
+- 2026-09-23 — P2.8 done. "Get SMS delivery reports" is live per SIM (off by
+  default, `sim_<id>_delivery_reports` in `sim_settings`). With it on, `SmsSender`
+  marks the row `status = PENDING` and passes a delivery intent to the new
+  `SmsDeliveredReceiver` (explicit, immutable, not exported), which reads the
+  report's TP-Status from its PDU and applies `nextDeliveryStatus` (a failed part
+  sticks; "delivered" never overwrites a failure). `Message.deliveryStatus` is
+  mapped from `sms.status`; the thread shows "Delivered" under the newest
+  delivered message and "Not delivered" wherever a report failed. The
+  direct-reply service reads `SendOptionsRegistry`, which `:app` keeps current
+  in memory: as built, the provider is synchronous, not the plan's `suspend`, so
+  the service never blocks on a DataStore read.
+  Device: the emulator marks a requested report pending (checked in the
+  provider), but its network never sends status reports, so the receiving half
+  is covered by a device test building real 3GPP status-report PDUs instead.
+  Tests: 67 black-box tests (Opus), all passing, 9 of them on the device. That
+  suite needs the SMS role, which a test APK can only hold if it declares the
+  role's required components: `core:telephony`'s androidTest manifest gained two
+  no-op stubs, and the test hands the role back afterwards. One old test that
+  asserted the switch was disabled was removed. First build with the local 6 GB
+  Gradle heap (`~/.gradle/gradle.properties`) and no worker cap.
+- 2026-09-23 — Found by the E2E run after P2.8, fixed on its own: Unblock on the
+  senders page sometimes left the sender listed. `unblock()` deleted this app's
+  row first, which re-emits the list and re-reads Android's block list, and only
+  then removed the number from Android's list; the re-read still found it. It
+  passed in P2.6 by timing. Android's list is now cleared first;
+  `manage_senders` passed three times in a row after.
 
 ## 4. Phase 1 work breakdown
 
