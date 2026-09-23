@@ -44,7 +44,7 @@ class RealTelephonyDataSource(
     private var cachedLatestMap: Map<Long, SmsLatest> = emptyMap()
 
     // ThreadMeta and SmsLatest are shared for cache comparison
-    private data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
+    internal data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
     private data class SmsLatest(val address: String, val body: String, val date: Long)
 
     /** One consistent read of the three cache fields, taken under the mutex. */
@@ -136,6 +136,28 @@ class RealTelephonyDataSource(
         }.sortedByDescending { it.date }
     }
 
+    /**
+     * Threads that are new since [cached] or whose date, count, read state or
+     * snippet differ. Removed threads are not in it: they have nothing to
+     * re-read, and [inboxChanged] catches them.
+     */
+    internal fun changedThreadIds(cached: List<ThreadMeta>?, current: List<ThreadMeta>): Set<Long> {
+        val cachedById = cached?.associateBy { it.id } ?: emptyMap()
+        return current.filter { meta -> cachedById[meta.id] != meta }.map { it.id }.toSet()
+    }
+
+    /**
+     * Whether the inbox built from [cached] is out of date for [current]:
+     * no cache yet, a thread added or changed, or a thread gone. Checking only
+     * the threads still present missed deletions, so a deleted conversation
+     * stayed in the inbox until the app restarted.
+     */
+    internal fun inboxChanged(cached: List<ThreadMeta>?, current: List<ThreadMeta>): Boolean {
+        if (cached == null) return true
+        if (changedThreadIds(cached, current).isNotEmpty()) return true
+        return cached.map { it.id }.toSet() != current.map { it.id }.toSet()
+    }
+
     private suspend fun tryThreadsQuery(): List<Conversation>? {
         return try {
             val proj = arrayOf(
@@ -173,22 +195,12 @@ class RealTelephonyDataSource(
             }
             val cached = snapshot.metas
 
-            // Cache check: if metas identical to cached, reuse cached conversations without Sms re-query
-            if (cached != null && cached == metas) {
+            // Nothing added, changed or removed: reuse the cached list without
+            // touching the Sms table.
+            if (!inboxChanged(cached, metas)) {
                 snapshot.conversations?.let { return it }
             }
-
-            // Determine which threadIds actually changed (DATE/count/read/snippet)
-            val cachedMap = cached?.associateBy { it.id } ?: emptyMap()
-            val changedIds = metas.filter { meta ->
-                val prev = cachedMap[meta.id]
-                prev == null || prev.date != meta.date || prev.count != meta.count || prev.read != meta.read || prev.snippet != meta.snippet
-            }.map { it.id }.toSet()
-
-            // If all metas unchanged, reuse cache
-            if (changedIds.isEmpty() && cached != null) {
-                return snapshot.conversations
-            }
+            val changedIds = changedThreadIds(cached, metas)
 
             // Batch Sms lookup only for changed (or all if no cache) to get latest address/body/date
             val idsToQuery = if (cached == null) metas.map { it.id } else changedIds.toList()

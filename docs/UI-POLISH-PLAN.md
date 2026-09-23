@@ -326,6 +326,14 @@ None at the moment. Record new ones here with the answer when given.
   `data15` = a small PNG) for the contact's raw contact and set `contacts.photo_id`
   to it, then kill `android.process.acore`. `content read` cannot fetch the photo
   (the provider serves it through `openAssetFile`, not `openFile`); the app can.
+- 2026-09-23 — Found while measuring P2.5, fixed on its own: **a deleted
+  conversation stayed in the inbox until the app restarted.** The provider does
+  notify, and the inbox does re-query, but `tryThreadsQuery` decided whether its
+  cache was stale by comparing only the threads still present, so a removal
+  never counted and the old list came back. Reproduced with an external `content
+  delete` (an external insert showed up within 3s, the delete never did); after
+  the fix the row leaves the open inbox. The decision is now two small
+  functions, `changedThreadIds` and `inboxChanged`, with 14 black-box tests.
 
 ## 4. Phase 1 work breakdown
 
