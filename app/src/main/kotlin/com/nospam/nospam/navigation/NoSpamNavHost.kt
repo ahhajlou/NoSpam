@@ -99,6 +99,8 @@ fun NoSpamNavHost(
     navController: NavHostController,
     startDestination: Any? = null,
     onOpenDrawer: () -> Unit = {},
+    launchTarget: LaunchTarget? = null,
+    onLaunchTargetHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val container = remember(context) {
@@ -144,6 +146,27 @@ fun NoSpamNavHost(
             popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
             launchSingleTop = true
         }
+    }
+
+    // A conversation an intent asked for: a notification tap, or another app's
+    // "send SMS to". It waits while onboarding is showing or still required, so
+    // the gate above always wins, then opens once on top of whatever is there;
+    // back returns to it. Handled only after navigating, because clearing it
+    // first would cancel this effect mid-lookup.
+    LaunchedEffect(launchTarget, currentEntry) {
+        val target = launchTarget ?: return@LaunchedEffect
+        val destination = currentEntry?.destination ?: return@LaunchedEffect
+        if (destination.hasRoute(OnboardingRoute::class)) return@LaunchedEffect
+        if (needsOnboarding(context)) return@LaunchedEffect
+        val route = when (target) {
+            is LaunchTarget.Thread -> ThreadRoute(target.threadId, target.address)
+            is LaunchTarget.Compose -> {
+                val threadId = container?.telephony?.getOrCreateThreadId(target.address) ?: -1L
+                ThreadRoute(threadId, target.address, forwardBody = target.body)
+            }
+        }
+        navController.navigate(route)
+        onLaunchTargetHandled()
     }
 
     val start = resolvedStart

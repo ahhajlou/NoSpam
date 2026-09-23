@@ -1,0 +1,11 @@
+appId: com.nospam.nospam
+tags:
+  - launch
+  - manual-only
+---
+# Part 2 of tools/launch_intents_check.sh: a second "send SMS to" while the app
+# is already open on the inbox arrives through onNewIntent.
+- assertVisible: ".*5557770003.*"
+- assertVisible: "Second request"
+- tapOn: "Navigate up"
+- assertVisible: "Inbox"

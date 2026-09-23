@@ -1,0 +1,20 @@
+appId: com.nospam.nospam
+tags:
+  - launch
+  - manual-only
+---
+# Part 1 of tools/launch_intents_check.sh: another app's "send SMS to" started
+# the app cold (`am start -a SENDTO -d smsto:+15557770001 --es sms_body ...`),
+# which Maestro cannot send itself. No launchApp: that would replace the intent.
+- assertVisible: ".*5557770001.*"
+- assertVisible: "Hello from another app"
+# Back lands on the inbox, which is what the conversation opened on top of.
+- tapOn: "Navigate up"
+- assertVisible: "Inbox"
+# Rotating recreates the activity with the same intent; it must not reopen
+# the conversation.
+- setOrientation: LANDSCAPE_LEFT
+- assertVisible: "Inbox"
+- assertNotVisible: "Hello from another app"
+- setOrientation: PORTRAIT
+- assertVisible: "Inbox"

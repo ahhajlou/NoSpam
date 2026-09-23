@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 done 2026-09-23. Next: P2.2, notification tap and `ACTION_SENDTO`.
+**P2 planned 2026-09-22** (§3). P2.1 and P2.2 done 2026-09-23. Next: P2.3, settings cleanup and theme.
 
 ## 1. Constraints
 
@@ -162,7 +162,7 @@ Design decisions:
       `observeAll` follows saves and removals; a read failure returns the default.
       Device: install the previous APK, turn spam protection off and leave a
       draft, upgrade, both survive.
-- [ ] P2.2 **Notification tap and `ACTION_SENDTO` open the thread.** A pure
+- [x] P2.2 **Notification tap and `ACTION_SENDTO` open the thread.** A pure
       `parseLaunchIntent(action, data, extras): LaunchTarget?` (`Thread(id)` or
       `Compose(address, body?)`); `MainActivity` exposes it as a `StateFlow`,
       including from `onNewIntent`; the NavHost consumes it once, after the
@@ -172,7 +172,9 @@ Design decisions:
       garbage gives null; `smsto:a,b` takes the first recipient; navigates once and
       not again after rotation.
       Device: `adb shell am start -a android.intent.action.SENDTO -d smsto:+15551234 --es sms_body hi`,
-      notification tap from cold and warm start; new flow `sendto_intent.yaml`.
+      notification tap from cold and warm start. *As built:* `tools/launch_intents_check.sh`
+      plus three `_launch_*` flows tagged manual-only, because Maestro can send
+      neither an intent nor an SMS.
 - [ ] P2.3 **Settings cleanup and theme.** Remove the auto-delete and
       warn-contacts rows; MMS rows disabled with "Needs MMS support"; `simById`
       becomes a flow; theme and dynamic color persist and apply (dynamic hidden
@@ -251,9 +253,31 @@ None at the moment. Record new ones here with the answer when given.
   Device (emulator-5554): installed `main`'s build, turned spam protection off and
   left a draft, upgraded in place to this build: both survived. Package flags no
   longer include `ALLOW_BACKUP`. E2E after a clean install: 7 pass, 1 fail
-  (`archived_unarchive`, which passes on rerun). Cause: the runner seeds
-  `nospam.db` before the app's first launch has created it. Pre-existing runner
-  gap exposed by the uninstall, not by this change; recorded in TODO.md.
+  (`archived_unarchive`, which passes on rerun). *Corrected in P2.2:* the cause
+  is not the database (its rows were there) but the Archived page showing
+  "Archive is empty" while it loads, on a slow first launch after install.
+  Pre-existing; recorded in TODO.md.
+- 2026-09-23 — P2.2 done. `parseLaunchIntent` (pure, `:app` navigation) turns
+  `SENDTO`/`VIEW` with `sms:`/`smsto:`/`mms:`/`mmsto:` or our notification's
+  `thread_id` into a `LaunchTarget`; `MainActivity` holds it in a `StateFlow`
+  (fresh launches and `onNewIntent` only, so rotation cannot replay it);
+  `NoSpamNavHost` opens it once, after the onboarding gate, on top of the current
+  screen. Found on the way: `MainActivity` had the default launch mode, so a
+  notification tap with the app open would have stacked a second copy of the
+  app; now `singleTop`. The notification uses the shared `EXTRA_THREAD_ID` /
+  `EXTRA_SUBSCRIPTION_ID` constants instead of string literals.
+  Tests: 42 black-box tests (Sonnet), all passing first time. Build, lint,
+  432 unit tests, coverage 60.97%.
+  Device (emulator-5554): `tools/launch_intents_check.sh` passes all four cases:
+  cold SENDTO plus rotation, warm SENDTO, notification tap with the app in the
+  background, and after the process was killed. Two script issues fixed on the
+  way: Maestro needs `LANDSCAPE_LEFT`, and the emulator console strips a sender
+  to its digits (`NSTEST_NOTIF1` arrived as `1`), so the check uses a numeric
+  sender. The same console behaviour probably undermines
+  `tools/persistence_check.sh`; recorded in TODO.md. E2E: 7 pass, and
+  `archived_unarchive` failed first again. Diagnosed this time: the Archived page
+  shows "Archive is empty" while loading, and the first load after an install
+  is slow. Pre-existing, recorded in TODO.md, not fixed here.
 
 ## 4. Phase 1 work breakdown
 

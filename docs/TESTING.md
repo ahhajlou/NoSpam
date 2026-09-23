@@ -75,7 +75,7 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: â€¦) state=â€
 | `feature:settings` | 12 | `SettingsViewModel`, `SpamSettingsViewModel` + the settings pages and dialogs |
 | `feature:onboarding` | 12 | The permission list and the onboarding screen |
 | `feature:export`, `feature:mldebug` | 21 | Debug-only features; absent from release |
-| `:app` | 9 | `AppContainer` wiring and `AppSmsReceiver` |
+| `:app` | 51 | `AppContainer` wiring, `AppSmsReceiver`, and launch-intent parsing (`SENDTO`, notification taps) |
 
 **Compose screens are tested here, not on a device.** Suites use
 `createComposeRule` under Robolectric:

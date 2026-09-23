@@ -39,6 +39,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nospam.nospam.R
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
+import com.nospam.nospam.navigation.LaunchTarget
 import com.nospam.nospam.navigation.ArchivedRoute
 import com.nospam.nospam.navigation.ConversationsRoute
 import com.nospam.nospam.navigation.NoSpamNavHost
@@ -54,7 +55,10 @@ import kotlin.reflect.KClass
  * can show its own title, a back button, an overflow menu or a selection bar.
  */
 @Composable
-fun NoSpamAppShell() {
+fun NoSpamAppShell(
+    launchTarget: LaunchTarget? = null,
+    onLaunchTargetHandled: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -108,6 +112,8 @@ fun NoSpamAppShell() {
             NoSpamNavHost(
                 navController = navController,
                 onOpenDrawer = { scope.launch { drawerState.open() } },
+                launchTarget = launchTarget,
+                onLaunchTargetHandled = onLaunchTargetHandled,
             )
         }
     }

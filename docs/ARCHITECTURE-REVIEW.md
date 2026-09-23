@@ -266,7 +266,7 @@ Neither is dead code exactly; both advertise something the app does not do.
 
 - `NoSpamAppShell`'s "Mark all as read" drawer item closes the drawer and does
   nothing else.
-- `MainActivity.handleSendToIntent()` normalizes the incoming address and then
+- **Fixed 2026-09-23 (phase 2, P2.2).** `MainActivity.handleSendToIntent()` normalized the incoming address and then
   only logs it, under a comment claiming NavHost deep-linking is wired. The
   manifest advertises `sms:`, `smsto:`, `mms:` and `mmsto:` to other apps, so
   this is a broken advertised entry point rather than an unused private helper.

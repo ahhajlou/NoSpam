@@ -166,7 +166,12 @@ self-contained:
 - `HeadlessSmsSendService` for `ACTION_RESPOND_VIA_MESSAGE`, requiring
   `SEND_RESPOND_VIA_MESSAGE`. Also the direct-reply target.
 - An activity handling `ACTION_SENDTO` for `sms:`/`smsto:`/`mms:`/`mmsto:`.
-  **Advertised but not implemented** — see `TODO.md`.
+  `parseLaunchIntent` (`:app` navigation) turns it, and a notification's
+  `VIEW` + `thread_id`, into a `LaunchTarget`; `NoSpamNavHost` opens it once,
+  after the onboarding gate. `MainActivity` is `singleTop` so a tap lands in
+  `onNewIntent` rather than a second copy of the app, and reads its start
+  intent only when `savedInstanceState` is null so rotation does not reopen it.
+  Device check: `tools/launch_intents_check.sh`.
 - Role request on API 29+ through `roleManager.createRequestRoleIntent(ROLE_SMS)`
   launched via the Activity Result API. There is no public intent action to
   build by hand. Pre-Q, fall back to `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT`
@@ -331,7 +336,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 18 modules | 390 tests, 60.89% line coverage (2026-09-23) |
+| Unit, including every Compose screen | `src/test` across 18 modules | 432 tests, 60.97% line coverage (2026-09-23) |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
 | End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |

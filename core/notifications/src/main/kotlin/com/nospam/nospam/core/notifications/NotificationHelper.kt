@@ -97,8 +97,8 @@ object NotificationHelper {
         val replyIntent = Intent(TelephonyConstants.ACTION_RESPOND_VIA_MESSAGE).apply {
             setClassName(context.packageName, "com.nospam.nospam.core.telephony.service.HeadlessSmsSendService")
             data = android.net.Uri.fromParts("sms", sender, null)
-            putExtra("thread_id", threadId)
-            if (subscriptionId != null) putExtra("subscription_id", subscriptionId)
+            putExtra(TelephonyConstants.EXTRA_THREAD_ID, threadId)
+            if (subscriptionId != null) putExtra(TelephonyConstants.EXTRA_SUBSCRIPTION_ID, subscriptionId)
         }
         val replyPending = PendingIntent.getService(
             context, REQUEST_CODE_REPLY + notificationId(threadId), replyIntent,
@@ -115,7 +115,7 @@ object NotificationHelper {
         val contentIntent = Intent(Intent.ACTION_VIEW).apply {
             setClassName(context.packageName, "com.nospam.nospam.MainActivity")
             data = android.net.Uri.fromParts("sms", sender, null)
-            putExtra("thread_id", threadId)
+            putExtra(TelephonyConstants.EXTRA_THREAD_ID, threadId)
             putExtra("android.intent.extra.TEXT", messageBody)
         }
         val contentPending = PendingIntent.getActivity(
