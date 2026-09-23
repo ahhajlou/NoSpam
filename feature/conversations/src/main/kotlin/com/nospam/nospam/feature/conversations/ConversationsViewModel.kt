@@ -134,7 +134,7 @@ class ConversationsViewModel(
     fun setStarred(threadIds: Collection<Long>, starred: Boolean) {
         val repo = repository
         if (repo != null) {
-            viewModelScope.launch { threadIds.forEach { repo.setStar(ThreadId(it), starred) } }
+            viewModelScope.launch { repo.setStar(threadIds.map(::ThreadId), starred) }
         }
         updateFake(threadIds) { it.copy(isStarred = starred) }
     }
@@ -142,7 +142,7 @@ class ConversationsViewModel(
     fun setPinned(threadIds: Collection<Long>, pinned: Boolean) {
         val repo = repository
         if (repo != null) {
-            viewModelScope.launch { threadIds.forEach { repo.setPin(ThreadId(it), pinned) } }
+            viewModelScope.launch { repo.setPin(threadIds.map(::ThreadId), pinned) }
         }
         updateFake(threadIds) { it.copy(isPinned = pinned) }
     }
@@ -150,7 +150,7 @@ class ConversationsViewModel(
     fun setMuted(threadIds: Collection<Long>, muted: Boolean) {
         val repo = repository
         if (repo != null) {
-            viewModelScope.launch { threadIds.forEach { repo.setMute(ThreadId(it), muted) } }
+            viewModelScope.launch { repo.setMute(threadIds.map(::ThreadId), muted) }
         }
         updateFake(threadIds) { it.copy(isMuted = muted) }
     }

@@ -126,6 +126,19 @@ paths (`RealTelephonyDataSource`, `HeadlessSmsSendService`) go through
 `SmsSender`. When this app is not the default SMS app the `OUTBOX` insert fails
 and the send proceeds without a row (the system stores that message itself).
 
+**Multi-select actions are one call with the whole selection**, never a loop
+of single calls from the UI. Each flag table (archived, pinned, starred, muted)
+takes the selection in one transaction and publishes once, so the inbox changes
+once per table rather than once per conversation (a loop of 50 archives was
+measured at 37 intermediate inbox states), and a failure cannot leave half a
+selection done within a table. Provider writes go as `thread_id IN (...)` in
+chunks of 500. The provider and `nospam.db` are separate databases, so an action
+spanning both is not atomic across them; the provider is written first. Deleting
+a conversation clears every thread-keyed row (verdicts and all four flags,
+because the provider recycles thread ids) and keeps `sender_state`. Block and
+unblock still go sender by sender inside the call: Android's own block list has
+no bulk form.
+
 **Address normalisation is the join key everywhere.** E.164 via
 `PhoneNumberUtils`, falling back to the trimmed upper-cased raw value for
 alphanumeric sender IDs, which are common on Iranian networks. Comparing raw
@@ -347,8 +360,8 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 18 modules | 518 tests, 63.67% line coverage (2026-09-23) |
-| Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
+| Unit, including every Compose screen | `src/test` across 18 modules | 558 tests, 63.31% line coverage (2026-09-23) |
+| Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
 | End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |
 

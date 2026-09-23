@@ -61,5 +61,22 @@ class SqlitePinnedDao(private val helper: SqliteNoSpamOpenHelper) : PinnedDao {
     }
     override suspend fun pin(threadId: Long) = withContext(Dispatchers.IO){ writeLock.withLock { val v = android.content.ContentValues().apply{ put("threadId", threadId)}; helper.writableDatabase.insertWithOnConflict("pinned_threads", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE); publish { it.withThread(threadId) } } }
     override suspend fun unpin(threadId: Long) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("pinned_threads", "threadId = ?", arrayOf(threadId.toString())); publish { it.withoutThread(threadId) } } } }
+    override suspend fun pinAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.insertThreadIds("pinned_threads", threadIds)
+            publish { current -> threadIds.fold(current) { acc, id -> acc.withThread(id) } }
+        } }
+    }
+
+    override suspend fun unpinAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.deleteThreadIds("pinned_threads", threadIds)
+            val removed = threadIds.toSet()
+            publish { current -> current.filterNot { it.threadId in removed } }
+        } }
+    }
+
     override suspend fun isPinned(threadId: Long): Boolean = withContext(Dispatchers.IO){ helper.readableDatabase.query("pinned_threads", null, "threadId = ?", arrayOf(threadId.toString()), null, null, null).use{ it.count>0 } }
 }

@@ -31,7 +31,7 @@ class SpamScreenRobolectricTest {
 
     @Test fun `not spam from the selection removes the row and reports it`() {
         val reported = mutableListOf<Pair<Long, String>>()
-        rule.setContent { SpamScreen(title = "Spam & blocked", onNotSpam = { id, addr -> reported.add(id to addr) }) }
+        rule.setContent { SpamScreen(title = "Spam & blocked", onNotSpam = { reported.addAll(it) }) }
         rule.onNodeWithText("Win A Free Cruise!").performTouchInput { longClick() }
         rule.onNodeWithContentDescription("Not spam").performClick()
         rule.waitForIdle()
@@ -41,7 +41,7 @@ class SpamScreenRobolectricTest {
 
     @Test fun `block asks for confirmation before blocking anything`() {
         val blocked = mutableListOf<String>()
-        rule.setContent { SpamScreen(title = "Spam & blocked", onBlock = { blocked.add(it) }) }
+        rule.setContent { SpamScreen(title = "Spam & blocked", onBlock = { blocked.addAll(it) }) }
         rule.onNodeWithText("Win A Free Cruise!").performTouchInput { longClick() }
         rule.onNodeWithContentDescription("Block").performClick()
         rule.waitForIdle()

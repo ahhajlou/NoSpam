@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.4 done 2026-09-23. Next: P2.5, bulk operations as single calls.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.5 done 2026-09-23. Next: P2.6, manage blocked and allowed senders.
 
 ## 1. Constraints
 
@@ -186,7 +186,7 @@ Design decisions:
       `ThreadUiState.contact: Participant?`, a small LRU.
       Spec: a thread opened with only an address shows name and photo; no contact
       shows the number and the initial; a failed photo load falls back to the initial.
-- [ ] P2.5 **Bulk operations as single transactional calls.** Test writer: Opus.
+- [x] P2.5 **Bulk operations as single transactional calls.** Test writer: Opus.
       `NoSpamDatabase.transaction {}`, `*All(ids)` DAO methods, repository
       `archive/unarchive/setRead/setStarred/setPinned/setMuted/delete(ids)`,
       `blockAll`, `markSendersNotSpam`; telephony `deleteConversations` and
@@ -334,6 +334,31 @@ None at the moment. Record new ones here with the answer when given.
   delete` (an external insert showed up within 3s, the delete never did); after
   the fix the row leaves the open inbox. The decision is now two small
   functions, `changedThreadIds` and `inboxChanged`, with 14 black-box tests.
+- 2026-09-23 — P2.5 done, measured before and after on the emulator with 50
+  conversations and temporary logging (not committed):
+
+  | 50 selected | before | after |
+  |---|---|---|
+  | Archive | 37 intermediate inbox states over 507ms | 1 state at +138ms |
+  | Delete  | 50 concurrent provider deletes + 50 notifications; 1 state at +401ms (with the stale-inbox fix) | 1 provider delete, 1 state at +340ms |
+
+  As built: the four flag DAOs gained `…All(ids)` (one transaction, one publish;
+  deletes chunked at 500). Telephony gained `setThreadsRead` and
+  `deleteConversations` (`thread_id IN (…)` per 500); the single forms delegate.
+  `ConversationsRepository`, `SpamRepository.markSendersSpam/NotSpam` (sender
+  states in one `upsertAll`) and `BlocklistRepository.block/unblock(addresses)`
+  take whole selections, and the Inbox, Archived and Spam screens hand them over
+  in one call. Deviations from the plan, deliberately: atomic per flag table,
+  not across tables (archive touches pinned then archived: two publishes, not
+  37); no `NoSpamDatabase.transaction {}`; block and unblock still go sender by
+  sender inside the call, because Android's block list has no bulk form (they
+  used to run as 50 concurrent coroutines). Found and fixed on the way: deleting
+  a conversation cleared its archive flag but not pin, star or mute, and the
+  provider recycles thread ids.
+  Tests: 32 black-box tests written by Opus (6 on the device against real
+  SQLite, 26 JVM), none failing. Its "one publish per batch" device test was
+  checked by mutation: putting the per-id loop back in `archiveAll` fails exactly
+  that test, listing the intermediate states.
 
 ## 4. Phase 1 work breakdown
 

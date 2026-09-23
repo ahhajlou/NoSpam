@@ -69,6 +69,20 @@ class BlocklistRepository(
         }.onFailure { Log.w("BlocklistRepo", "Could not drop pin for blocked sender", it) }
     }
 
+    /**
+     * [block] for a whole selection in one call, one sender after another.
+     * Each also writes Android's own block list, which has no bulk form; run in
+     * sequence rather than as one coroutine per sender, as the screens used to.
+     */
+    suspend fun block(addresses: Collection<String>) {
+        for (address in addresses.distinct()) block(address)
+    }
+
+    /** [unblock] for a whole selection in one call, one sender after another. */
+    suspend fun unblock(addresses: Collection<String>) {
+        for (address in addresses.distinct()) unblock(address)
+    }
+
     suspend fun unblock(address: String) {
         val normalized = if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim()
         db.blocklistDao.deleteByAddress(normalized)

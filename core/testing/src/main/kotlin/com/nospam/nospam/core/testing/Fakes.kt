@@ -181,8 +181,24 @@ class FakeTelephonyDataSource(
 
     override suspend fun markAsUnread(threadId: ThreadId) {}
 
+    /** One entry per `setThreadsRead` call: the thread ids and the read flag. */
+    val setThreadsReadCalls = mutableListOf<Pair<List<Long>, Boolean>>()
+
+    override suspend fun setThreadsRead(threadIds: Collection<ThreadId>, read: Boolean) {
+        setThreadsReadCalls += threadIds.map { it.value } to read
+        if (read) markedReadThreadIds.addAll(threadIds.map { it.value })
+    }
+
     override suspend fun deleteConversation(threadId: ThreadId) {
         deletedThreadIds.add(threadId.value)
+    }
+
+    /** One entry per `deleteConversations` call. */
+    val deleteConversationsCalls = mutableListOf<List<Long>>()
+
+    override suspend fun deleteConversations(threadIds: Collection<ThreadId>) {
+        deleteConversationsCalls += threadIds.map { it.value }
+        deletedThreadIds.addAll(threadIds.map { it.value })
     }
 
     override suspend fun deleteMessage(messageId: Long) {

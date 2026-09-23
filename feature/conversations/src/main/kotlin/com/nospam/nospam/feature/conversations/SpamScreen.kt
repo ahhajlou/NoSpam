@@ -42,10 +42,11 @@ fun SpamScreen(
     onOpenDrawer: () -> Unit = {},
     viewModel: SpamViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
-    onNotSpam: (Long, String) -> Unit = { _, _ -> },
-    onBlock: (String) -> Unit = {},
-    onUnblock: (String) -> Unit = {},
-    onDelete: (Long) -> Unit = {},
+    // Whole selections in one call; a swipe passes a list of one.
+    onNotSpam: (conversations: List<Pair<Long, String>>) -> Unit = {},
+    onBlock: (addresses: List<String>) -> Unit = {},
+    onUnblock: (addresses: List<String>) -> Unit = {},
+    onDelete: (threadIds: List<Long>) -> Unit = {},
 ) {
     // Live verdicts when a ViewModel is provided; a local seed for previews and tests.
     val live = viewModel?.conversations?.collectAsStateWithLifecycle()?.value
@@ -62,13 +63,13 @@ fun SpamScreen(
     fun notSpam(conversations: List<Conversation>) {
         val moved = conversations.map { it.threadId.value }.toSet()
         if (viewModel == null) fake = fake.filterNot { it.threadId.value in moved } else dismissed = dismissed + moved
-        conversations.forEach { onNotSpam(it.threadId.value, it.participants.firstOrNull()?.address.orEmpty()) }
+        onNotSpam(conversations.map { it.threadId.value to it.participants.firstOrNull()?.address.orEmpty() })
         val message = resources.getQuantityString(R.plurals.marked_not_spam_count, moved.size, moved.size)
         scope.launch { snackbar.showSnackbar(message) }
     }
-    fun delete(id: Long) {
-        if (viewModel == null) fake = fake.filterNot { it.threadId.value == id }
-        onDelete(id)
+    fun delete(threadIds: List<Long>) {
+        if (viewModel == null) fake = fake.filterNot { it.threadId.value in threadIds }
+        onDelete(threadIds)
     }
 
     val selection = rememberSelectionState()
@@ -85,7 +86,7 @@ fun SpamScreen(
         })
         if (summary.allBlocked) {
             add(TopBarAction(stringResource(R.string.menu_unblock), Icons.Outlined.Block) {
-                addressesOf(selected).forEach(onUnblock)
+                onUnblock(addressesOf(selected))
                 selection.clear()
             })
         } else {
@@ -137,7 +138,7 @@ fun SpamScreen(
         SpamConfirm.DELETE -> ConfirmDeleteDialog(
             count = selected.size,
             onConfirm = {
-                selected.forEach { delete(it.threadId.value) }
+                delete(selected.map { it.threadId.value })
                 selection.clear()
             },
             onDismiss = { confirm = null },
@@ -145,7 +146,7 @@ fun SpamScreen(
         SpamConfirm.BLOCK -> ConfirmBlockDialog(
             count = addressesOf(selected).size,
             onConfirm = {
-                addressesOf(selected).forEach(onBlock)
+                onBlock(addressesOf(selected))
                 selection.clear()
             },
             onDismiss = { confirm = null },

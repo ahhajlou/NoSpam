@@ -10,6 +10,10 @@ interface MutedDao {
     fun observeAll(): Flow<List<MutedThreadEntity>>
     suspend fun mute(threadId: Long)
     suspend fun unmute(threadId: Long)
+    /** Mutes every thread in [threadIds] in one write. */
+    suspend fun muteAll(threadIds: Collection<Long>)
+    /** Unmutes every thread in [threadIds] in one write. */
+    suspend fun unmuteAll(threadIds: Collection<Long>)
     suspend fun isMuted(threadId: Long): Boolean
 }
 
@@ -20,5 +24,7 @@ class InMemoryMutedDao : MutedDao {
     override fun observeAll(): Flow<List<MutedThreadEntity>> = flow
     override suspend fun mute(threadId: Long) { data.add(threadId); refresh() }
     override suspend fun unmute(threadId: Long) { data.remove(threadId); refresh() }
+    override suspend fun muteAll(threadIds: Collection<Long>) { data.addAll(threadIds); refresh() }
+    override suspend fun unmuteAll(threadIds: Collection<Long>) { data.removeAll(threadIds.toSet()); refresh() }
     override suspend fun isMuted(threadId: Long) = threadId in data
 }

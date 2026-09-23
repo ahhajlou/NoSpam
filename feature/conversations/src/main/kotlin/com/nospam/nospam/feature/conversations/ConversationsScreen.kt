@@ -81,12 +81,14 @@ fun ConversationsScreen(
     viewModel: ConversationsViewModel = viewModel(),
     onConversationClick: (Long) -> Unit = {},
     onNewMessage: () -> Unit = {},
-    onSetRead: (Long, Boolean) -> Unit = { _, _ -> },
-    onArchive: (Long) -> Unit = {},
-    onReportSpam: (Long, String) -> Unit = { _, _ -> },
-    onBlock: (String) -> Unit = {},
-    onUnblock: (String) -> Unit = {},
-    onDelete: (Long) -> Unit = {},
+    // Multi-select actions hand over the whole selection in one call, so the
+    // data layer can apply it as one write instead of one per conversation.
+    onSetRead: (threadIds: List<Long>, read: Boolean) -> Unit = { _, _ -> },
+    onArchive: (threadIds: List<Long>) -> Unit = {},
+    onReportSpam: (conversations: List<Pair<Long, String>>) -> Unit = {},
+    onBlock: (addresses: List<String>) -> Unit = {},
+    onUnblock: (addresses: List<String>) -> Unit = {},
+    onDelete: (threadIds: List<Long>) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isDefault by viewModel.isDefaultSmsApp.collectAsStateWithLifecycle()
@@ -113,7 +115,7 @@ fun ConversationsScreen(
             icon = if (summary.allPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
         ) { act { viewModel.setPinned(ids, !summary.allPinned) } })
         add(TopBarAction(stringResource(R.string.menu_archive), Icons.Outlined.Archive) {
-            act { ids.forEach(onArchive) }
+            act { onArchive(ids) }
         })
         add(TopBarAction(stringResource(R.string.menu_delete), Icons.Outlined.Delete) {
             confirm = InboxConfirm.DELETE
@@ -121,7 +123,7 @@ fun ConversationsScreen(
         add(TopBarAction(
             label = stringResource(if (summary.anyUnread) R.string.menu_mark_read else R.string.menu_mark_unread),
             icon = if (summary.anyUnread) Icons.Outlined.MarkChatRead else Icons.Outlined.MarkChatUnread,
-        ) { act { ids.forEach { onSetRead(it, summary.anyUnread) } } })
+        ) { act { onSetRead(ids, summary.anyUnread) } })
         add(TopBarAction(
             label = stringResource(if (summary.allStarred) R.string.action_unstar else R.string.action_star),
             icon = if (summary.allStarred) Icons.Outlined.StarOutline else Icons.Outlined.Star,
@@ -139,11 +141,11 @@ fun ConversationsScreen(
             })
         }
         add(TopBarAction(stringResource(R.string.menu_report_spam), Icons.Outlined.Report, destructive = true) {
-            act { selected.forEach { onReportSpam(it.threadId.value, it.participants.firstOrNull()?.address.orEmpty()) } }
+            act { onReportSpam(selected.map { it.threadId.value to it.participants.firstOrNull()?.address.orEmpty() }) }
         })
         if (summary.allBlocked) {
             add(TopBarAction(stringResource(R.string.menu_unblock), Icons.Outlined.Block) {
-                act { addressesOf(selected).forEach(onUnblock) }
+                act { onUnblock(addressesOf(selected)) }
             })
         } else {
             add(TopBarAction(stringResource(R.string.menu_block), Icons.Outlined.Block, destructive = true) {
@@ -248,12 +250,12 @@ fun ConversationsScreen(
     when (confirm) {
         InboxConfirm.DELETE -> ConfirmDeleteDialog(
             count = selected.size,
-            onConfirm = { act { ids.forEach(onDelete) } },
+            onConfirm = { act { onDelete(ids) } },
             onDismiss = { confirm = null },
         )
         InboxConfirm.BLOCK -> ConfirmBlockDialog(
             count = addressesOf(selected).size,
-            onConfirm = { act { addressesOf(selected).forEach(onBlock) } },
+            onConfirm = { act { onBlock(addressesOf(selected)) } },
             onDismiss = { confirm = null },
         )
         null -> Unit

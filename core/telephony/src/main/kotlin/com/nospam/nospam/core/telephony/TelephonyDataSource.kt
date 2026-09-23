@@ -30,7 +30,18 @@ interface TelephonyDataSource {
     suspend fun updateMessageType(messageId: Long, type: com.nospam.nospam.core.model.MessageType)
     suspend fun markAsRead(threadId: ThreadId)
     suspend fun markAsUnread(threadId: ThreadId)
+    /**
+     * Marks every message of every thread in [threadIds] read or unread, in one
+     * provider write per few hundred threads rather than one per thread.
+     * Best-effort, like the single-thread forms.
+     */
+    suspend fun setThreadsRead(threadIds: Collection<ThreadId>, read: Boolean)
     suspend fun deleteConversation(threadId: ThreadId)
+    /**
+     * Deletes every message of every thread in [threadIds], in one provider
+     * delete per few hundred threads rather than one per thread. Best-effort.
+     */
+    suspend fun deleteConversations(threadIds: Collection<ThreadId>)
     /** Deletes a single message row. Best-effort: a no-op if it no longer exists. */
     suspend fun deleteMessage(messageId: Long)
     /** Inserts an incoming message into the system inbox. Returns the row id, or null on failure. */

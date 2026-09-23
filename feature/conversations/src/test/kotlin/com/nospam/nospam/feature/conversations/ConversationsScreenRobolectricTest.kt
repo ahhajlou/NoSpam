@@ -57,7 +57,7 @@ class ConversationsScreenRobolectricTest {
     @Test fun `archive acts on the selection and leaves selection mode`() {
         val archived = mutableListOf<Long>()
         rule.setContent {
-            ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(), onArchive = { archived.add(it) })
+            ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(), onArchive = { archived.addAll(it) })
         }
         rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
         rule.onNodeWithContentDescription("Archive").performClick()
@@ -69,7 +69,7 @@ class ConversationsScreenRobolectricTest {
     @Test fun `delete asks for confirmation before deleting anything`() {
         val deleted = mutableListOf<Long>()
         rule.setContent {
-            ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(), onDelete = { deleted.add(it) })
+            ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(), onDelete = { deleted.addAll(it) })
         }
         rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
         rule.onNodeWithContentDescription("Delete").performClick()

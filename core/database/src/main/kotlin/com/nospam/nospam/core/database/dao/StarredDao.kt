@@ -10,6 +10,10 @@ interface StarredDao {
     fun observeAll(): Flow<List<StarredThreadEntity>>
     suspend fun star(threadId: Long)
     suspend fun unstar(threadId: Long)
+    /** Stars every thread in [threadIds] in one write. */
+    suspend fun starAll(threadIds: Collection<Long>)
+    /** Unstars every thread in [threadIds] in one write. */
+    suspend fun unstarAll(threadIds: Collection<Long>)
     suspend fun isStarred(threadId: Long): Boolean
 }
 
@@ -20,5 +24,7 @@ class InMemoryStarredDao : StarredDao {
     override fun observeAll(): Flow<List<StarredThreadEntity>> = flow
     override suspend fun star(threadId: Long) { data.add(threadId); refresh() }
     override suspend fun unstar(threadId: Long) { data.remove(threadId); refresh() }
+    override suspend fun starAll(threadIds: Collection<Long>) { data.addAll(threadIds); refresh() }
+    override suspend fun unstarAll(threadIds: Collection<Long>) { data.removeAll(threadIds.toSet()); refresh() }
     override suspend fun isStarred(threadId: Long) = threadId in data
 }

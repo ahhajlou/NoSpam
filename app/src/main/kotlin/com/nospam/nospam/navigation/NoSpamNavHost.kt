@@ -214,23 +214,25 @@ fun NoSpamNavHost(
                 viewModel = conversationsVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
                 onNewMessage = { navController.navigate(NewConversationRoute()) },
-                onSetRead = { id, read ->
-                    scope.launch { container?.conversationsRepository?.setRead(ThreadId(id), read) }
+                onSetRead = { ids, read ->
+                    scope.launch { container?.conversationsRepository?.setRead(ids.map(::ThreadId), read) }
                 },
-                onArchive = { id ->
-                    scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }
+                onArchive = { ids ->
+                    scope.launch { container?.conversationsRepository?.archive(ids.map(::ThreadId)) }
                 },
-                onReportSpam = { id, address ->
-                    scope.launch { container?.spamRepository?.markSpam(ThreadId(id), address) }
+                onReportSpam = { conversations ->
+                    scope.launch {
+                        container?.spamRepository?.markSendersSpam(conversations.map { (id, address) -> ThreadId(id) to address })
+                    }
                 },
-                onBlock = { address ->
-                    scope.launch { container?.blocklistRepository?.block(address) }
+                onBlock = { addresses ->
+                    scope.launch { container?.blocklistRepository?.block(addresses) }
                 },
-                onUnblock = { address ->
-                    scope.launch { container?.blocklistRepository?.unblock(address) }
+                onUnblock = { addresses ->
+                    scope.launch { container?.blocklistRepository?.unblock(addresses) }
                 },
-                onDelete = { id ->
-                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                onDelete = { ids ->
+                    scope.launch { container?.conversationsRepository?.deleteConversations(ids.map(::ThreadId)) }
                 },
             )
         }
@@ -241,11 +243,11 @@ fun NoSpamNavHost(
                 onOpenDrawer = onOpenDrawer,
                 viewModel = archivedVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
-                onUnarchive = { id ->
-                    scope.launch { container?.conversationsRepository?.unarchive(ThreadId(id)) }
+                onUnarchive = { ids ->
+                    scope.launch { container?.conversationsRepository?.unarchive(ids.map(::ThreadId)) }
                 },
-                onDelete = { id ->
-                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                onDelete = { ids ->
+                    scope.launch { container?.conversationsRepository?.deleteConversations(ids.map(::ThreadId)) }
                 },
             )
         }
@@ -256,19 +258,19 @@ fun NoSpamNavHost(
                 onOpenDrawer = onOpenDrawer,
                 viewModel = spamVm,
                 onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
-                onNotSpam = { id, address ->
+                onNotSpam = { conversations ->
                     scope.launch {
-                        container?.spamRepository?.markNotSpam(ThreadId(id), address)
+                        container?.spamRepository?.markSendersNotSpam(conversations.map { (id, address) -> ThreadId(id) to address })
                     }
                 },
-                onBlock = { address ->
-                    scope.launch { container?.blocklistRepository?.block(address) }
+                onBlock = { addresses ->
+                    scope.launch { container?.blocklistRepository?.block(addresses) }
                 },
-                onUnblock = { address ->
-                    scope.launch { container?.blocklistRepository?.unblock(address) }
+                onUnblock = { addresses ->
+                    scope.launch { container?.blocklistRepository?.unblock(addresses) }
                 },
-                onDelete = { id ->
-                    scope.launch { container?.conversationsRepository?.deleteConversation(ThreadId(id)) }
+                onDelete = { ids ->
+                    scope.launch { container?.conversationsRepository?.deleteConversations(ids.map(::ThreadId)) }
                 },
             )
         }

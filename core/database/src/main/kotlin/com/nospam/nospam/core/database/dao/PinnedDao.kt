@@ -10,6 +10,10 @@ interface PinnedDao {
     fun observeAll(): Flow<List<PinnedThreadEntity>>
     suspend fun pin(threadId: Long)
     suspend fun unpin(threadId: Long)
+    /** Pins every thread in [threadIds] in one write. */
+    suspend fun pinAll(threadIds: Collection<Long>)
+    /** Unpins every thread in [threadIds] in one write. */
+    suspend fun unpinAll(threadIds: Collection<Long>)
     suspend fun isPinned(threadId: Long): Boolean
 }
 
@@ -20,5 +24,7 @@ class InMemoryPinnedDao : PinnedDao {
     override fun observeAll(): Flow<List<PinnedThreadEntity>> = flow
     override suspend fun pin(threadId: Long) { data.add(threadId); refresh() }
     override suspend fun unpin(threadId: Long) { data.remove(threadId); refresh() }
+    override suspend fun pinAll(threadIds: Collection<Long>) { data.addAll(threadIds); refresh() }
+    override suspend fun unpinAll(threadIds: Collection<Long>) { data.removeAll(threadIds.toSet()); refresh() }
     override suspend fun isPinned(threadId: Long) = threadId in data
 }

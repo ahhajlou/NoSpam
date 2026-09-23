@@ -63,9 +63,9 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=�
 | `core:common` | 8 | `Result` map/fold, dispatchers, permission constants |
 | `core:testing` | 10 | The fakes themselves (classifier counts, telephony filters) |
 | `core:database` | 31 | DAO logic against `NoSpamDatabase.inMemory()` |
-| `core:data` | 109 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune); `SettingsRepository`/`DraftRepository` defaults, stored key names and failure fallbacks |
+| `core:data` | 135 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune); `SettingsRepository`/`DraftRepository` defaults, stored key names and failure fallbacks |
 | `core:ml` | 10 | Preprocessing (URL/NUM tokens, Persian normalisation, ZWNJ), `char_wb` n-grams, classifier parity |
-| `core:telephony` | 30 | Address normalisation, default-SMS detection, `SmsManager` resolution |
+| `core:telephony` | 44 | Address normalisation, default-SMS detection, `SmsManager` resolution |
 | `core:preferences` | 12 | The DataStore source against real files: type round-trips, removal, serialised edits, unsupported types |
 | `core:notifications` | 3 | Channel ids and reply-extra constants **only** — see Known gaps |
 | `core:i18n` | 3 | RTL detection, date formatting |

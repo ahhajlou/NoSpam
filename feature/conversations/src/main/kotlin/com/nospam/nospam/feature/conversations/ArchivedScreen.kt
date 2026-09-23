@@ -35,21 +35,22 @@ fun ArchivedScreen(
     onOpenDrawer: () -> Unit = {},
     viewModel: ArchivedViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
-    onUnarchive: (Long) -> Unit = {},
-    onDelete: (Long) -> Unit = {},
+    // Whole selections in one call; a swipe passes a list of one.
+    onUnarchive: (threadIds: List<Long>) -> Unit = {},
+    onDelete: (threadIds: List<Long>) -> Unit = {},
 ) {
     // Live data when a ViewModel is provided; a local seed for previews and tests.
     val live = viewModel?.conversations?.collectAsStateWithLifecycle()?.value
     var fake by remember(viewModel) { mutableStateOf(if (viewModel == null) fakeArchived() else emptyList()) }
     val loading = viewModel != null && live == null
     val archived = live ?: fake
-    fun unarchive(id: Long) {
-        if (viewModel == null) fake = fake.filterNot { it.threadId.value == id }
-        onUnarchive(id)
+    fun unarchive(threadIds: List<Long>) {
+        if (viewModel == null) fake = fake.filterNot { it.threadId.value in threadIds }
+        onUnarchive(threadIds)
     }
-    fun delete(id: Long) {
-        if (viewModel == null) fake = fake.filterNot { it.threadId.value == id }
-        onDelete(id)
+    fun delete(threadIds: List<Long>) {
+        if (viewModel == null) fake = fake.filterNot { it.threadId.value in threadIds }
+        onDelete(threadIds)
     }
 
     val selection = rememberSelectionState()
@@ -60,7 +61,7 @@ fun ArchivedScreen(
 
     val actions = listOf(
         TopBarAction(stringResource(R.string.menu_unarchive), Icons.Outlined.Unarchive) {
-            ids.forEach(::unarchive)
+            unarchive(ids)
             selection.clear()
         },
         TopBarAction(stringResource(R.string.menu_delete), Icons.Outlined.Delete) { confirmDelete = true },
@@ -94,7 +95,7 @@ fun ArchivedScreen(
                         swipeEnabled = !selection.isActive,
                         swipeLabel = stringResource(R.string.unarchive),
                         swipeIcon = Icons.Outlined.Unarchive,
-                        onSwiped = { unarchive(id) },
+                        onSwiped = { unarchive(listOf(id)) },
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),
@@ -108,7 +109,7 @@ fun ArchivedScreen(
         ConfirmDeleteDialog(
             count = ids.size,
             onConfirm = {
-                ids.forEach(::delete)
+                delete(ids)
                 selection.clear()
             },
             onDismiss = { confirmDelete = false },
