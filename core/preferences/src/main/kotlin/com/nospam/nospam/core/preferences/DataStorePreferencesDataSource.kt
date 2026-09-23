@@ -14,6 +14,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.preferencesDataStoreFile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -21,17 +22,25 @@ import kotlinx.coroutines.flow.map
 // instances ever open the same file, which is why these are the only ones.
 private val Context.settingsDataStore by preferencesDataStore(PreferenceFile.SETTINGS.fileName)
 private val Context.draftsDataStore by preferencesDataStore(PreferenceFile.DRAFTS.fileName)
+private val Context.uiSettingsDataStore by preferencesDataStore(PreferenceFile.UI_SETTINGS.fileName)
 
 private fun Context.dataStoreFor(file: PreferenceFile): DataStore<Preferences> = when (file) {
     PreferenceFile.SETTINGS -> settingsDataStore
     PreferenceFile.DRAFTS -> draftsDataStore
+    PreferenceFile.UI_SETTINGS -> uiSettingsDataStore
 }
 
 class DataStorePreferencesDataSource internal constructor(
     private val stores: (PreferenceFile) -> DataStore<Preferences>,
+    private val fileExists: (PreferenceFile) -> Boolean = { false },
 ) : PreferencesDataSource {
 
-    constructor(context: Context) : this(context.applicationContext::dataStoreFor)
+    constructor(context: Context) : this(
+        stores = context.applicationContext::dataStoreFor,
+        fileExists = { context.applicationContext.preferencesDataStoreFile(it.fileName).exists() },
+    )
+
+    override fun exists(file: PreferenceFile): Boolean = runCatching { fileExists(file) }.getOrDefault(false)
 
     override fun data(file: PreferenceFile): Flow<Map<String, Any>> =
         stores(file).data.map { it.byName() }

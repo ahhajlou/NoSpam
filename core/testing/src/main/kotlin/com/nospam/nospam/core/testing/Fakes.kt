@@ -6,6 +6,7 @@ import com.nospam.nospam.core.common.PermissionChecker
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.*
 import com.nospam.nospam.core.telephony.TelephonyDataSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -109,6 +110,12 @@ class FakeTelephonyDataSource(
     var nextThreadId: Long = 42L
     var sendResult: Result<Unit> = Result.success(Unit)
     var subscriptions: List<TelephonyDataSource.SimInfo> = emptyList()
+
+    /**
+     * When set, [getActiveSubscriptions] suspends until it completes: a seam for
+     * testing screens opened before the SIM list has loaded.
+     */
+    var subscriptionsGate: CompletableDeferred<Unit>? = null
     /** When true, `insertInboxMessage` returns null instead of an incrementing id
      *  -- simulates a failed provider write (e.g. Result.messageId == null). */
     var failInsertInbox: Boolean = false
@@ -209,7 +216,10 @@ class FakeTelephonyDataSource(
 
     override suspend fun getOutboundSenderAddresses(): Set<String> = outboundAddresses
 
-    override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> = subscriptions
+    override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> {
+        subscriptionsGate?.await()
+        return subscriptions
+    }
 
     override suspend fun searchBodyMatch(query: String): Set<Long> = emptySet()
 

@@ -15,6 +15,9 @@ enum class PreferenceFile(val fileName: String) {
 
     /** Unsent drafts, one `draft_<threadId>` key per thread. */
     DRAFTS("drafts"),
+
+    /** How the app looks: theme, dynamic color. */
+    UI_SETTINGS("ui_settings"),
 }
 
 /**
@@ -41,4 +44,11 @@ interface PreferencesDataSource {
      * @throws IllegalArgumentException if [transform] stores an unsupported type.
      */
     suspend fun edit(file: PreferenceFile, transform: (MutableMap<String, Any>) -> Unit): Map<String, Any>
+
+    /**
+     * Whether [file] has ever been written. Checks for the file on disk without
+     * reading it, so it is cheap enough to call on the main thread before
+     * deciding whether a blocking read is worth doing.
+     */
+    fun exists(file: PreferenceFile): Boolean
 }

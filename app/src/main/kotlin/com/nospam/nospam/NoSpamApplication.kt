@@ -4,21 +4,35 @@ package com.nospam.nospam
 
 import android.app.Application
 import android.os.StrictMode
+import android.os.SystemClock
 import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
 import com.nospam.nospam.core.data.BackfillStatus
+import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.notifications.NotificationHelper
+import com.nospam.nospam.ui.toNightMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class NoSpamApplication : Application() {
     lateinit var container: AppContainer
         private set
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Wallpaper colors on or off, as stored; current from before the first activity. */
+    lateinit var dynamicColor: StateFlow<Boolean>
+        private set
 
     override fun onCreate() {
         Log.i("NoSpamPerf", "app started at ${android.os.SystemClock.elapsedRealtime()}ms")
@@ -50,6 +64,7 @@ class NoSpamApplication : Application() {
             StrictMode.setThreadPolicy(oldPolicy)
         }
         container = AppContainer(this)
+        applyAppearance()
         NotificationHelper.createChannels(this)
         // Progress notification for the one-time history scan (silently no-ops
         // when notifications are denied on API 33+).
@@ -89,5 +104,38 @@ class NoSpamApplication : Application() {
                 .first { it is BackfillStatus.Done || it is BackfillStatus.Cancelled || it is BackfillStatus.Failed }
             container.settingsRepository.setBackfillPending(false)
         }
+    }
+
+    /**
+     * Puts the user's theme in place before the first activity is created.
+     * Applied any later, AppCompat recreates the activity, and someone who chose
+     * Light or Dark would see the system theme flash on every cold start. So the
+     * first value is read here, blocking: one small DataStore file, read on the
+     * IO dispatcher and capped at [APPEARANCE_READ_TIMEOUT_MS]. That read was
+     * measured at 21-38ms on a debug emulator, so it only happens when the user
+     * has changed an appearance setting; otherwise the defaults are known
+     * without reading. Changes after that apply as they are saved.
+     */
+    private fun applyAppearance() {
+        val settings = container.settingsRepository
+        val started = SystemClock.elapsedRealtime()
+        val defaults = ThemeSetting.SYSTEM to false
+        val (theme, dynamic) = if (!settings.hasAppearanceSettings()) defaults else runBlocking(Dispatchers.IO) {
+            withTimeoutOrNull(APPEARANCE_READ_TIMEOUT_MS) {
+                settings.theme.first() to settings.dynamicColor.first()
+            }
+        } ?: defaults
+        Log.i("NoSpamPerf", "appearance read in ${SystemClock.elapsedRealtime() - started}ms")
+        AppCompatDelegate.setDefaultNightMode(theme.toNightMode())
+        dynamicColor = settings.dynamicColor.stateIn(appScope, SharingStarted.Eagerly, dynamic)
+        appScope.launch {
+            settings.theme.collect {
+                withContext(Dispatchers.Main) { AppCompatDelegate.setDefaultNightMode(it.toNightMode()) }
+            }
+        }
+    }
+
+    private companion object {
+        const val APPEARANCE_READ_TIMEOUT_MS = 500L
     }
 }

@@ -56,6 +56,7 @@ import kotlin.reflect.KClass
  */
 @Composable
 fun NoSpamAppShell(
+    dynamicColor: Boolean = false,
     launchTarget: LaunchTarget? = null,
     onLaunchTargetHandled: () -> Unit = {},
 ) {
@@ -65,7 +66,7 @@ fun NoSpamAppShell(
     val backStack by navController.currentBackStackEntryAsState()
     val destination = backStack?.destination
 
-    NoSpamTheme {
+    NoSpamTheme(dynamicColor = dynamicColor) {
         ModalNavigationDrawer(
             drawerState = drawerState,
             // Only drawer destinations can open it; a thread, the recipient

@@ -33,7 +33,4 @@ class SettingsViewModel(
             }
         }
     }
-
-    fun simById(subscriptionId: Int): TelephonyDataSource.SimInfo? =
-        _uiState.value.sims.firstOrNull { it.subscriptionId == subscriptionId }
 }

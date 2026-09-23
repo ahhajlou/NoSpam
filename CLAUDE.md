@@ -308,6 +308,17 @@ val LightColors = lightColorScheme(
 )
 ```
 
+**The user's light/dark choice is applied as `AppCompatDelegate` night mode**,
+not as a flag passed to `NoSpamTheme`. Night mode also reaches what Compose does
+not draw: the window background, the system bar icons (`enableEdgeToEdge`'s auto
+style reads the configuration) and AppCompat views such as the emoji picker, and
+`NoSpamTheme`'s default `isSystemInDarkTheme()` then reflects it. It must be set
+before the first activity exists, or AppCompat recreates the activity and a
+forced theme flashes the system one: `NoSpamApplication.applyAppearance()` reads
+it there, blocking, but only when `ui_settings` exists on disk (measured 21-38ms
+for the read on a debug emulator, 1ms for the existence check). Dynamic color is
+a `StateFlow` the activity passes to `NoSpamTheme`.
+
 **Open item:** the export only defines a light scheme. Either hand-tune a dark
 scheme with the same role semantics, or generate one from the seed color
 (`dynamicColorScheme` / Material color-scheme builder) and eyeball it — don't ship
@@ -336,7 +347,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 18 modules | 432 tests, 60.97% line coverage (2026-09-23) |
+| Unit, including every Compose screen | `src/test` across 18 modules | 486 tests, 63.56% line coverage (2026-09-23) |
 | Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
 | End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |

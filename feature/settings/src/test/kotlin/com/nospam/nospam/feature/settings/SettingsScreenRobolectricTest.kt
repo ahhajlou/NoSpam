@@ -70,9 +70,9 @@ class SettingsScreenRobolectricTest {
     }
 
     @Test fun `settings without storage yet are shown disabled, not silently inert`() {
+        // Message sounds get their storage in phase 2 step P2.10.
         rule.setContent { GeneralSettingsScreen() }
-        rule.onNodeWithText("Choose theme").assertIsNotEnabled()
-        rule.onNodeWithText("Use wallpaper colors").assertIsNotEnabled()
+        rule.onNodeWithText("Hear outgoing and incoming message sounds").assertIsNotEnabled()
     }
 
     @Test fun `spam protection toggles off and back on`() {

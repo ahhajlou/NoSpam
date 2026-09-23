@@ -34,9 +34,12 @@ class MainActivity : AppCompatActivity() {
         // process restore) gets the same intent back and must not open the
         // conversation a second time.
         if (savedInstanceState == null) launchTarget.value = intent?.toLaunchTarget()
+        val app = application as NoSpamApplication
         setContent {
             val target by launchTarget.collectAsState()
+            val dynamicColor by app.dynamicColor.collectAsState()
             NoSpamAppShell(
+                dynamicColor = dynamicColor,
                 launchTarget = target,
                 onLaunchTargetHandled = { launchTarget.value = null },
             )

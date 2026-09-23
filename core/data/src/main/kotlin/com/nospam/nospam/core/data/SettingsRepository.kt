@@ -3,6 +3,7 @@
 package com.nospam.nospam.core.data
 
 import android.util.Log
+import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.preferences.PreferenceFile
 import com.nospam.nospam.core.preferences.PreferencesDataSource
 import kotlinx.coroutines.CancellationException
@@ -69,9 +70,38 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         UUID.randomUUID().toString()
     }
 
-    private suspend fun write(transform: (MutableMap<String, Any>) -> Unit) {
+    /**
+     * Whether the user has ever changed an appearance setting. Cheap enough for
+     * the main thread: it lets app startup skip reading [theme] and
+     * [dynamicColor] when both can only be their defaults.
+     */
+    fun hasAppearanceSettings(): Boolean = prefs.exists(PreferenceFile.UI_SETTINGS)
+
+    /** Light, dark or the device's choice. Defaults to [ThemeSetting.SYSTEM]. */
+    val theme: Flow<ThemeSetting> = prefs.data(PreferenceFile.UI_SETTINGS)
+        .map { stored -> ThemeSetting.entries.firstOrNull { it.name == stored[KEY_THEME] } ?: ThemeSetting.SYSTEM }
+        .catch { emit(ThemeSetting.SYSTEM) }
+
+    suspend fun setTheme(theme: ThemeSetting) = write(PreferenceFile.UI_SETTINGS) { it[KEY_THEME] = theme.name }
+
+    /**
+     * Wallpaper-based colors (Material You) instead of the brand palette.
+     * Defaults to off. Stored as chosen; whether the device supports it
+     * (Android 12+) is the caller's concern.
+     */
+    val dynamicColor: Flow<Boolean> = prefs.data(PreferenceFile.UI_SETTINGS)
+        .map { it[KEY_DYNAMIC_COLOR] as? Boolean ?: false }
+        .catch { emit(false) }
+
+    suspend fun setDynamicColor(enabled: Boolean) =
+        write(PreferenceFile.UI_SETTINGS) { it[KEY_DYNAMIC_COLOR] = enabled }
+
+    private suspend fun write(
+        file: PreferenceFile = PreferenceFile.SETTINGS,
+        transform: (MutableMap<String, Any>) -> Unit,
+    ) {
         try {
-            prefs.edit(PreferenceFile.SETTINGS, transform)
+            prefs.edit(file, transform)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -84,5 +114,7 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         const val KEY_SPAM_PROTECTION = "spam_protection_enabled"
         const val KEY_BACKFILL_PENDING = "history_backfill_pending"
         const val KEY_INSTALL_ID = "install_id"
+        const val KEY_THEME = "theme"
+        const val KEY_DYNAMIC_COLOR = "dynamic_color"
     }
 }

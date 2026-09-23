@@ -52,6 +52,7 @@ import com.nospam.nospam.feature.onboarding.hasRequiredPermissions
 import com.nospam.nospam.feature.settings.AboutSettingsScreen
 import com.nospam.nospam.feature.settings.AdvancedSettingsScreen
 import com.nospam.nospam.feature.settings.GeneralSettingsScreen
+import com.nospam.nospam.feature.settings.GeneralSettingsViewModel
 import com.nospam.nospam.feature.settings.SettingsScreen
 import com.nospam.nospam.feature.settings.SettingsViewModel
 import com.nospam.nospam.feature.settings.SimSettingsScreen
@@ -285,7 +286,10 @@ fun NoSpamNavHost(
             )
         }
         composable<SettingsGeneralRoute> {
-            GeneralSettingsScreen(onNavigateUp = { navController.navigateUp() })
+            val vm: GeneralSettingsViewModel = viewModel(
+                factory = vmFactory { GeneralSettingsViewModel(container?.settingsRepository) }
+            )
+            GeneralSettingsScreen(onNavigateUp = { navController.navigateUp() }, viewModel = vm)
         }
         composable<SettingsSimRoute> { backStackEntry ->
             SimSettingsScreen(

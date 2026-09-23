@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 and P2.2 done 2026-09-23. Next: P2.3, settings cleanup and theme.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.3 done 2026-09-23. Next: P2.4, contact name and photo.
 
 ## 1. Constraints
 
@@ -175,7 +175,7 @@ Design decisions:
       notification tap from cold and warm start. *As built:* `tools/launch_intents_check.sh`
       plus three `_launch_*` flows tagged manual-only, because Maestro can send
       neither an intent nor an SMS.
-- [ ] P2.3 **Settings cleanup and theme.** Remove the auto-delete and
+- [x] P2.3 **Settings cleanup and theme.** Remove the auto-delete and
       warn-contacts rows; MMS rows disabled with "Needs MMS support"; `simById`
       becomes a flow; theme and dynamic color persist and apply (dynamic hidden
       below Android 12); `MainActivity` re-applies `enableEdgeToEdge` with the
@@ -278,6 +278,33 @@ None at the moment. Record new ones here with the answer when given.
   `archived_unarchive` failed first again. Diagnosed this time: the Archived page
   shows "Archive is empty" while loading, and the first load after an install
   is slow. Pre-existing, recorded in TODO.md, not fixed here.
+- 2026-09-23 — Archived/Spam loading fix (own commit, at the user's request,
+  between P2.2 and P2.3). Both ViewModels start at `null` rather than an empty
+  list, and both pages show the inbox's skeleton rows until the first load, so
+  neither claims to be empty while loading. Spam had the same bug. Tests
+  rewritten from the new contract by an isolated agent (one stalled and was
+  relaunched).
+- 2026-09-23 — P2.3 done. Removed: the auto-delete spam row (it was still there,
+  as phase 1's disabled placeholder; the earlier removal was the Spam screen's
+  30-day banner) and the warn-about-contacts row, with their strings. Group
+  messaging, auto-download MMS and roaming MMS are disabled with "Needs MMS
+  support"; the group-messaging dialog, whose choice was never saved, is gone.
+  The SIM page now collects the SIM list, so one opened before it loads fills
+  in. Theme and dynamic color persist in the new `ui_settings` file and apply as
+  `AppCompatDelegate` night mode, set in `NoSpamApplication` before the first
+  activity; the designsystem's unused `ThemeMode` went, `ThemeSetting` is in
+  `core:model`. The blocking startup read measured 21-38ms on the debug
+  emulator, so it only happens when `ui_settings` exists (new
+  `PreferencesDataSource.exists`, 1ms).
+  Tests: 38 + 1 + 9 black-box tests (Sonnet). The SIM load race needed a seam,
+  so `FakeTelephonyDataSource.subscriptionsGate` was added and the test written
+  after. 486 unit tests, coverage 63.56%, ratchet 60 -> 63.
+  Device (emulator-5554): Dark on a light system and Light on a dark system both
+  apply, including status bar icons and the AppCompat emoji picker, and survive
+  a relaunch; wallpaper colors apply; the SIM page is correct in Persian (RTL,
+  disabled MMS rows, isolated number). Note: `./gradlew build` ran out of daemon
+  heap once after several parallel agent builds; `--max-workers=2` passes, as in
+  phase 1.
 
 ## 4. Phase 1 work breakdown
 

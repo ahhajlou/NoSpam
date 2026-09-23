@@ -24,6 +24,7 @@ class FakePreferencesDataSource(
         MutableStateFlow(initial[it].orEmpty())
     }
     private val mutex = Mutex()
+    private val written = mutableSetOf<PreferenceFile>()
 
     @Volatile var failReads = false
     @Volatile var failWrites = false
@@ -45,9 +46,14 @@ class FakePreferencesDataSource(
         val state = files.getValue(file)
         val next = state.value.toMutableMap().also(transform).toMap()
         state.value = next
+        written += file
         editCount++
         next
     }
+
+    /** A file exists once it has been seeded with contents or edited. */
+    override fun exists(file: PreferenceFile): Boolean =
+        file in written || files.getValue(file).value.isNotEmpty()
 
     /** Current contents of [file], for assertions. */
     fun contents(file: PreferenceFile): Map<String, Any> = files.getValue(file).value
