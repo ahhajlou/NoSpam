@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nospam.nospam.core.data.DraftRepository
+import com.nospam.nospam.core.data.SettingsRepository
 import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
@@ -17,6 +18,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class ThreadUiState(
@@ -47,18 +49,23 @@ data class ThreadUiState(
  * sent-box write with an optimistic row for instant feedback.
  * @param drafts when null (previews, tests that do not care), drafts are not
  * persisted.
+ * @param settings when null, the SIM picker shows the carrier's numbers only,
+ * not ones the user entered.
  */
 class ThreadViewModel(
     private val dataSource: TelephonyDataSource? = null,
     initialAddress: String? = null,
     private val spamRepository: SpamRepository? = null,
     private val drafts: DraftRepository? = null,
+    private val settings: SettingsRepository? = null,
 ) : ViewModel() {
     // The other party for threads reached from New Conversation, which have
     // no messages yet. Mutable because one VM instance can serve successive
     // ThreadRoutes (same navigation scope).
     private var pendingAddress: String? = initialAddress
     private var simPickedByUser = false
+    // The system's default SMS SIM, read with the SIM list.
+    private var defaultSimId: Int? = null
 
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
@@ -101,7 +108,10 @@ class ThreadViewModel(
         if (context != null) {
             // Load SIMs for dual-SIM picker
             viewModelScope.launch {
-                val sims = dataSource?.getActiveSubscriptions() ?: emptyList()
+                val carrier = dataSource?.getActiveSubscriptions() ?: emptyList()
+                val entered = settings?.simNumbers?.first().orEmpty()
+                val sims = carrier.map { sim -> entered[sim.subscriptionId]?.let { sim.copy(number = it) } ?: sim }
+                defaultSimId = runCatching { dataSource?.getDefaultSmsSubscriptionId() }.getOrNull()
                 _uiState.value = _uiState.value.copy(sims = sims)
                 syncSelectedSim()
             }
@@ -256,6 +266,13 @@ class ThreadViewModel(
      * recorded it, not always on the first SIM. Falls back to the first SIM when
      * the thread has no history on an active one. Never overrides the user's pick.
      */
+    /**
+     * Which SIM a reply goes out on, unless the user picked one: the SIM this
+     * thread last used, else the one already selected, else the system's
+     * default SMS SIM, else the first. The default matters for a conversation
+     * with no history, which used to start on the first SIM whatever the
+     * phone's setting was.
+     */
     private fun syncSelectedSim() {
         if (simPickedByUser) return
         val state = _uiState.value
@@ -264,7 +281,10 @@ class ThreadViewModel(
         val threadSim = state.messages
             .lastOrNull { it.subscriptionId != null && it.subscriptionId in active && it.id.value > 0 }
             ?.subscriptionId
-        val chosen = threadSim ?: state.selectedSimId?.takeIf { it in active } ?: state.sims.first().subscriptionId
+        val chosen = threadSim
+            ?: state.selectedSimId?.takeIf { it in active }
+            ?: defaultSimId?.takeIf { it in active }
+            ?: state.sims.first().subscriptionId
         if (chosen != state.selectedSimId) _uiState.value = state.copy(selectedSimId = chosen)
     }
 

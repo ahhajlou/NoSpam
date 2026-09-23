@@ -69,6 +69,8 @@ interface TelephonyDataSource {
     /** All sender addresses this app has sent to — batch protectFromSpam signal for history scans. */
     suspend fun getOutboundSenderAddresses(): Set<String>
     suspend fun getActiveSubscriptions(): List<SimInfo>
+    /** The SIM the system uses for SMS by default, or null when there is none (single SIM, or "ask every time"). */
+    suspend fun getDefaultSmsSubscriptionId(): Int?
     suspend fun searchBodyMatch(query: String): Set<Long>
     suspend fun getContacts(limit: Int = 50, query: String? = null): List<com.nospam.nospam.core.model.ContactEntry>
     suspend fun getAllMessages(): List<com.nospam.nospam.core.model.Message>

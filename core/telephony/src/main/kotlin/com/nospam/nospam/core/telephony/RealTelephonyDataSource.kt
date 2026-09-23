@@ -589,6 +589,12 @@ class RealTelephonyDataSource(
         }
     }
 
+    override suspend fun getDefaultSmsSubscriptionId(): Int? = withContext(Dispatchers.IO) {
+        runCatching { android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId() }
+            .getOrNull()
+            ?.takeIf { it != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID }
+    }
+
     @Suppress("DEPRECATION")
     @android.annotation.SuppressLint("MissingPermission")
     override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> = withContext(Dispatchers.IO) {

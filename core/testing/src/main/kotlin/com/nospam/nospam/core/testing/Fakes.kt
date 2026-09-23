@@ -248,6 +248,11 @@ class FakeTelephonyDataSource(
 
     override suspend fun getOutboundSenderAddresses(): Set<String> = outboundAddresses
 
+    /** What [getDefaultSmsSubscriptionId] returns. */
+    var defaultSmsSubscriptionId: Int? = null
+
+    override suspend fun getDefaultSmsSubscriptionId(): Int? = defaultSmsSubscriptionId
+
     override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> {
         subscriptionsGate?.await()
         return subscriptions

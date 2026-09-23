@@ -23,11 +23,13 @@ import kotlinx.coroutines.flow.map
 private val Context.settingsDataStore by preferencesDataStore(PreferenceFile.SETTINGS.fileName)
 private val Context.draftsDataStore by preferencesDataStore(PreferenceFile.DRAFTS.fileName)
 private val Context.uiSettingsDataStore by preferencesDataStore(PreferenceFile.UI_SETTINGS.fileName)
+private val Context.simSettingsDataStore by preferencesDataStore(PreferenceFile.SIM_SETTINGS.fileName)
 
 private fun Context.dataStoreFor(file: PreferenceFile): DataStore<Preferences> = when (file) {
     PreferenceFile.SETTINGS -> settingsDataStore
     PreferenceFile.DRAFTS -> draftsDataStore
     PreferenceFile.UI_SETTINGS -> uiSettingsDataStore
+    PreferenceFile.SIM_SETTINGS -> simSettingsDataStore
 }
 
 class DataStorePreferencesDataSource internal constructor(

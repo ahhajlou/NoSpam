@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.6 done 2026-09-23. Next: P2.7, per-SIM number and the default SIM.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.7 done 2026-09-23. Next: P2.8, delivery reports.
 
 ## 1. Constraints
 
@@ -203,7 +203,7 @@ Design decisions:
       Spec: the list is app blocks plus system blocks, deduplicated by normalised
       address; unblock removes from both; rules survive thread deletion; removing
       a rule never deletes a thread. New flow `manage_senders.yaml`.
-- [ ] P2.7 **Per-SIM: the user's own number, and the default SIM.**
+- [x] P2.7 **Per-SIM: the user's own number, and the default SIM.**
       `SettingsRepository.simPreferences(subId)`, `setSimNumber`,
       `TelephonyDataSource.getDefaultSmsSubscriptionId()`. A new conversation
       starts on the system default SMS SIM (closes that half of TODO.md's SIM item).
@@ -378,6 +378,22 @@ None at the moment. Record new ones here with the answer when given.
   in-memory blocklist DAO kept insertion order while SQLite sorts newest first,
   so the fake now sorts like SQLite. feature:settings tests gained a
   core:database test dependency.
+- 2026-09-23 — P2.7 done. The SIM page's "Phone number" row opens a dialog to
+  enter, change or clear your own number (stored per subscription id in the new
+  `sim_settings` file); an entered number wins over the carrier's on the SIM
+  page, the Settings landing page and the compose-bar SIM picker, marked
+  "(entered by you)". Save accepts digits and `+ - ( )` and spaces
+  (`isValidSimNumber`; Persian digits count as digits). A conversation with no
+  SIM history starts on the system default SMS SIM
+  (`TelephonyDataSource.getDefaultSmsSubscriptionId`) when it is active.
+  Found on the device: the prefilled field put the cursor at the start, so
+  typing landed in the middle of the carrier's number; it now starts at the end.
+  Tests: 51 black-box tests (Sonnet), then reshaped. The dialog cannot be tested
+  under Robolectric: a text field inside a dialog window never idles, or with
+  the clock paused never counts as displayed (bisected: the dialog without its
+  field is fine, a bare field hangs). So its behaviour is the new flow
+  `sim_number.yaml` on the emulator, and the Save rule is a pure function with
+  19 tests. The default-SIM rule is unit-tested only: the emulator has one SIM.
 
 ## 4. Phase 1 work breakdown
 

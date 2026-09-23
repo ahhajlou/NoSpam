@@ -53,6 +53,13 @@
     <string name="sim_section_details">SIM details</string>
     <string name="sim_number_title">Phone number</string>
     <string name="sim_number_unknown">Not provided by this SIM</string>
+    <string name="sim_number_unknown_enter">Not provided by this SIM. Tap to enter it</string>
+    <string name="sim_number_entered">%1$s (entered by you)</string>
+    <string name="sim_number_dialog_title">Your number on this SIM</string>
+    <string name="sim_number_dialog_body">Many carriers do not store your number on the SIM. Entering it here only changes what NoSpam shows; it is not sent anywhere.</string>
+    <string name="action_save">Save</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_cancel">Cancel</string>
     <string name="mms_roaming_title">Auto-download MMS when roaming</string>
     <string name="delivery_reports_title">Get SMS delivery reports</string>
     <string name="delivery_reports_sub">Find out when a message is delivered</string>

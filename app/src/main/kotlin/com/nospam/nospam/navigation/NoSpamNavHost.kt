@@ -205,7 +205,7 @@ fun NoSpamNavHost(
     }
     // Hoisted so the SIM list survives navigating into a SIM's page and back.
     val settingsVm: SettingsViewModel = viewModel(
-        factory = vmFactory { SettingsViewModel(container?.telephony) }
+        factory = vmFactory { SettingsViewModel(container?.telephony, container?.settingsRepository) }
     )
 
     NavHost(navController = navController, startDestination = start) {
@@ -363,7 +363,7 @@ fun NoSpamNavHost(
             val vm: ThreadViewModel = viewModel(
                 factory = vmFactory {
                     container?.let {
-                        ThreadViewModel(it.telephony, args.address, it.spamRepository, it.draftRepository)
+                        ThreadViewModel(it.telephony, args.address, it.spamRepository, it.draftRepository, it.settingsRepository)
                     } ?: ThreadViewModel()
                 }
             )

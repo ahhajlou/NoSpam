@@ -96,6 +96,32 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
     suspend fun setDynamicColor(enabled: Boolean) =
         write(PreferenceFile.UI_SETTINGS) { it[KEY_DYNAMIC_COLOR] = enabled }
 
+    /**
+     * Phone numbers the user entered for their SIMs, by subscription id: many
+     * carriers do not put the number on the SIM, so Android cannot report it.
+     * Empty when none were entered or the file cannot be read. Keyed by
+     * subscription id, so a new SIM card starts without one.
+     */
+    val simNumbers: Flow<Map<Int, String>> = prefs.data(PreferenceFile.SIM_SETTINGS)
+        .map { all ->
+            buildMap {
+                for ((key, value) in all) {
+                    val id = key.removePrefix(SIM_PREFIX).removeSuffix(SIM_NUMBER_SUFFIX).toIntOrNull()
+                    if (key.startsWith(SIM_PREFIX) && key.endsWith(SIM_NUMBER_SUFFIX) && id != null && value is String) {
+                        put(id, value)
+                    }
+                }
+            }
+        }
+        .catch { emit(emptyMap()) }
+
+    /** Stores [number] (trimmed) for the SIM; null or blank removes it. */
+    suspend fun setSimNumber(subscriptionId: Int, number: String?) = write(PreferenceFile.SIM_SETTINGS) {
+        val key = "$SIM_PREFIX$subscriptionId$SIM_NUMBER_SUFFIX"
+        val trimmed = number?.trim()
+        if (trimmed.isNullOrEmpty()) it.remove(key) else it[key] = trimmed
+    }
+
     private suspend fun write(
         file: PreferenceFile = PreferenceFile.SETTINGS,
         transform: (MutableMap<String, Any>) -> Unit,
@@ -116,5 +142,7 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         const val KEY_INSTALL_ID = "install_id"
         const val KEY_THEME = "theme"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
+        const val SIM_PREFIX = "sim_"
+        const val SIM_NUMBER_SUFFIX = "_number"
     }
 }

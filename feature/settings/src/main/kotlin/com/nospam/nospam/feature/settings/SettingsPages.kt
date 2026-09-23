@@ -2,6 +2,13 @@
 
 package com.nospam.nospam.feature.settings
 
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -182,6 +189,8 @@ fun SimSettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val sim = state.sims.firstOrNull { it.subscriptionId == subscriptionId }
     val needsMms = stringResource(R.string.needs_mms)
+    val entered = state.enteredNumbers[subscriptionId]
+    var editNumber by rememberSaveable { mutableStateOf(false) }
 
     SettingsScaffold(
         title = sim?.displayName ?: stringResource(R.string.sim_title),
@@ -222,13 +231,98 @@ fun SimSettingsScreen(
 
         SettingsSectionHeader(stringResource(R.string.sim_section_details))
         SettingsGroup {
+            // Many carriers leave the number off the SIM, so the user can say it.
+            val number = entered ?: sim?.number
             SettingsItem(
                 title = stringResource(R.string.sim_number_title),
-                supportingText = sim?.number?.let(::isolateIfPhoneNumber) ?: stringResource(R.string.sim_number_unknown),
-                onClick = null,
+                supportingText = when {
+                    number == null -> stringResource(R.string.sim_number_unknown_enter)
+                    entered != null -> stringResource(R.string.sim_number_entered, isolateIfPhoneNumber(number))
+                    else -> isolateIfPhoneNumber(number)
+                },
+                onClick = { editNumber = true },
             )
         }
     }
+
+    if (editNumber) {
+        SimNumberDialog(
+            initial = entered ?: sim?.number.orEmpty(),
+            canClear = entered != null,
+            onSave = {
+                viewModel.setSimNumber(subscriptionId, it)
+                editNumber = false
+            },
+            onClear = {
+                viewModel.setSimNumber(subscriptionId, null)
+                editNumber = false
+            },
+            onDismiss = { editNumber = false },
+        )
+    }
+}
+
+/**
+ * Whether [text] can be saved as a SIM's number: not blank, and only digits and
+ * the usual phone punctuation (`+ - ( )` and spaces), because it is shown as a
+ * number. Length is capped separately, by [MAX_SIM_NUMBER_LENGTH].
+ */
+internal fun isValidSimNumber(text: String): Boolean =
+    text.isNotBlank() && text.all { it.isDigit() || it in "+-() " }
+
+/** Longest number accepted; E.164 is at most 15 digits, this leaves room for formatting. */
+private const val MAX_SIM_NUMBER_LENGTH = 24
+
+@Composable
+private fun SimNumberDialog(
+    initial: String,
+    canClear: Boolean,
+    onSave: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // The cursor starts after the prefilled number, so typing continues it
+    // rather than landing in the middle of it.
+    var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initial, TextRange(initial.length)))
+    }
+    val text = field.text
+    val valid = isValidSimNumber(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sim_number_dialog_title)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.sim_number_dialog_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = field,
+                    onValueChange = { if (it.text.length <= MAX_SIM_NUMBER_LENGTH) field = it },
+                    label = { Text(stringResource(R.string.sim_number_title)) },
+                    singleLine = true,
+                    isError = text.isNotBlank() && !valid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    // A number reads left to right in every language.
+                    textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
+                    modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }, enabled = valid) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            Row {
+                if (canClear) {
+                    TextButton(onClick = onClear) { Text(stringResource(R.string.action_clear)) }
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            }
+        },
+    )
 }
 
 @Composable

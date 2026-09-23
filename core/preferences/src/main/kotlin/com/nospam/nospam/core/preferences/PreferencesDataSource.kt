@@ -18,6 +18,9 @@ enum class PreferenceFile(val fileName: String) {
 
     /** How the app looks: theme, dynamic color. */
     UI_SETTINGS("ui_settings"),
+
+    /** Per-SIM settings, keyed `sim_<subscriptionId>_…`. */
+    SIM_SETTINGS("sim_settings"),
 }
 
 /**

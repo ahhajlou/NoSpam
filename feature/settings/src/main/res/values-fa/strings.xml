@@ -53,6 +53,13 @@
     <string name="sim_section_details">مشخصات سیم‌کارت</string>
     <string name="sim_number_title">شماره تلفن</string>
     <string name="sim_number_unknown">این سیم‌کارت شماره‌ای ارائه نمی‌دهد</string>
+    <string name="sim_number_unknown_enter">این سیم‌کارت شماره را ارائه نمی‌کند. برای وارد کردن ضربه بزنید</string>
+    <string name="sim_number_entered">%1$s (واردشده توسط شما)</string>
+    <string name="sim_number_dialog_title">شماره شما روی این سیم‌کارت</string>
+    <string name="sim_number_dialog_body">بسیاری از اپراتورها شماره را روی سیم‌کارت ذخیره نمی‌کنند. وارد کردن آن در اینجا فقط نمایش NoSpam را تغییر می‌دهد و به جایی ارسال نمی‌شود.</string>
+    <string name="action_save">ذخیره</string>
+    <string name="action_clear">پاک کردن</string>
+    <string name="action_cancel">لغو</string>
     <string name="mms_roaming_title">دریافت خودکار MMS در رومینگ</string>
     <string name="delivery_reports_title">دریافت گزارش تحویل پیامک</string>
     <string name="delivery_reports_sub">باخبر شوید که پیام چه زمانی تحویل داده شد</string>
