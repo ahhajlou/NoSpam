@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.5 done 2026-09-23. Next: P2.6, manage blocked and allowed senders.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.6 done 2026-09-23. Next: P2.7, per-SIM number and the default SIM.
 
 ## 1. Constraints
 
@@ -195,7 +195,7 @@ Design decisions:
       Spec: archive and block unpin; delete keeps `sender_state`; an empty
       collection does nothing; a failure part-way leaves no partial flags;
       Archived and Spam ordering unchanged.
-- [ ] P2.6 **Manage blocked and allowed senders.** Test writer: Opus.
+- [x] P2.6 **Manage blocked and allowed senders.** Test writer: Opus.
       `SenderStateDao.observeUserOverrides()`; `SpamRepository.removeAllow` clears
       the override and re-derives the state through `ThreadSpamPolicy`, keeping the
       counts; `TelephonyDataSource.getSystemBlockedNumbers()`; screen, ViewModel
@@ -359,6 +359,25 @@ None at the moment. Record new ones here with the answer when given.
   SQLite, 26 JVM), none failing. Its "one publish per batch" device test was
   checked by mutation: putting the per-id loop back in `archiveAll` fails exactly
   that test, listing the intermediate states.
+- 2026-09-23 — P2.6 done. Settings → Spam protection → Blocked and allowed
+  senders: a "Blocked" section (this app's blocklist plus Android's own block
+  list, so numbers blocked from the dialer show too, one entry per normalised
+  address) and a "Marked not spam" section, each row with the contact's name and
+  photo where known and an Unblock / Remove button, no confirmation (both are
+  one action to redo). `TelephonyDataSource.getSystemBlockedNumbers`,
+  `BlocklistRepository.observeBlockedSenders`, `SpamRepository.observeAllowedSenders`
+  and `removeAllow` (TRUSTED override → MIXED with spam history, else CLEAN; counts
+  kept). `SettingsItem` gained a `leadingContent` slot for the avatar. As built,
+  the plan's `SenderStateDao.observeUserOverrides()` was not needed: the
+  repository filters `observeAll`.
+  Device: blocked NSTEST_STAR1, deleted its conversation, found the rule on the
+  page and unblocked it; marked NSTEST_SPAM1 not spam, found it, removed it.
+  Now the permanent flow `manage_senders.yaml`. Found on the way (TODO.md): Not
+  spam / Report spam reset the sender's counts, so Remove can only return CLEAN.
+  Tests: 41 black-box tests (Opus). One failed, and the test was right: the
+  in-memory blocklist DAO kept insertion order while SQLite sorts newest first,
+  so the fake now sorts like SQLite. feature:settings tests gained a
+  core:database test dependency.
 
 ## 4. Phase 1 work breakdown
 

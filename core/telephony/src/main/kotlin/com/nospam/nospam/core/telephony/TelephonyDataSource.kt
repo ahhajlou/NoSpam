@@ -52,6 +52,12 @@ interface TelephonyDataSource {
     suspend fun getOrCreateThreadId(address: String): Long
     suspend fun updateMessageRead(messageId: Long, read: Boolean)
     suspend fun isSystemBlocked(address: String): Boolean
+    /**
+     * Every number in Android's own block list (blocks made from the dialer or
+     * another app as well as ours), as stored. Empty when this app may not read
+     * it, which is whenever it is not the default SMS app.
+     */
+    suspend fun getSystemBlockedNumbers(): List<String>
     suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant?
     /**
      * The encoded image behind a contact's photo URI (as found in

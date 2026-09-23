@@ -58,6 +58,8 @@ import com.nospam.nospam.feature.settings.SettingsViewModel
 import com.nospam.nospam.feature.settings.SimSettingsScreen
 import com.nospam.nospam.feature.settings.SpamSettingsScreen
 import com.nospam.nospam.feature.settings.SpamSettingsViewModel
+import com.nospam.nospam.feature.settings.SendersScreen
+import com.nospam.nospam.feature.settings.SendersViewModel
 import com.nospam.nospam.feature.thread.NewConversationScreen
 import com.nospam.nospam.feature.thread.ThreadScreen
 import com.nospam.nospam.feature.thread.ThreadViewModel
@@ -70,6 +72,7 @@ import kotlinx.serialization.Serializable
 @Serializable object SettingsGeneralRoute
 @Serializable data class SettingsSimRoute(val subscriptionId: Int)
 @Serializable object SettingsSpamRoute
+@Serializable object SettingsSendersRoute
 @Serializable object SettingsAdvancedRoute
 @Serializable object SettingsAboutRoute
 @Serializable object OnboardingRoute
@@ -304,7 +307,19 @@ fun NoSpamNavHost(
             val vm: SpamSettingsViewModel = viewModel(
                 factory = vmFactory { SpamSettingsViewModel(container?.settingsRepository) }
             )
-            SpamSettingsScreen(onNavigateUp = { navController.navigateUp() }, viewModel = vm)
+            SpamSettingsScreen(
+                onNavigateUp = { navController.navigateUp() },
+                onOpenSenders = { navController.navigate(SettingsSendersRoute) },
+                viewModel = vm,
+            )
+        }
+        composable<SettingsSendersRoute> {
+            val vm: SendersViewModel = viewModel(
+                factory = vmFactory {
+                    SendersViewModel(container?.blocklistRepository, container?.spamRepository, container?.telephony)
+                }
+            )
+            SendersScreen(onNavigateUp = { navController.navigateUp() }, viewModel = vm)
         }
         composable<SettingsAdvancedRoute> {
             AdvancedSettingsScreen(

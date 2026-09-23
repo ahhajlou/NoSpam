@@ -12,7 +12,10 @@ import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class BlocklistRepository(
@@ -26,6 +29,33 @@ class BlocklistRepository(
     private val telephony: TelephonyDataSource? = null,
 ) {
     fun observe(): Flow<List<BlocklistEntity>> = db.blocklistDao.observeAll()
+
+    /**
+     * Every blocked sender, for the "Blocked and allowed senders" page: this
+     * app's blocklist plus Android's own block list (numbers blocked from the
+     * dialer or another app), one entry per normalised address, this app's
+     * newest blocks first. The system list cannot be observed, so it is re-read
+     * whenever this app's list changes: a number blocked elsewhere appears the
+     * next time the page opens.
+     */
+    fun observeBlockedSenders(): Flow<List<String>> = db.blocklistDao.observeAll()
+        .map { rows ->
+            val system = try {
+                telephony?.getSystemBlockedNumbers().orEmpty()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                emptyList()
+            }
+            (rows.map { it.address } + system)
+                .map(::normalize)
+                .filter { it.isNotBlank() }
+                .distinctBy { it.uppercase() }
+        }
+        .flowOn(Dispatchers.IO)
+
+    private fun normalize(address: String): String =
+        if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim()
     suspend fun block(address: String, reason: String? = null) {
         val normalized = if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim()
         db.blocklistDao.insert(BlocklistEntity(address = normalized, reason = reason))

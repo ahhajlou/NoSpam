@@ -149,6 +149,7 @@ conversation the new rules would never have hidden.
 - [] Make SPAM non-sticky against ham: a ham message from a SPAM sender moves it
   back to the inbox as MIXED.
 - [] Add the "reply clears automatic spam state, never an explicit block" rule.
+- [] "Not spam" and "Report spam" overwrite the sender's counts. `markSendersNotSpam` writes a fresh `sender_state` (spamCount and hamCount 0) and `markSendersSpam` writes spamCount 1, hamCount 0, so the sender's history is lost. Seen 2026-09-23 through the new senders page: removing an allow can then only return the sender to CLEAN, never MIXED. Safe (it can only hide less) but it throws evidence away; keep the counts and change only state and override
 - [] Re-derive graduated SPAM rows on upgrade.
 
 ### Settings: what to expose, and the rule for deciding
@@ -161,7 +162,7 @@ that can cause a conversation to be hidden that otherwise would not be, is a new
 way to lose an OTP.
 
 Worth having:
-- [] **Manage blocked and allowed senders** — a real gap, not a preference.
+- [x] **Done 2026-09-23 (phase 2, P2.6):** Settings → Spam protection → Blocked and allowed senders lists this app's blocks, Android's system block list and "Not spam" senders, each undoable. Original entry: **Manage blocked and allowed senders** — a real gap, not a preference.
   Sticky rules are keyed to the sender and survive thread deletion, so today a
   user can block a number, delete the thread, and have no way to find or undo
   that rule. There is no such screen in `SettingsScreen.kt` today.

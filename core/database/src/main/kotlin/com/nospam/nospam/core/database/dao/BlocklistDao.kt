@@ -18,6 +18,9 @@ class InMemoryBlocklistDao : BlocklistDao {
     private val data = mutableListOf<BlocklistEntity>()
     private val flow = MutableStateFlow<List<BlocklistEntity>>(emptyList())
     private var nextId = 1L
+    // Newest block first, as SqliteBlocklistDao's ORDER BY createdAt DESC:
+    // tests of anything that relies on that order run against this class.
+    private fun publish() { flow.value = data.sortedByDescending { it.createdAt } }
     override fun observeAll(): Flow<List<BlocklistEntity>> = flow
     override suspend fun findByAddress(address: String): BlocklistEntity? = data.find { it.address == address }
     override suspend fun insert(entry: BlocklistEntity): Long {
@@ -25,9 +28,9 @@ class InMemoryBlocklistDao : BlocklistDao {
         val e = entry.copy(id = id)
         data.removeAll { it.address == entry.address }
         data.add(e)
-        flow.value = data.toList()
+        publish()
         return id
     }
-    override suspend fun delete(entry: BlocklistEntity) { data.removeIf { it.id == entry.id }; flow.value = data.toList() }
-    override suspend fun deleteByAddress(address: String) { data.removeIf { it.address == address }; flow.value = data.toList() }
+    override suspend fun delete(entry: BlocklistEntity) { data.removeIf { it.id == entry.id }; publish() }
+    override suspend fun deleteByAddress(address: String) { data.removeIf { it.address == address }; publish() }
 }

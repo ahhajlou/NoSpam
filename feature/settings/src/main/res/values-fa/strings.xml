@@ -58,5 +58,12 @@
     <string name="delivery_reports_sub">باخبر شوید که پیام چه زمانی تحویل داده شد</string>
     <string name="blocked_senders_title">فرستندگان مسدود و مجاز</string>
     <string name="blocked_senders_sub">فرستندگانی که مسدود یا مجاز کرده‌اید را ببینید و تغییر دهید</string>
+    <string name="senders_explanation">مسدود یا مجاز کردن به فرستنده مربوط است، نه به گفت‌وگو: با حذف گفت‌وگو باقی می‌ماند. شماره‌های مسدود برای تماس هم مسدود می‌شوند.</string>
+    <string name="senders_blocked">مسدود</string>
+    <string name="senders_allowed">علامت‌خورده به‌عنوان غیرهرزنامه</string>
+    <string name="senders_blocked_empty">فرستنده مسدودی وجود ندارد</string>
+    <string name="senders_allowed_empty">فرستنده‌ای به‌عنوان غیرهرزنامه علامت نخورده است</string>
+    <string name="senders_unblock">رفع مسدودی</string>
+    <string name="senders_remove">حذف</string>
     <string name="section_spam">محافظت از هرزنامه</string>
 </resources>

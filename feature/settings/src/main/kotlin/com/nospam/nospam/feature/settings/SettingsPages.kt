@@ -234,6 +234,7 @@ fun SimSettingsScreen(
 @Composable
 fun SpamSettingsScreen(
     onNavigateUp: () -> Unit = {},
+    onOpenSenders: () -> Unit = {},
     viewModel: SpamSettingsViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -252,8 +253,7 @@ fun SpamSettingsScreen(
             SettingsItem(
                 title = stringResource(R.string.blocked_senders_title),
                 supportingText = stringResource(R.string.blocked_senders_sub),
-                enabled = NOT_WIRED_YET,
-                onClick = {},
+                onClick = onOpenSenders,
             )
         }
     }

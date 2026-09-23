@@ -508,6 +508,24 @@ class RealTelephonyDataSource(
         }
     }
 
+    override suspend fun getSystemBlockedNumbers(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val numbers = mutableListOf<String>()
+            context.contentResolver.query(
+                android.provider.BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                arrayOf(android.provider.BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER),
+                null, null, null,
+            )?.use { c ->
+                while (c.moveToNext()) c.getString(0)?.takeIf { it.isNotBlank() }?.let(numbers::add)
+            }
+            numbers
+        } catch (e: Exception) {
+            // SecurityException unless this is the default SMS app (or dialer).
+            Log.w(TAG, "System block list not readable", e)
+            emptyList()
+        }
+    }
+
     override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = withContext(Dispatchers.IO) {
         contactLookup.lookup(address)
     }

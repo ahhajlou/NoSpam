@@ -82,6 +82,8 @@ fun SettingsItem(
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
     trailingContent: @Composable (() -> Unit)? = null,
+    /** Replaces [icon] when the row leads with something richer, such as an avatar. */
+    leadingContent: @Composable (() -> Unit)? = null,
 ) {
     val clickModifier = if (onClick != null) {
         Modifier.clickable(enabled = enabled, onClick = onClick)
@@ -92,6 +94,7 @@ fun SettingsItem(
         icon = icon,
         enabled = enabled,
         trailingContent = trailingContent,
+        leadingContent = leadingContent,
         modifier = modifier.then(clickModifier),
     )
 }
@@ -132,13 +135,14 @@ private fun SettingsListItem(
     enabled: Boolean,
     trailingContent: @Composable (() -> Unit)?,
     modifier: Modifier,
+    leadingContent: @Composable (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     fun Color.orDisabled() = if (enabled) this else copy(alpha = DISABLED_ALPHA)
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = supportingText?.let { { Text(it) } },
-        leadingContent = icon?.let { { Icon(it, contentDescription = null) } },
+        leadingContent = leadingContent ?: icon?.let { { Icon(it, contentDescription = null) } },
         trailingContent = trailingContent,
         colors = ListItemDefaults.colors(
             containerColor = colors.surfaceContainer,

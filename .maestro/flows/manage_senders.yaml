@@ -1,0 +1,56 @@
+appId: com.nospam.nospam
+tags:
+  - settings
+  - senders
+---
+# Blocked and allowed senders (phase 2, P2.6). A rule belongs to the sender,
+# not the conversation, so it must stay findable after the conversation is
+# deleted, and undoable from Settings. Requires tools/seed.sh core.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "Inbox"
+
+# Block a sender, then delete its conversation.
+- scrollUntilVisible:
+    element: "NSTEST_STAR1"
+- longPressOn: "NSTEST_STAR1"
+- tapOn: "More options"
+- tapOn: "Block"
+- tapOn:
+    text: "Block"
+    index: 0
+- tapOn: "Open navigation menu"
+- tapOn: "Spam & blocked"
+- longPressOn: "NSTEST_STAR1"
+- tapOn: "Delete"
+- tapOn: "Delete"
+- assertNotVisible: "NSTEST_STAR1"
+
+# The rule is still there, and can be undone.
+- tapOn: "Open navigation menu"
+- tapOn: "Settings"
+- tapOn: "Spam protection"
+- tapOn: "Blocked and allowed senders"
+- assertVisible: "NSTEST_STAR1"
+- tapOn:
+    text: "Unblock"
+    index: 0
+- assertNotVisible: "NSTEST_STAR1"
+
+# "Not spam" is listed as an allow, and removing it takes it off the page.
+- tapOn: "Navigate up"
+- tapOn: "Navigate up"
+- tapOn: "Open navigation menu"
+- tapOn: "Spam & blocked"
+- longPressOn: "NSTEST_SPAM1"
+- tapOn: "Not spam"
+- tapOn: "Open navigation menu"
+- tapOn: "Settings"
+- tapOn: "Spam protection"
+- tapOn: "Blocked and allowed senders"
+- assertVisible: "NSTEST_SPAM1"
+- tapOn: "Remove"
+- assertNotVisible: "NSTEST_SPAM1"
+- assertVisible: "No senders marked as not spam"

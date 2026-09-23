@@ -8,6 +8,7 @@ import com.nospam.nospam.core.database.entity.SpamVerdictEntity
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -58,6 +59,36 @@ class SpamRepository(
             com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.TRUSTED, isUserOverride = true)
         }
         spamStateWriter.withSpamStateLock { db.senderStateDao.upsertAll(states) }
+    }
+
+    /** Senders the user marked "Not spam", most recent first, as normalised addresses. */
+    fun observeAllowedSenders(): Flow<List<String>> = db.senderStateDao.observeAll().map { states ->
+        states
+            .filter { it.state == ThreadSpamState.TRUSTED && it.isUserOverride }
+            .sortedByDescending { it.updatedAt }
+            .map { it.normalizedAddress }
+    }
+
+    /**
+     * Undoes "Not spam" for [address], so the sender is filtered automatically
+     * again. The state before the override is not kept, so it is rebuilt from
+     * the stored counts the same way unblocking does: MIXED when the sender has
+     * spam history, CLEAN otherwise; the counts themselves are kept. Only a
+     * user's TRUSTED override is changed, and no conversation is touched.
+     */
+    suspend fun removeAllow(address: String) {
+        val addr = normalizedAddress(address)
+        spamStateWriter.withSpamStateLock {
+            val current = db.senderStateDao.getByAddress(addr) ?: return@withSpamStateLock
+            if (current.state != ThreadSpamState.TRUSTED || !current.isUserOverride) return@withSpamStateLock
+            db.senderStateDao.upsert(
+                current.copy(
+                    state = if (current.spamCount > 0) ThreadSpamState.MIXED else ThreadSpamState.CLEAN,
+                    isUserOverride = false,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+        }
     }
 
     suspend fun markSenderSpam(threadId: ThreadId, address: String) =

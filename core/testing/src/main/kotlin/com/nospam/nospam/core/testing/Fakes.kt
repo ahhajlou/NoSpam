@@ -226,6 +226,8 @@ class FakeTelephonyDataSource(
 
     override suspend fun isSystemBlocked(address: String): Boolean = address in systemBlocked
 
+    override suspend fun getSystemBlockedNumbers(): List<String> = systemBlocked.toList()
+
     override suspend fun lookupContact(address: String): Participant? = contacts[address]
 
     /** Photo bytes by photo URI; a URI not in the map has no photo. */
