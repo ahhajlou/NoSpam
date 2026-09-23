@@ -41,6 +41,7 @@ fun ArchivedScreen(
     // Live data when a ViewModel is provided; a local seed for previews and tests.
     val live = viewModel?.conversations?.collectAsStateWithLifecycle()?.value
     var fake by remember(viewModel) { mutableStateOf(if (viewModel == null) fakeArchived() else emptyList()) }
+    val loading = viewModel != null && live == null
     val archived = live ?: fake
     fun unarchive(id: Long) {
         if (viewModel == null) fake = fake.filterNot { it.threadId.value == id }
@@ -52,7 +53,8 @@ fun ArchivedScreen(
     }
 
     val selection = rememberSelectionState()
-    PruneSelection(selection, archived.map { it.threadId.value })
+    // While loading, the list is empty for reasons unrelated to the selection.
+    if (!loading) PruneSelection(selection, archived.map { it.threadId.value })
     val ids = archived.map { it.threadId.value }.filter { it in selection.ids }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
@@ -70,7 +72,9 @@ fun ArchivedScreen(
         selection = selection,
         selectionActions = actions,
     ) { padding ->
-        if (archived.isEmpty()) {
+        if (loading) {
+            LoadingList(padding)
+        } else if (archived.isEmpty()) {
             EmptyListState(
                 icon = Icons.Outlined.Archive,
                 title = stringResource(R.string.archive_empty_title),

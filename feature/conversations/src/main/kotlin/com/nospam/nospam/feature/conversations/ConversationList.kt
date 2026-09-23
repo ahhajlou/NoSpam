@@ -2,6 +2,9 @@
 
 package com.nospam.nospam.feature.conversations
 
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -216,6 +219,21 @@ private fun StatusIcon(shown: Boolean, icon: ImageVector, labelRes: Int) {
         modifier = Modifier.size(16.dp),
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/**
+ * Placeholder rows while a list's first load is in flight, the same rows the
+ * inbox shows, so a page never claims to be empty before it knows.
+ */
+@Composable
+internal fun LoadingList(padding: PaddingValues) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().consumeWindowInsets(padding),
+        contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding()),
+        userScrollEnabled = false,
+    ) {
+        items(8) { SkeletonRow() }
+    }
 }
 
 @Composable

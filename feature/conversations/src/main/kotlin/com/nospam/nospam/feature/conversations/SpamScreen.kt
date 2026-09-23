@@ -53,6 +53,7 @@ fun SpamScreen(
     // Rows marked not spam this session disappear at once; the persisted
     // override removes them from the live flow on its next emission.
     var dismissed by remember(viewModel) { mutableStateOf(setOf<Long>()) }
+    val loading = viewModel != null && live == null
     val spam = (live ?: fake).filterNot { it.threadId.value in dismissed }
 
     val snackbar = remember { SnackbarHostState() }
@@ -71,7 +72,8 @@ fun SpamScreen(
     }
 
     val selection = rememberSelectionState()
-    PruneSelection(selection, spam.map { it.threadId.value })
+    // While loading, the list is empty for reasons unrelated to the selection.
+    if (!loading) PruneSelection(selection, spam.map { it.threadId.value })
     val selected = spam.filter { it.threadId.value in selection.ids }
     val summary = summarize(selected)
     var confirm by rememberSaveable { mutableStateOf<SpamConfirm?>(null) }
@@ -99,7 +101,9 @@ fun SpamScreen(
         selectionActions = actions,
         snackbarHostState = snackbar,
     ) { padding ->
-        if (spam.isEmpty()) {
+        if (loading) {
+            LoadingList(padding)
+        } else if (spam.isEmpty()) {
             EmptyListState(
                 icon = Icons.Outlined.GppGood,
                 title = stringResource(R.string.spam_empty_title),
