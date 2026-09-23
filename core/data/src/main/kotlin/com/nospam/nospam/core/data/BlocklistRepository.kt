@@ -115,9 +115,10 @@ class BlocklistRepository(
 
     suspend fun unblock(address: String) {
         val normalized = if (context != null) PhoneNumberNormalizer.normalize(context, address) else address.trim()
-        db.blocklistDao.deleteByAddress(normalized)
-        // Also try raw
-        if (normalized != address.trim()) db.blocklistDao.deleteByAddress(address.trim())
+        // Android's own list first, this app's rows second. Deleting a row
+        // re-emits [observeBlockedSenders], which re-reads Android's list; done
+        // the other way round, that re-read still found the number there and
+        // the "Blocked" page kept listing a sender that was already unblocked.
         if (context != null) {
             withContext(Dispatchers.IO) {
                 try {
@@ -138,6 +139,9 @@ class BlocklistRepository(
                 }
             }
         }
+        db.blocklistDao.deleteByAddress(normalized)
+        // Also try raw
+        if (normalized != address.trim()) db.blocklistDao.deleteByAddress(address.trim())
         clearBlockedSenderState(normalized)
         if (normalized != address.trim()) clearBlockedSenderState(address.trim())
     }
