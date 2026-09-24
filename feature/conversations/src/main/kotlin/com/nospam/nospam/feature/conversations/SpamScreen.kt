@@ -42,7 +42,7 @@ fun SpamScreen(
     onOpenDrawer: () -> Unit = {},
     viewModel: SpamViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
-    // Whole selections in one call; a swipe passes a list of one.
+    // Whole selections in one call.
     onNotSpam: (conversations: List<Pair<Long, String>>) -> Unit = {},
     onBlock: (addresses: List<String>) -> Unit = {},
     onUnblock: (addresses: List<String>) -> Unit = {},
@@ -118,14 +118,11 @@ fun SpamScreen(
             ) {
                 items(spam, key = { it.threadId.value }) { conv ->
                     val id = conv.threadId.value
-                    SwipeableConversationRow(
+                    // No swipe here: Not spam is in the selection bar, and
+                    // only the inbox's rows swipe.
+                    ConversationRow(
                         conv = conv,
                         selected = id in selection.ids,
-                        swipeEnabled = !selection.isActive,
-                        startToEnd = SwipeSpec(stringResource(R.string.not_spam), Icons.Outlined.MoveToInbox) {
-                            notSpam(listOf(conv))
-                        },
-                        endToStart = null,
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),

@@ -76,8 +76,8 @@ fun NoSpamAppShell(
                 drawerState = drawerState,
                 // Opened only by the menu button; once open, a drag or a tap on
                 // the scrim closes it. A drag could open it before, which took a
-                // start-edge swipe from inbox rows (and from Archived and Spam,
-                // whose rows already swiped) and fought the system back gesture.
+                // start-edge swipe from inbox rows and fought the system back
+                // gesture.
                 gesturesEnabled = drawerState.isOpen,
                 drawerContent = {
                     ModalDrawerSheet {

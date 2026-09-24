@@ -18,7 +18,6 @@
     <string name="unknown_sender">ناشناس</string>
     <string name="archive_empty_title">بایگانی خالی است</string>
     <string name="archive_empty_subtitle">پیام‌هایی که بایگانی می‌کنید اینجا نمایش داده می‌شوند.</string>
-    <string name="unarchive">خارج کردن از بایگانی</string>
     <string name="not_spam">هرزنامه نیست</string>
     <string name="marked_as_not_spam">%1$s هرزنامه نیست</string>
     <string name="menu_mark_read">علامت‌گذاری به‌عنوان خوانده‌شده</string>
