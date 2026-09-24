@@ -340,6 +340,9 @@ fun NoSpamNavHost(
             val scope = rememberCoroutineScope()
             OnboardingScreen(
                 onComplete = {
+                    // The inbox list was first read before the permissions
+                    // existed and cached as empty.
+                    container?.conversationsRepository?.refresh()
                     scope.launch {
                         container?.settingsRepository?.setBackfillPending(true)
                         container?.spamBackfill?.ensureStarted()

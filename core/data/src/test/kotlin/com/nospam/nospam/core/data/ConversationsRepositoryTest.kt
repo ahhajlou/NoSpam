@@ -10,10 +10,13 @@ import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
+import com.nospam.nospam.core.telephony.TelephonyDataSource
 import com.nospam.nospam.core.testing.FakeTelephonyDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -63,6 +66,27 @@ class ConversationsRepositoryTest {
             assertEquals(1, awaitItem().size)
             tele.emitConversations(listOf(first, second))
             assertEquals(2, awaitItem().size)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `refresh re-reads a provider that failed before the permission was granted`() = runTest {
+        // Like RealTelephonyDataSource: the list is read when the flow is
+        // collected, a denied read is empty, and a grant is not a provider change.
+        var granted = false
+        val stored = listOf(conv(1, "+98912"))
+        val tele = object : TelephonyDataSource by FakeTelephonyDataSource() {
+            override fun observeConversations(): Flow<List<Conversation>> =
+                flow { emit(if (granted) stored else emptyList()) }
+        }
+        val testScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repo = ConversationsRepository(tele, NoSpamDatabase.inMemory(), testScope)
+        repo.observeConversations().test {
+            assertTrue(awaitItem().isEmpty())
+            granted = true
+            repo.refresh()
+            assertEquals(stored.map { it.threadId }, awaitItem().map { it.threadId })
             cancelAndIgnoreRemainingEvents()
         }
     }
