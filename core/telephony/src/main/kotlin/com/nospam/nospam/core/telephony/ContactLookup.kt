@@ -34,12 +34,24 @@ class ContactLookup(private val context: Context) {
      * trustworthy or whether it still has to ask the provider.
      */
     @Volatile private var directory: Map<String, Participant>? = null
-    private val warmed = AtomicBoolean(false)
+    private val warming = AtomicBoolean(false)
 
-    /** Loads the contact directory once. Safe to call from any thread. */
+    /** True once the contact directory has been read, so a miss is a real miss. */
+    val isWarm: Boolean get() = directory != null
+
+    /**
+     * Loads the contact directory, once it can be read. Safe to call from any
+     * thread. A failed load is retried on the next call: before READ_CONTACTS is
+     * granted the read throws, and treating that as done left the app without
+     * contacts until the process restarted, even after the grant in onboarding.
+     */
     fun warm() {
-        if (!warmed.compareAndSet(false, true)) return
-        directory = runCatching { loadDirectory() }.getOrNull()
+        if (directory != null || !warming.compareAndSet(false, true)) return
+        try {
+            directory = runCatching { loadDirectory() }.getOrNull()
+        } finally {
+            warming.set(false)
+        }
     }
 
     fun lookup(address: String): Participant? {
@@ -48,9 +60,13 @@ class ContactLookup(private val context: Context) {
         cache[address]?.let { return it.participant }
 
         val dir = directory
-        val result = when {
-            dir == null -> query(address)                      // not warmed, ask the provider
-            else -> dir[matchKey(address)]?.copy(address = address)
+        val result = if (dir == null) {
+            // Not warmed, ask the provider. A failed read is not a miss: cached,
+            // it outlived the READ_CONTACTS grant, and ingress then took a
+            // contact's message for a stranger's.
+            runCatching { query(address) }.getOrElse { return null }
+        } else {
+            dir[matchKey(address)]?.copy(address = address)
         }
         cache[address] = Cached(result)
         return result
@@ -104,30 +120,29 @@ class ContactLookup(private val context: Context) {
         return out
     }
 
+    /** Throws when the provider cannot be read, e.g. without READ_CONTACTS. */
     private fun query(address: String): Participant? {
-        return try {
-            val uri = Uri.withAppendedPath(
-                ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
-                Uri.encode(address)
-            )
-            val projection = arrayOf(
-                ContactsContract.PhoneLookup._ID,
-                ContactsContract.PhoneLookup.DISPLAY_NAME,
-                ContactsContract.PhoneLookup.STARRED,
-                ContactsContract.PhoneLookup.PHOTO_URI
-            )
-            context.contentResolver.query(uri, projection, null, null, null)?.use { c ->
-                if (c.moveToFirst()) {
-                    Participant(
-                        address = address,
-                        displayName = c.getString(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup.DISPLAY_NAME)),
-                        contactId = c.getLong(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup._ID)),
-                        photoUri = c.getString(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup.PHOTO_URI)),
-                        isStarred = c.getInt(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup.STARRED)) == 1
-                    )
-                } else null
-            }
-        } catch (_: Exception) { null }
+        val uri = Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            Uri.encode(address)
+        )
+        val projection = arrayOf(
+            ContactsContract.PhoneLookup._ID,
+            ContactsContract.PhoneLookup.DISPLAY_NAME,
+            ContactsContract.PhoneLookup.STARRED,
+            ContactsContract.PhoneLookup.PHOTO_URI
+        )
+        return context.contentResolver.query(uri, projection, null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                Participant(
+                    address = address,
+                    displayName = c.getString(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup.DISPLAY_NAME)),
+                    contactId = c.getLong(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup._ID)),
+                    photoUri = c.getString(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup.PHOTO_URI)),
+                    isStarred = c.getInt(c.getColumnIndexOrThrow(ContactsContract.PhoneLookup.STARRED)) == 1
+                )
+            } else null
+        }
     }
 
     private companion object {

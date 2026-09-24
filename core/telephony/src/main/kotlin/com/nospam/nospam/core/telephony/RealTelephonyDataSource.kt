@@ -248,6 +248,7 @@ class RealTelephonyDataSource(
             }
             // Parallelize contact lookups + build
             contactLookup.warm()
+            val contactsRead = contactLookup.isWarm
             val conversations = coroutineScope {
                 metas.mapNotNull { meta ->
                     val latest = latestMap[meta.id] ?: return@mapNotNull null
@@ -266,8 +267,10 @@ class RealTelephonyDataSource(
                 }.awaitAll().filterNotNull()
             }
             if (conversations.isEmpty()) null else {
-                // Update cache
-                conversationCacheMutex.withLock {
+                // Not cached without contacts: the threads would read as unchanged
+                // once READ_CONTACTS is granted, and the nameless list would be
+                // served until the process restarted.
+                if (contactsRead) conversationCacheMutex.withLock {
                     cachedMetas = metas.toList()
                     cachedLatestMap = latestMap.toMap()
                     cachedConversations = conversations
