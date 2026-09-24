@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.telephony.DefaultSmsApp
 
@@ -82,8 +83,23 @@ fun OnboardingScreen(onComplete: () -> Unit = {}) {
     val roleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
+        // Taking the SMS role auto-grants the SMS permissions, so both change here.
+        hasPermissions = hasRequiredPermissions(context)
         isDefaultSms = isDefaultSmsApp(context)
         if (hasPermissions && isDefaultSms) onComplete()
+    }
+
+    // Both steps can be completed outside the two launchers: permissions granted
+    // on the system settings page (the only route after a second denial), the
+    // role taken from Settings > Default apps, or a launcher result that reports
+    // before the system has applied the grant. Without this the screen kept the
+    // state it read when it was first composed, and Continue stayed disabled
+    // until the process restarted, even with everything granted.
+    LifecycleResumeEffect(Unit) {
+        hasPermissions = hasRequiredPermissions(context)
+        isDefaultSms = isDefaultSmsApp(context)
+        if (hasPermissions) permanentlyDenied = false
+        onPauseOrDispose { }
     }
 
     Column(
