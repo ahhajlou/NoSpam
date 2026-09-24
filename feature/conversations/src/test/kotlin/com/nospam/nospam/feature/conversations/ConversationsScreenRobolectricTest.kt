@@ -2,7 +2,15 @@
 
 package com.nospam.nospam.feature.conversations
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.ResolvedTextDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -109,6 +117,28 @@ class ConversationsScreenRobolectricTest {
         rule.onNodeWithText("Search conversations").assertIsDisplayed().performClick()
         rule.onNodeWithText("Search conversations").performTextInput("alice")
         rule.onNodeWithText("alice", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test fun `a searched number reads left to right and a Persian word right to left in a Persian layout`() {
+        fun searchedDirection(query: String): ResolvedTextDirection {
+            val field = rule.onNode(hasSetTextAction())
+            field.performTextClearance()
+            field.performTextInput(query)
+            val layouts = mutableListOf<TextLayoutResult>()
+            field.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            return layouts.first().getParagraphDirection(0)
+        }
+        val vm = ConversationsViewModel()
+        rule.setContent {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                ConversationsScreen(title = "Inbox", viewModel = vm)
+            }
+        }
+        // Without its own direction "+98912" would be laid out right to left,
+        // and the "+" would move to the other end.
+        assertEquals(ResolvedTextDirection.Ltr, searchedDirection("+98912"))
+        assertEquals(ResolvedTextDirection.Ltr, searchedDirection("meeting"))
+        assertEquals(ResolvedTextDirection.Rtl, searchedDirection("جلسه"))
     }
 
     @Test fun `tapping a conversation reports its thread id`() {

@@ -29,6 +29,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import com.nospam.nospam.core.designsystem.component.Avatar
 import com.nospam.nospam.core.designsystem.component.NoSpamTopAppBar
@@ -157,6 +159,10 @@ fun NewConversationScreen(
                 placeholder = { Text(stringResource(R.string.new_hint)) },
                 modifier = Modifier.fillMaxWidth().focusRequester(recipientFocus),
                 singleLine = true,
+                // A contact name keeps its own direction; a number, which has no
+                // letters to decide by, reads left to right, or a Persian layout
+                // moves its leading "+" to the other end.
+                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                     keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone,
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,

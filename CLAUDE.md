@@ -261,7 +261,19 @@ uppercase. Lowercase silently fails with "Unknown role".
   the layout: snippets, message bodies, names and the thread title set
   `TextDirection.Content`. Without it an English message in a Persian inbox
   renders as ".Meeting moved to 3pm" — the layout's direction moves its full
-  stop to the front.
+  stop to the front. An unset direction resolves to the layout's, not the
+  content's (Compose `resolveTextDirection`), so every field needs it set too.
+- **Text fields follow the same rule, chosen by what is typed into them.** The
+  compose bar is `TextDirection.Content`, like the bubble the draft becomes, so
+  what is typed looks as it will once sent. Fields whose input is often a bare
+  number (new-conversation recipient, inbox search) are
+  `TextDirection.ContentOrLtr`: letters still decide, but text with none reads
+  left to right, keeping a leading "+" in place. A digits-only field (SIM
+  number) is `TextDirection.Ltr`. User input is never wrapped in isolates, since
+  that would change the text that is sent or searched. `SearchBarDefaults
+  .InputField(query = …)` has no `textStyle`; provide `LocalTextStyle` instead.
+  Direction is per line, and the first letter of a line decides it, as in any
+  Android text view: "Meeting در دفتر" is left to right.
 - **Phone numbers are isolated** through `isolateIfPhoneNumber` (core:designsystem),
   so a right-to-left layout cannot move a leading "+" to the other end. Only
   phone-like values: isolate characters are invisible but still characters, and

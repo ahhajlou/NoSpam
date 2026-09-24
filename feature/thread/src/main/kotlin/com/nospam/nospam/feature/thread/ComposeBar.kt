@@ -17,6 +17,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,6 +40,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.emoji2.emojipicker.EmojiPickerView
@@ -105,6 +107,10 @@ internal fun ComposeBar(
                 modifier = Modifier.weight(1f),
                 // SMS is often several lines; the bar grows to five and then scrolls.
                 maxLines = 5,
+                // The draft takes its direction from what is typed, as its bubble
+                // will once sent: without this an English draft in a Persian layout
+                // is laid out right to left and its full stop jumps to the front.
+                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Content),
                 shape = MaterialTheme.shapes.extraLarge,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
