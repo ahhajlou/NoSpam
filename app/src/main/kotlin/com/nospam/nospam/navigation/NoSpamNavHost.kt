@@ -337,13 +337,9 @@ fun NoSpamNavHost(
             AboutSettingsScreen(onNavigateUp = { navController.navigateUp() })
         }
         composable<OnboardingRoute> {
-            val scope = rememberCoroutineScope()
             OnboardingScreen(
                 onComplete = {
-                    scope.launch {
-                        container?.settingsRepository?.setBackfillPending(true)
-                        container?.spamBackfill?.ensureStarted()
-                    }
+                    container?.onSetupComplete()
                     navController.navigate(ConversationsRoute) {
                         popUpTo(OnboardingRoute) { inclusive = true }
                     }

@@ -22,7 +22,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,6 +47,8 @@ class RealTelephonyDataSource(
     private var cachedConversations: List<Conversation>? = null
     private var cachedMetas: List<ThreadMeta>? = null
     private var cachedLatestMap: Map<Long, SmsLatest> = emptyMap()
+    /** [ContactLookup.generation] the cached conversations were named under. */
+    private var cachedContactsGeneration: Int = -1
 
     // ThreadMeta and SmsLatest are shared for cache comparison
     internal data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
@@ -54,17 +59,19 @@ class RealTelephonyDataSource(
         val metas: List<ThreadMeta>?,
         val conversations: List<Conversation>?,
         val latest: Map<Long, SmsLatest>,
+        val contactsGeneration: Int,
     )
 
     /**
      * Emits the inbox on subscribe and re-emits on every provider change
-     * (incoming SMS, sent message, read-state update). The ContentObserver
+     * (incoming SMS, sent message, read-state update) and every contacts change,
+     * which renames the conversations without re-reading messages. The ContentObserver
      * lives here — callers only see a cold Flow. Rapid bursts are coalesced
      * by [mapLatest], which cancels an in-flight reload, and debounced 200ms.
      */
     @OptIn(ExperimentalCoroutinesApi::class, kotlinx.coroutines.FlowPreview::class)
     override fun observeConversations(): Flow<List<Conversation>> =
-        observeSmsChanges()
+        merge(observeSmsChanges(), contactLookup.generation.drop(1).map { })
             .debounce(200)
             .onStart { emit(Unit) }
             .mapLatest { getConversations() }
@@ -193,13 +200,15 @@ class RealTelephonyDataSource(
             // install a new generation in between, so the validated metas and the
             // returned conversations could come from different snapshots.
             val snapshot = conversationCacheMutex.withLock {
-                CacheSnapshot(cachedMetas, cachedConversations, cachedLatestMap)
+                CacheSnapshot(cachedMetas, cachedConversations, cachedLatestMap, cachedContactsGeneration)
             }
             val cached = snapshot.metas
 
-            // Nothing added, changed or removed: reuse the cached list without
-            // touching the Sms table.
-            if (!inboxChanged(cached, metas)) {
+            // Nothing added, changed or removed, and no contact changed since the
+            // list was named: reuse it without touching the Sms table. A contact
+            // change alone rebuilds from the cached rows below, re-reading none.
+            val contactsGeneration = contactLookup.generation.value
+            if (!inboxChanged(cached, metas) && snapshot.contactsGeneration == contactsGeneration) {
                 snapshot.conversations?.let { return it }
             }
             val changedIds = changedThreadIds(cached, metas)
@@ -248,6 +257,7 @@ class RealTelephonyDataSource(
             }
             // Parallelize contact lookups + build
             contactLookup.warm()
+            val contactsRead = contactLookup.isWarm
             val conversations = coroutineScope {
                 metas.mapNotNull { meta ->
                     val latest = latestMap[meta.id] ?: return@mapNotNull null
@@ -266,11 +276,14 @@ class RealTelephonyDataSource(
                 }.awaitAll().filterNotNull()
             }
             if (conversations.isEmpty()) null else {
-                // Update cache
-                conversationCacheMutex.withLock {
+                // Not cached without contacts: the threads would read as unchanged
+                // once READ_CONTACTS is granted, and the nameless list would be
+                // served until the process restarted.
+                if (contactsRead) conversationCacheMutex.withLock {
                     cachedMetas = metas.toList()
                     cachedLatestMap = latestMap.toMap()
                     cachedConversations = conversations
+                    cachedContactsGeneration = contactsGeneration
                 }
                 conversations
             }

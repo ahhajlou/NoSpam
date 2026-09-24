@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.designsystem.component.SettingsGroup
@@ -41,6 +42,12 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // The SIM list can only be read once the phone permission is held, and SIMs
+    // come and go; see SettingsViewModel.refreshSims.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refreshSims()
+        onPauseOrDispose { }
+    }
 
     SettingsScaffold(title = title, navigation = TopBarNavigation.Menu(onOpenDrawer)) {
         SettingsGroup {

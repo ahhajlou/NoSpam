@@ -11,11 +11,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 
 class ConversationsRepository(
@@ -40,10 +43,15 @@ class ConversationsRepository(
         externalScope?.coroutineContext?.get(kotlin.coroutines.ContinuationInterceptor)
             ?: Dispatchers.IO
 
+    // Restarts the telephony subscription; see [refresh].
+    private val refreshRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     // Heavy telephony + adjustMixedSnippet shared with replay=1 so revisiting
     // the inbox replays the last list instantly instead of re-querying.
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val sharedTelephony = telephony.observeConversations()
+    private val sharedTelephony = refreshRequests
+        .onStart { emit(Unit) }
+        .flatMapLatest { telephony.observeConversations() }
         .distinctUntilChanged()
         .mapLatest { adjustMixedSnippet(it) }
         .shareIn(repositoryScope, SharingStarted.Eagerly, replay = 1)
@@ -76,6 +84,19 @@ class ConversationsRepository(
             mutedIds = muted.map { it.threadId }.toSet(),
         )
     }.shareIn(repositoryScope, SharingStarted.Eagerly, replay = 1)
+
+    /**
+     * Queries the provider again, whether or not it has changed. The shared list
+     * starts when the container is built, which after a fresh install is before
+     * READ_SMS is granted: that first query fails, reads as an empty inbox, and
+     * granting a permission changes nothing the provider would announce, so the
+     * inbox stayed empty until the process restarted. Restarting the
+     * subscription also re-registers the provider observer, which was
+     * registered without the permission.
+     */
+    fun refresh() {
+        refreshRequests.tryEmit(Unit)
+    }
 
     private fun normalizeAddr(raw: String) = raw.trim().uppercase()
 
