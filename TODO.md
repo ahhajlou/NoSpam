@@ -247,13 +247,14 @@ error.
 **Resolved 2026-09-15 in `6898a35` (PR #8):** the "Block all" / "Delete all"
 row and the "deleted automatically after 30 days" banner were removed from
 `SpamScreen`, so the unconfirmed hard delete no longer exists. Per-conversation
-Not spam / Block / Delete remain on swipe and long-press. The analysis below is
+Not spam / Block / Delete remain on long-press selection (the row swipe was
+removed from Archived and Spam & blocked on 2026-09-24; only the inbox swipes). The analysis below is
 kept because it is the rule any future bulk action must meet — including
 multi-select in the UI polish work (`docs/UI-POLISH-PLAN.md`).
 
 - [x] **`.maestro/flows/spam_notspam_and_bulk.yaml` was stale** — rewritten
   2026-09-17 with Spam selection mode (`docs/UI-POLISH-PLAN.md` P1.3): it now
-  asserts the bulk row is gone, a confirmed Delete, swipe to Not spam and a
+  asserts the bulk row is gone, a confirmed Delete, Not spam on one row and a
   two-row Not spam. Passing. `settings_dialogs_and_switches.yaml` still carries
   a comment mentioning the removed button; harmless.
 - The confirmation rule below is now implemented for multi-select Delete and

@@ -538,6 +538,7 @@ Order chosen so each step leaves the app building and usable.
         contacts and Call (single only), Report spam, Block (confirm) / Unblock. Archived: Unarchive,
         Delete. Spam: Not spam, Block/Unblock, Delete. Swipe kept (Unarchive / Not spam), disabled
         while selecting, migrated off deprecated `confirmValueChange` to `onDismiss`.
+        (Swipe removed from Archived and Spam 2026-09-24; only the inbox swipes.)
       - Back clears selection (BackHandler; `activity-compose` added to the module).
       - Search: `SearchBarDefaults.InputField` in a pill with a clear button, still filters inline.
       - FAB: icon-only `AddComment`, content description "Start chat"; hidden while selecting.

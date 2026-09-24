@@ -35,7 +35,7 @@ fun ArchivedScreen(
     onOpenDrawer: () -> Unit = {},
     viewModel: ArchivedViewModel? = null,
     onConversationClick: (Long) -> Unit = {},
-    // Whole selections in one call; a swipe passes a list of one.
+    // Whole selections in one call.
     onUnarchive: (threadIds: List<Long>) -> Unit = {},
     onDelete: (threadIds: List<Long>) -> Unit = {},
 ) {
@@ -89,14 +89,11 @@ fun ArchivedScreen(
             ) {
                 items(archived, key = { it.threadId.value }) { conv ->
                     val id = conv.threadId.value
-                    SwipeableConversationRow(
+                    // No swipe here: Unarchive is in the selection bar, and
+                    // only the inbox's rows swipe.
+                    ConversationRow(
                         conv = conv,
                         selected = id in selection.ids,
-                        swipeEnabled = !selection.isActive,
-                        startToEnd = SwipeSpec(stringResource(R.string.unarchive), Icons.Outlined.Unarchive) {
-                            unarchive(listOf(id))
-                        },
-                        endToStart = null,
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),

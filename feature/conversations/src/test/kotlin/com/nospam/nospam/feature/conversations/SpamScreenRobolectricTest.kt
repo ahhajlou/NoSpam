@@ -9,6 +9,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -37,6 +39,16 @@ class SpamScreenRobolectricTest {
         rule.waitForIdle()
         assertEquals(listOf(201L to "Win A Free Cruise!"), reported)
         rule.onNodeWithText("Win A Free Cruise!").assertDoesNotExist()
+    }
+
+    @Test fun `spam rows do not swipe in either direction`() {
+        val reported = mutableListOf<Pair<Long, String>>()
+        rule.setContent { SpamScreen(title = "Spam & blocked", onNotSpam = { reported.addAll(it) }) }
+        rule.onNodeWithText("Win A Free Cruise!").performTouchInput { swipeRight() }
+        rule.onNodeWithText("Win A Free Cruise!").performTouchInput { swipeLeft() }
+        rule.waitForIdle()
+        assertTrue(reported.isEmpty())
+        rule.onNodeWithText("Win A Free Cruise!").assertIsDisplayed()
     }
 
     @Test fun `block asks for confirmation before blocking anything`() {
