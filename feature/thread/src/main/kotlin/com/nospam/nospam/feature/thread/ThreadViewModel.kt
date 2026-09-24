@@ -59,6 +59,8 @@ class ThreadViewModel(
     private val spamRepository: SpamRepository? = null,
     private val drafts: DraftRepository? = null,
     private val settings: SettingsRepository? = null,
+    /** Called once a message the user sent was handed to the radio: the sent sound. */
+    private val onMessageQueued: suspend () -> Unit = {},
 ) : ViewModel() {
     // The other party for threads reached from New Conversation, which have
     // no messages yet. Mutable because one VM instance can serve successive
@@ -360,6 +362,8 @@ class ThreadViewModel(
         if (result.isFailure) {
             Log.w(TAG, "SmsManager send failed", result.exceptionOrNull())
             if (rowId == null) restoreUnsent(address, body)
+        } else {
+            runCatching { onMessageQueued() }
         }
         // No manual reload: the provider observer re-emits and reconciles.
     }

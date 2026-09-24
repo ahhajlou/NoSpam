@@ -2,6 +2,9 @@
 
 package com.nospam.nospam.sms
 
+import kotlinx.coroutines.flow.first
+import com.nospam.nospam.core.notifications.incomingAlert
+import com.nospam.nospam.core.notifications.IncomingAlert
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -61,8 +64,19 @@ class AppSmsReceiver : BroadcastReceiver() {
                     )
                 )
                 Log.d(TAG, "Prediction: ${if (result.isSpam) "spam" else "ham"} (Score: ${result.score}) state=${result.senderState} notif=${result.notificationDecision}")
-                if (result.notificationDecision == com.nospam.nospam.core.model.NotificationDecision.NORMAL && result.messageId != null) {
-                    postHamNotification(context.applicationContext, result, subscriptionId, timestamp)
+                if (result.messageId != null) {
+                    val container = app.container
+                    val alert = incomingAlert(
+                        decision = result.notificationDecision,
+                        threadId = result.threadId.value,
+                        visibleThreadId = container.visibleThread.value,
+                        soundsEnabled = container.settingsRepository.messageSounds.first(),
+                    )
+                    when (alert) {
+                        IncomingAlert.NOTIFY -> postHamNotification(context.applicationContext, result, subscriptionId, timestamp)
+                        IncomingAlert.IN_APP_SOUND -> container.messageSounds.playReceived()
+                        IncomingAlert.NONE -> Unit
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "SMS ingress failed", e)

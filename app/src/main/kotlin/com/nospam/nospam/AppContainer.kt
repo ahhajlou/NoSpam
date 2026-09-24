@@ -2,6 +2,9 @@
 
 package com.nospam.nospam
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import com.nospam.nospam.core.notifications.SystemMessageSoundPlayer
+import com.nospam.nospam.core.notifications.MessageSoundPlayer
 import android.content.Context
 import com.nospam.nospam.core.data.BlocklistRepository
 import com.nospam.nospam.core.data.ConversationsRepository
@@ -35,6 +38,12 @@ class AppContainer(private val context: Context) {
     val database: NoSpamDatabase by lazy { NoSpamDatabase.persistent(appContext) }
 
     val telephony: TelephonyDataSource by lazy { RealTelephonyDataSource(appContext) }
+
+    /** In-app message sounds (sent, and received in the conversation on screen). */
+    val messageSounds: MessageSoundPlayer by lazy { SystemMessageSoundPlayer(appContext) }
+
+    /** The conversation on screen, if any; set by the thread screen while resumed. */
+    val visibleThread = MutableStateFlow<Long?>(null)
 
     /** Contact photos for every avatar in the app, through `LocalContactPhotoLoader`. */
     val contactPhotos: ContactPhotoLoader by lazy { ContactPhotoCache(telephony) }

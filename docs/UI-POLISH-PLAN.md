@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.9 done 2026-09-24. Next: P2.10, message sounds.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.10 done 2026-09-24. Next: P2.11, close-out.
 
 ## 1. Constraints
 
@@ -221,7 +221,7 @@ Design decisions:
       `SwipeAction {NONE, ARCHIVE, DELETE, TOGGLE_READ}` per direction, default
       ARCHIVE both ways as in Google Messages; DELETE confirms; ARCHIVE offers undo;
       directions follow the layout (RTL). Archived and Spam keep their fixed actions.
-- [ ] P2.10 **Message sounds.** `MessageSoundPlayer` (SoundPool) in
+- [x] P2.10 **Message sounds.** `MessageSoundPlayer` (SoundPool) in
       `core:notifications`, silent when the ringer is silent or on vibrate; bundled
       sounds with licences in `REUSE.toml`; foreground only (`ProcessLifecycleOwner`),
       background stays with the notification channel; the sent sound plays when a
@@ -437,6 +437,23 @@ None at the moment. Record new ones here with the answer when given.
   drag fell through to the row as a tap and toggled its selection (drags are now
   absorbed while selecting). New flow `swipe_actions.yaml`. Note for flows: a
   swipe from the screen's left edge is Android's back gesture.
+- 2026-09-24 — P2.10 done, with three user decisions (2026-09-24): Android's own
+  sounds, nothing bundled; no notification for the conversation on screen, an
+  in-app sound instead (as Google Messages); message sounds on by default. So,
+  deviating from the plan: `SystemMessageSoundPlayer` plays the default
+  notification sound for received and a `ToneGenerator` confirmation tone for
+  sent (the system click follows "touch sounds", often off), silent unless the
+  ringer is normal; no `res/raw` files and no `ProcessLifecycleOwner` — the
+  thread screen reports itself visible while resumed (`AppContainer.visibleThread`)
+  and `incomingAlert` decides NOTIFY / IN_APP_SOUND / NONE in `AppSmsReceiver`.
+  The sent sound plays when a send is queued (`ThreadViewModel.onMessageQueued`).
+  Device: a message into the open conversation posted no notification and
+  created the ringtone player; the next one, with the inbox showing, notified.
+  Tests: 36 black-box tests (Sonnet), all passing. The agent disclosed reading
+  `incomingAlert`'s body and grepping signatures in files it was told not to
+  open; the rule is the spec's own table, so the exhaustive test still stands.
+  The old test that asserted the sounds switch was disabled was removed: no
+  General row is unbacked any more, and `NOT_WIRED_YET` is gone.
 
 ## 4. Phase 1 work breakdown
 

@@ -73,6 +73,16 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
     }
 
     /**
+     * Sent and received sounds while the app is open. On by default, as in
+     * Google Messages; the player itself stays quiet when the phone is silenced.
+     */
+    val messageSounds: Flow<Boolean> = prefs.data(PreferenceFile.SETTINGS)
+        .map { it[KEY_MESSAGE_SOUNDS] as? Boolean ?: true }
+        .catch { emit(true) }
+
+    suspend fun setMessageSounds(enabled: Boolean) = write { it[KEY_MESSAGE_SOUNDS] = enabled }
+
+    /**
      * The inbox's swipe actions. In the main settings file rather than
      * `ui_settings`, whose mere existence makes app startup read it before the
      * first screen. An unknown stored value reads as the default for that side.
@@ -187,6 +197,7 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_SWIPE_RIGHT = "swipe_right"
         const val KEY_SWIPE_LEFT = "swipe_left"
+        const val KEY_MESSAGE_SOUNDS = "message_sounds"
         const val SIM_PREFIX = "sim_"
         const val SIM_NUMBER_SUFFIX = "_number"
         const val SIM_DELIVERY_SUFFIX = "_delivery_reports"

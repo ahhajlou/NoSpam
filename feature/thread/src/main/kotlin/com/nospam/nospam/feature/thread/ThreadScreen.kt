@@ -2,6 +2,7 @@
 
 package com.nospam.nospam.feature.thread
 
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -99,11 +100,19 @@ fun ThreadScreen(
     onArchive: (Long) -> Unit = {},
     onBlock: (String) -> Unit = {},
     onDeleteConversation: (Long) -> Unit = {},
+    /** Reports when this conversation is (true) and stops being (false) on screen. */
+    onVisibilityChange: (threadId: Long, visible: Boolean) -> Unit = { _, _ -> },
     viewModel: ThreadViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
     LaunchedEffect(threadId, address, forwardBody) { viewModel.loadThread(threadId, address, context, forwardBody) }
+    // Resumed means the user can see it: a message arriving here then plays the
+    // in-app sound instead of posting a notification.
+    LifecycleResumeEffect(threadId) {
+        onVisibilityChange(threadId, true)
+        onPauseOrDispose { onVisibilityChange(threadId, false) }
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lazyState = rememberLazyListState()
     val scope = rememberCoroutineScope()

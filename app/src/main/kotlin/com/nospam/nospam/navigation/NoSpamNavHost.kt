@@ -2,6 +2,7 @@
 
 package com.nospam.nospam.navigation
 
+import kotlinx.coroutines.flow.first
 import android.Manifest
 import android.app.role.RoleManager
 import android.content.Context
@@ -367,7 +368,10 @@ fun NoSpamNavHost(
             val vm: ThreadViewModel = viewModel(
                 factory = vmFactory {
                     container?.let {
-                        ThreadViewModel(it.telephony, args.address, it.spamRepository, it.draftRepository, it.settingsRepository)
+                        ThreadViewModel(
+                            it.telephony, args.address, it.spamRepository, it.draftRepository, it.settingsRepository,
+                            onMessageQueued = { if (it.settingsRepository.messageSounds.first()) it.messageSounds.playSent() },
+                        )
                     } ?: ThreadViewModel()
                 }
             )
@@ -378,6 +382,11 @@ fun NoSpamNavHost(
                 forwardBody = args.forwardBody,
                 onForward = { body -> navController.navigate(NewConversationRoute(forwardBody = body)) },
                 onNavigateUp = { navController.navigateUp() },
+                onVisibilityChange = { id, visible ->
+                    val holder = container?.visibleThread
+                    // Only clear it if no other conversation took over meanwhile.
+                    if (visible) holder?.value = id else holder?.compareAndSet(id, null)
+                },
                 onArchive = { id ->
                     scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }
                 },

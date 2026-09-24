@@ -21,6 +21,7 @@ data class GeneralSettingsUiState(
     val theme: ThemeSetting = ThemeSetting.SYSTEM,
     val dynamicColor: Boolean = false,
     val swipeActions: SwipeActions = SwipeActions(),
+    val messageSounds: Boolean = true,
 )
 
 /**
@@ -44,6 +45,9 @@ class GeneralSettingsViewModel(
             viewModelScope.launch {
                 repo.swipeActions.collect { _uiState.value = _uiState.value.copy(swipeActions = it) }
             }
+            viewModelScope.launch {
+                repo.messageSounds.collect { _uiState.value = _uiState.value.copy(messageSounds = it) }
+            }
         }
     }
 
@@ -62,5 +66,10 @@ class GeneralSettingsViewModel(
     fun setSwipeActions(actions: SwipeActions) {
         val repo = settings ?: return run { _uiState.value = _uiState.value.copy(swipeActions = actions) }
         viewModelScope.launch { repo.setSwipeActions(actions) }
+    }
+
+    fun setMessageSounds(enabled: Boolean) {
+        val repo = settings ?: return run { _uiState.value = _uiState.value.copy(messageSounds = enabled) }
+        viewModelScope.launch { repo.setMessageSounds(enabled) }
     }
 }

@@ -9,7 +9,6 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -67,12 +66,6 @@ class SettingsScreenRobolectricTest {
         // the dialog is identified by its title.
         rule.onNodeWithText("App language").assertIsDisplayed()
         rule.onNodeWithText("فارسی").assertIsDisplayed()
-    }
-
-    @Test fun `settings without storage yet are shown disabled, not silently inert`() {
-        // Message sounds get their storage in phase 2 step P2.10.
-        rule.setContent { GeneralSettingsScreen() }
-        rule.onNodeWithText("Hear outgoing and incoming message sounds").assertIsNotEnabled()
     }
 
     @Test fun `spam protection toggles off and back on`() {

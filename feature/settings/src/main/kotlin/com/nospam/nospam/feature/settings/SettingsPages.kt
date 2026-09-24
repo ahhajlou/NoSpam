@@ -61,10 +61,6 @@ import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.telephony.DefaultSmsApp
 import kotlinx.coroutines.launch
 
-// Settings whose storage does not exist yet are shown disabled rather than as
-// controls that look live and silently forget (docs/UI-POLISH-PLAN.md §3).
-private const val NOT_WIRED_YET = false
-
 @Composable
 fun GeneralSettingsScreen(
     onNavigateUp: () -> Unit = {},
@@ -150,9 +146,8 @@ fun GeneralSettingsScreen(
             SettingsSwitchItem(
                 title = stringResource(R.string.sounds_title),
                 supportingText = stringResource(R.string.sounds_sub),
-                checked = false,
-                onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
+                checked = appearance.messageSounds,
+                onCheckedChange = viewModel::setMessageSounds,
             )
         }
 
