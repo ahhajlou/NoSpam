@@ -30,7 +30,6 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -147,8 +146,10 @@ fun NoSpamNavHost(
         if (!needsOnboarding(context)) return@LaunchedEffect
         navController.navigate(OnboardingRoute) {
             // Nothing behind it: the inbox must not be reachable by back while a
-            // required permission is missing.
-            popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+            // required permission is missing. Pops the whole graph, not to its
+            // start destination: when the start was onboarding it has already
+            // left the stack, and popping to it would do nothing.
+            popUpTo(navController.graph.id) { inclusive = true }
             launchSingleTop = true
         }
     }
