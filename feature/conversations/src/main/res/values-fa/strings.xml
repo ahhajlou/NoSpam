@@ -25,6 +25,8 @@
     <string name="menu_mark_unread">علامت‌گذاری به‌عنوان خوانده‌نشده</string>
     <string name="menu_archive">بایگانی</string>
     <string name="menu_unarchive">خارج کردن از بایگانی</string>
+    <string name="swipe_archived">گفت‌وگو بایگانی شد</string>
+    <string name="action_undo">واگرد</string>
     <string name="menu_report_spam">گزارش هرزنامه</string>
     <string name="menu_block">مسدود کردن</string>
     <string name="menu_unblock">رفع مسدودیت</string>

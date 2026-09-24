@@ -93,9 +93,10 @@ fun ArchivedScreen(
                         conv = conv,
                         selected = id in selection.ids,
                         swipeEnabled = !selection.isActive,
-                        swipeLabel = stringResource(R.string.unarchive),
-                        swipeIcon = Icons.Outlined.Unarchive,
-                        onSwiped = { unarchive(listOf(id)) },
+                        startToEnd = SwipeSpec(stringResource(R.string.unarchive), Icons.Outlined.Unarchive) {
+                            unarchive(listOf(id))
+                        },
+                        endToStart = null,
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),

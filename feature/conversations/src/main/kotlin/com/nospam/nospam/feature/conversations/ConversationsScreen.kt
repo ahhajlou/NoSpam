@@ -2,6 +2,16 @@
 
 package com.nospam.nospam.feature.conversations
 
+import kotlinx.coroutines.launch
+import com.nospam.nospam.core.model.Conversation
+import com.nospam.nospam.core.model.SwipeAction
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +99,8 @@ fun ConversationsScreen(
     onBlock: (addresses: List<String>) -> Unit = {},
     onUnblock: (addresses: List<String>) -> Unit = {},
     onDelete: (threadIds: List<Long>) -> Unit = {},
+    /** Undo for a swipe-archive. */
+    onUnarchive: (threadIds: List<Long>) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isDefault by viewModel.isDefaultSmsApp.collectAsStateWithLifecycle()
@@ -103,6 +115,41 @@ fun ConversationsScreen(
     val summary = summarize(selected)
     val ids = selected.map { it.threadId.value }
     var confirm by rememberSaveable { mutableStateOf<InboxConfirm?>(null) }
+    // A swipe-delete waiting for its confirmation.
+    var swipeDelete by rememberSaveable { mutableStateOf<Long?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val archivedMessage = stringResource(R.string.swipe_archived)
+    val undoLabel = stringResource(R.string.action_undo)
+    val archiveLabel = stringResource(R.string.menu_archive)
+    val deleteLabel = stringResource(R.string.menu_delete)
+    val markReadLabel = stringResource(R.string.menu_mark_read)
+    val markUnreadLabel = stringResource(R.string.menu_mark_unread)
+    // Settings name physical directions; the row takes layout directions. In a
+    // right-to-left layout a drag toward the end edge is a left swipe.
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val swipe = uiState.swipeActions
+    val startToEndAction = if (rtl) swipe.left else swipe.right
+    val endToStartAction = if (rtl) swipe.right else swipe.left
+    fun swipeSpec(action: SwipeAction, conv: Conversation): SwipeSpec? {
+        val id = conv.threadId.value
+        return when (action) {
+            SwipeAction.NONE -> null
+            SwipeAction.ARCHIVE -> SwipeSpec(archiveLabel, Icons.Outlined.Archive) {
+                onArchive(listOf(id))
+                scope.launch {
+                    val result = snackbar.showSnackbar(archivedMessage, actionLabel = undoLabel, duration = SnackbarDuration.Short)
+                    if (result == SnackbarResult.ActionPerformed) onUnarchive(listOf(id))
+                }
+            }
+            SwipeAction.DELETE -> SwipeSpec(deleteLabel, Icons.Outlined.Delete, keepsRow = true) { swipeDelete = id }
+            SwipeAction.TOGGLE_READ -> if (conv.read) {
+                SwipeSpec(markUnreadLabel, Icons.Outlined.MarkChatUnread, keepsRow = true) { onSetRead(listOf(id), false) }
+            } else {
+                SwipeSpec(markReadLabel, Icons.Outlined.MarkChatRead, keepsRow = true) { onSetRead(listOf(id), true) }
+            }
+        }
+    }
 
     fun act(block: () -> Unit) {
         block()
@@ -159,6 +206,7 @@ fun ConversationsScreen(
         onOpenDrawer = onOpenDrawer,
         selection = selection,
         selectionActions = actions,
+        snackbarHostState = snackbar,
         floatingActionButton = {
             FloatingActionButton(onClick = onNewMessage) {
                 Icon(Icons.Outlined.AddComment, contentDescription = stringResource(R.string.start_chat))
@@ -212,9 +260,12 @@ fun ConversationsScreen(
                     item(key = "header-pinned") { SectionHeader(stringResource(R.string.section_pinned)) }
                     items(uiState.pinned, key = { it.threadId.value }) { conv ->
                         val id = conv.threadId.value
-                        ConversationRow(
+                        SwipeableConversationRow(
                             conv = conv,
                             selected = id in selection.ids,
+                            swipeEnabled = !selection.isActive,
+                            startToEnd = swipeSpec(startToEndAction, conv),
+                            endToStart = swipeSpec(endToStartAction, conv),
                             onClick = { open(id) },
                             onLongClick = { selection.toggle(id) },
                             modifier = Modifier.animateItem(),
@@ -226,9 +277,12 @@ fun ConversationsScreen(
                 }
                 items(uiState.conversations, key = { it.threadId.value }) { conv ->
                     val id = conv.threadId.value
-                    ConversationRow(
+                    SwipeableConversationRow(
                         conv = conv,
                         selected = id in selection.ids,
+                        swipeEnabled = !selection.isActive,
+                        startToEnd = swipeSpec(startToEndAction, conv),
+                        endToStart = swipeSpec(endToStartAction, conv),
                         onClick = { open(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),
@@ -259,6 +313,16 @@ fun ConversationsScreen(
             onDismiss = { confirm = null },
         )
         null -> Unit
+    }
+    swipeDelete?.let { id ->
+        ConfirmDeleteDialog(
+            count = 1,
+            onConfirm = {
+                onDelete(listOf(id))
+                swipeDelete = null
+            },
+            onDismiss = { swipeDelete = null },
+        )
     }
 }
 

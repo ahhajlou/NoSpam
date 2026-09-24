@@ -3,6 +3,8 @@
 package com.nospam.nospam.core.data
 
 import android.util.Log
+import com.nospam.nospam.core.model.SwipeAction
+import com.nospam.nospam.core.model.SwipeActions
 import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.preferences.PreferenceFile
 import com.nospam.nospam.core.preferences.PreferencesDataSource
@@ -69,6 +71,28 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
     } catch (e: Exception) {
         UUID.randomUUID().toString()
     }
+
+    /**
+     * The inbox's swipe actions. In the main settings file rather than
+     * `ui_settings`, whose mere existence makes app startup read it before the
+     * first screen. An unknown stored value reads as the default for that side.
+     */
+    val swipeActions: Flow<SwipeActions> = prefs.data(PreferenceFile.SETTINGS)
+        .map { stored ->
+            val defaults = SwipeActions()
+            SwipeActions(
+                right = swipeAction(stored[KEY_SWIPE_RIGHT]) ?: defaults.right,
+                left = swipeAction(stored[KEY_SWIPE_LEFT]) ?: defaults.left,
+            )
+        }
+        .catch { emit(SwipeActions()) }
+
+    suspend fun setSwipeActions(actions: SwipeActions) = write {
+        it[KEY_SWIPE_RIGHT] = actions.right.name
+        it[KEY_SWIPE_LEFT] = actions.left.name
+    }
+
+    private fun swipeAction(stored: Any?): SwipeAction? = SwipeAction.entries.firstOrNull { it.name == stored }
 
     /**
      * Whether the user has ever changed an appearance setting. Cheap enough for
@@ -161,6 +185,8 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         const val KEY_INSTALL_ID = "install_id"
         const val KEY_THEME = "theme"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
+        const val KEY_SWIPE_RIGHT = "swipe_right"
+        const val KEY_SWIPE_LEFT = "swipe_left"
         const val SIM_PREFIX = "sim_"
         const val SIM_NUMBER_SUFFIX = "_number"
         const val SIM_DELIVERY_SUFFIX = "_delivery_reports"

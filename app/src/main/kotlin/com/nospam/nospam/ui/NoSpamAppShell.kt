@@ -74,9 +74,11 @@ fun NoSpamAppShell(
         CompositionLocalProvider(LocalContactPhotoLoader provides photoLoader) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
-                // Only drawer destinations can open it; a thread, the recipient
-                // picker and onboarding use back navigation instead.
-                gesturesEnabled = drawerState.isOpen || destination.isDrawerDestination(),
+                // Opened only by the menu button; once open, a drag or a tap on
+                // the scrim closes it. A drag could open it before, which took a
+                // start-edge swipe from inbox rows (and from Archived and Spam,
+                // whose rows already swiped) and fought the system back gesture.
+                gesturesEnabled = drawerState.isOpen,
                 drawerContent = {
                     ModalDrawerSheet {
                         Text(
@@ -164,9 +166,6 @@ private fun NavDestination?.isOn(route: KClass<*>): Boolean =
 private fun NavDestination?.isOnDebugTool(routeTag: String): Boolean =
     this?.route?.contains(routeTag) == true
 
-private fun NavDestination?.isDrawerDestination(): Boolean =
-    isOn(ConversationsRoute::class) || isOn(ArchivedRoute::class) || isOn(SpamRoute::class) ||
-        isOn(SettingsRoute::class) || debugTools.any { isOnDebugTool(it.routeTag) }
 
 // Preview
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true, name = "Shell Light")

@@ -25,6 +25,8 @@
     <string name="menu_mark_unread">Mark as unread</string>
     <string name="menu_archive">Archive</string>
     <string name="menu_unarchive">Unarchive</string>
+    <string name="swipe_archived">Conversation archived</string>
+    <string name="action_undo">Undo</string>
     <string name="menu_report_spam">Report spam</string>
     <string name="menu_block">Block</string>
     <string name="menu_unblock">Unblock</string>

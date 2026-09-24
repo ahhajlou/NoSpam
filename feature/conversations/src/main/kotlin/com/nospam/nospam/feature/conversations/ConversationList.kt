@@ -2,6 +2,15 @@
 
 package com.nospam.nospam.feature.conversations
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.Orientation
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
@@ -380,9 +389,24 @@ private fun isCurrentYear(millis: Long): Boolean {
 }
 
 /**
- * [ConversationRow] with one swipe action toward the end edge (Unarchive,
- * Not spam). Swiping is off while selecting, so a drag cannot act on a row
- * the user is trying to select.
+ * One swipe direction's action on a [SwipeableConversationRow].
+ *
+ * @param keepsRow true when the conversation stays in this list afterwards (a
+ * delete that asks first and may be cancelled, marking read): the row springs
+ * back instead of staying swiped away.
+ */
+internal class SwipeSpec(
+    val label: String,
+    val icon: ImageVector,
+    val keepsRow: Boolean = false,
+    val onSwiped: () -> Unit,
+)
+
+/**
+ * [ConversationRow] with a swipe action in either direction, as layout
+ * directions: [startToEnd] is a drag toward the end edge. Null disables that
+ * direction. Swiping is off while selecting, so a drag cannot act on a row the
+ * user is trying to select.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -390,31 +414,71 @@ internal fun SwipeableConversationRow(
     conv: Conversation,
     selected: Boolean,
     swipeEnabled: Boolean,
-    swipeLabel: String,
-    swipeIcon: ImageVector,
-    onSwiped: () -> Unit,
+    startToEnd: SwipeSpec?,
+    endToStart: SwipeSpec?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state = androidx.compose.material3.rememberSwipeToDismissBoxState()
+    // Not rememberSwipeToDismissBoxState: that one is saveable, so a row that
+    // leaves the list and comes back under the same key (Undo after archive,
+    // or archiving again what was just unarchived) is restored already swiped
+    // away, fires its action again and leaves at once. Found on the device:
+    // Undo re-archived the conversation. A row that returns starts settled.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val threshold = androidx.compose.material3.SwipeToDismissBoxDefaults.positionalThreshold
+    val state = remember(conv.threadId) {
+        androidx.compose.material3.SwipeToDismissBoxState(
+            initialValue = androidx.compose.material3.SwipeToDismissBoxValue.Settled,
+            density = density,
+            positionalThreshold = threshold,
+        )
+    }
+    val scope = rememberCoroutineScope()
+    // One swipe acts once. A row that stays in the list after its action (the
+    // write failed, or the list re-emitted before it applied) is still in the
+    // swiped state, and recomposing it would fire the action again; it is
+    // armed again only once it is back at rest.
+    var handled by remember(conv.threadId) { mutableStateOf(false) }
+    LaunchedEffect(state.currentValue) {
+        if (state.currentValue == androidx.compose.material3.SwipeToDismissBoxValue.Settled) handled = false
+    }
     androidx.compose.material3.SwipeToDismissBox(
         state = state,
-        modifier = modifier,
-        enableDismissFromStartToEnd = true,
-        enableDismissFromEndToStart = false,
+        // While selecting, a horizontal drag is absorbed rather than passed to
+        // the row, where Compose would count a drag that stays inside it as a
+        // tap and toggle the selection.
+        modifier = modifier.draggable(
+            state = rememberDraggableState { },
+            orientation = Orientation.Horizontal,
+            enabled = !swipeEnabled,
+        ),
+        enableDismissFromStartToEnd = startToEnd != null,
+        enableDismissFromEndToStart = endToStart != null,
         gesturesEnabled = swipeEnabled,
-        onDismiss = { onSwiped() },
+        onDismiss = { direction ->
+            if (handled) return@SwipeToDismissBox
+            handled = true
+            val spec = if (direction == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd) startToEnd else endToStart
+            spec?.onSwiped?.invoke()
+            if (spec?.keepsRow == true) scope.launch { state.reset() }
+        },
         backgroundContent = {
-            Row(
-                modifier = Modifier.fillMaxSize()
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(horizontal = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(swipeIcon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(Modifier.width(12.dp))
-                Text(swipeLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            val towardEnd = state.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
+            val spec = if (towardEnd) startToEnd else endToStart
+            if (spec != null) {
+                Row(
+                    modifier = Modifier.fillMaxSize()
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 24.dp),
+                    // The label sits on the side the row is uncovering.
+                    horizontalArrangement = if (towardEnd) Arrangement.Start else Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(spec.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Spacer(Modifier.width(12.dp))
+                    Text(spec.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
             }
         },
     ) {

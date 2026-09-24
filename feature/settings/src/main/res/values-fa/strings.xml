@@ -45,6 +45,13 @@
     <string name="theme_dark">تیره</string>
     <string name="theme_system_sub">مطابق تنظیم دستگاه</string>
     <string name="needs_mms">به پشتیبانی از MMS نیاز دارد</string>
+    <string name="section_swipe">کشیدن انگشت</string>
+    <string name="swipe_right_title">کشیدن به راست</string>
+    <string name="swipe_left_title">کشیدن به چپ</string>
+    <string name="swipe_none">هیچ</string>
+    <string name="swipe_archive">بایگانی</string>
+    <string name="swipe_delete">حذف</string>
+    <string name="swipe_toggle_read">علامت خوانده یا نخوانده</string>
     <string name="dynamic_color_title">استفاده از رنگ‌های تصویر زمینه</string>
     <string name="dynamic_color_sub">متریال یو، اندروید ۱۲ و بالاتر</string>
     <string name="sounds_title">پخش صدای پیام‌های ارسالی و دریافتی</string>

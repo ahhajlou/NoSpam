@@ -122,9 +122,10 @@ fun SpamScreen(
                         conv = conv,
                         selected = id in selection.ids,
                         swipeEnabled = !selection.isActive,
-                        swipeLabel = stringResource(R.string.not_spam),
-                        swipeIcon = Icons.Outlined.MoveToInbox,
-                        onSwiped = { notSpam(listOf(conv)) },
+                        startToEnd = SwipeSpec(stringResource(R.string.not_spam), Icons.Outlined.MoveToInbox) {
+                            notSpam(listOf(conv))
+                        },
+                        endToStart = null,
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),

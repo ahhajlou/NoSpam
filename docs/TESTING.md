@@ -63,16 +63,16 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=�
 | `core:common` | 8 | `Result` map/fold, dispatchers, permission constants |
 | `core:testing` | 10 | The fakes themselves (classifier counts, telephony filters) |
 | `core:database` | 31 | DAO logic against `NoSpamDatabase.inMemory()` |
-| `core:data` | 184 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune); `SettingsRepository`/`DraftRepository` defaults, stored key names and failure fallbacks |
+| `core:data` | 194 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune); `SettingsRepository`/`DraftRepository` defaults, stored key names and failure fallbacks |
 | `core:ml` | 10 | Preprocessing (URL/NUM tokens, Persian normalisation, ZWNJ), `char_wb` n-grams, classifier parity |
 | `core:telephony` | 62 | Address normalisation, default-SMS detection, `SmsManager` resolution |
 | `core:preferences` | 12 | The DataStore source against real files: type round-trips, removal, serialised edits, unsupported types |
 | `core:notifications` | 3 | Channel ids and reply-extra constants **only** — see Known gaps |
 | `core:i18n` | 3 | RTL detection, date formatting |
 | `core:designsystem` | 36 | Color roles, type scale, shapes, avatar palette, top-bar action partition, bidi isolation, avatar semantics and contact photos |
-| `feature:conversations` | 37 | `ConversationsViewModel` + the inbox/spam screens |
+| `feature:conversations` | 50 | `ConversationsViewModel` + the inbox/spam screens |
 | `feature:thread` | 102 | `ThreadViewModel`, SMS segment counting, emoji insertion + the thread and new-conversation screens |
-| `feature:settings` | 91 | `SettingsViewModel`, `SpamSettingsViewModel`, `GeneralSettingsViewModel` + the settings pages and dialogs |
+| `feature:settings` | 99 | `SettingsViewModel`, `SpamSettingsViewModel`, `GeneralSettingsViewModel` + the settings pages and dialogs |
 | `feature:onboarding` | 12 | The permission list and the onboarding screen |
 | `feature:export`, `feature:mldebug` | 21 | Debug-only features; absent from release |
 | `:app` | 69 | `AppContainer` wiring, `AppSmsReceiver`, and launch-intent parsing (`SENDTO`, notification taps) |

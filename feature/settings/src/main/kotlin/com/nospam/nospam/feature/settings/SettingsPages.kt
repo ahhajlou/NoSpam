@@ -56,6 +56,7 @@ import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.designsystem.theme.isDynamicColorSupported
 import com.nospam.nospam.core.i18n.LocaleHelper
+import com.nospam.nospam.core.model.SwipeAction
 import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.telephony.DefaultSmsApp
 import kotlinx.coroutines.launch
@@ -72,6 +73,8 @@ fun GeneralSettingsScreen(
     val context = LocalContext.current
     val appearance by viewModel.uiState.collectAsState()
     var showThemeDialog by rememberSaveable { mutableStateOf(false) }
+    // Which direction's swipe dialog is open: true for right, false for left.
+    var swipeDialogRight by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var isDefault by remember { mutableStateOf(isDefaultSmsApp(context)) }
     var notificationsEnabled by remember { mutableStateOf(areNotificationsEnabled(context)) }
     var bubblesAllowed by remember { mutableStateOf(areBubblesAllowed(context)) }
@@ -152,6 +155,33 @@ fun GeneralSettingsScreen(
                 enabled = NOT_WIRED_YET,
             )
         }
+
+        SettingsSectionHeader(stringResource(R.string.section_swipe))
+        SettingsGroup {
+            SettingsItem(
+                title = stringResource(R.string.swipe_right_title),
+                supportingText = swipeActionName(appearance.swipeActions.right),
+                onClick = { swipeDialogRight = true },
+            )
+            SettingsItem(
+                title = stringResource(R.string.swipe_left_title),
+                supportingText = swipeActionName(appearance.swipeActions.left),
+                onClick = { swipeDialogRight = false },
+            )
+        }
+    }
+
+    swipeDialogRight?.let { right ->
+        SwipeActionDialog(
+            title = stringResource(if (right) R.string.swipe_right_title else R.string.swipe_left_title),
+            selected = if (right) appearance.swipeActions.right else appearance.swipeActions.left,
+            onSelect = { action ->
+                val current = appearance.swipeActions
+                viewModel.setSwipeActions(if (right) current.copy(right = action) else current.copy(left = action))
+                swipeDialogRight = null
+            },
+            onDismiss = { swipeDialogRight = null },
+        )
     }
 
     if (showThemeDialog) {
@@ -474,6 +504,44 @@ private fun themeName(theme: ThemeSetting): String = when (theme) {
     ThemeSetting.SYSTEM -> stringResource(R.string.theme_system)
     ThemeSetting.LIGHT -> stringResource(R.string.theme_light)
     ThemeSetting.DARK -> stringResource(R.string.theme_dark)
+}
+
+@Composable
+private fun swipeActionName(action: SwipeAction): String = stringResource(
+    when (action) {
+        SwipeAction.NONE -> R.string.swipe_none
+        SwipeAction.ARCHIVE -> R.string.swipe_archive
+        SwipeAction.DELETE -> R.string.swipe_delete
+        SwipeAction.TOGGLE_READ -> R.string.swipe_toggle_read
+    }
+)
+
+@Composable
+private fun SwipeActionDialog(
+    title: String,
+    selected: SwipeAction,
+    onSelect: (SwipeAction) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                SwipeAction.entries.forEach { action ->
+                    RadioRow(
+                        selected = selected == action,
+                        title = swipeActionName(action),
+                        subtitle = null,
+                        onClick = { onSelect(action) },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
+        },
+    )
 }
 
 @Composable

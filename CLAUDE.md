@@ -372,10 +372,10 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 | Layer | Where | State as of 2026-09-20 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 18 modules | 715 tests, 63.57% line coverage (2026-09-23) |
+| Unit, including every Compose screen | `src/test` across 18 modules | 746 tests, 64.39% line coverage (2026-09-24) |
 | Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, real `ContentResolver`: 9 delivery-report tests (2026-09-23, they take the SMS role through two stub components in the test manifest and hand it back), plus the older 4 of which 1 always skips (see `docs/TESTING.md` §2) |
-| End-to-end | `.maestro/flows` | 17 flows; 10 run by default (debug, destructive and manual-only tags are skipped), all 10 passing on 2026-09-23 |
+| End-to-end | `.maestro/flows` | 18 flows; 11 run by default (debug, destructive and manual-only tags are skipped), all 11 passing on 2026-09-24 |
 
 Tests are written against behaviour, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.

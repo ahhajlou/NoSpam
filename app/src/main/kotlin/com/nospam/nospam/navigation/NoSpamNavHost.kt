@@ -193,6 +193,7 @@ fun NoSpamNavHost(
                     it.conversationsRepository,
                     backfillStatus = it.spamBackfill.status,
                     onCancelBackfill = { it.spamBackfill.cancel() },
+                    swipeActions = it.settingsRepository.swipeActions,
                 )
             } ?: ConversationsViewModel()
         }
@@ -236,6 +237,9 @@ fun NoSpamNavHost(
                 },
                 onDelete = { ids ->
                     scope.launch { container?.conversationsRepository?.deleteConversations(ids.map(::ThreadId)) }
+                },
+                onUnarchive = { ids ->
+                    scope.launch { container?.conversationsRepository?.unarchive(ids.map(::ThreadId)) }
                 },
             )
         }

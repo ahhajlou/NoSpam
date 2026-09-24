@@ -45,6 +45,13 @@
     <string name="theme_dark">Dark</string>
     <string name="theme_system_sub">Follow the device setting</string>
     <string name="needs_mms">Needs MMS support</string>
+    <string name="section_swipe">Swipe actions</string>
+    <string name="swipe_right_title">Right swipe</string>
+    <string name="swipe_left_title">Left swipe</string>
+    <string name="swipe_none">None</string>
+    <string name="swipe_archive">Archive</string>
+    <string name="swipe_delete">Delete</string>
+    <string name="swipe_toggle_read">Mark as read or unread</string>
     <string name="dynamic_color_title">Use wallpaper colors</string>
     <string name="dynamic_color_sub">Material You, Android 12 and later</string>
     <string name="sounds_title">Hear outgoing and incoming message sounds</string>

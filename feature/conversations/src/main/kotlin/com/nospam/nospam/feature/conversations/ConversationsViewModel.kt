@@ -2,6 +2,8 @@
 
 package com.nospam.nospam.feature.conversations
 
+import kotlinx.coroutines.flow.Flow
+import com.nospam.nospam.core.model.SwipeActions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nospam.nospam.core.data.BackfillStatus
@@ -32,6 +34,8 @@ data class ConversationsUiState(
     val isLoading: Boolean = true,
     /** Non-null while a one-time history scan is running or just finished. */
     val backfillProgress: BackfillStatus? = null,
+    /** What swiping a row does, by direction. */
+    val swipeActions: SwipeActions = SwipeActions(),
 )
 
 /**
@@ -44,6 +48,8 @@ class ConversationsViewModel(
     /** Live scan status when a container provides one; null for tests/previews. */
     private val backfillStatus: StateFlow<BackfillStatus?>? = null,
     private val onCancelBackfill: () -> Unit = {},
+    /** The user's swipe settings; null (tests, previews) means the defaults. */
+    private val swipeActions: Flow<SwipeActions>? = null,
 ) : ViewModel() {
     private val _filter = MutableStateFlow(ConversationFilter.ALL)
     private val _searchQuery = MutableStateFlow("")
@@ -99,7 +105,8 @@ class ConversationsViewModel(
         combine(
             baseState,
             backfillStatus ?: MutableStateFlow<BackfillStatus?>(null),
-        ) { ui, backfill -> ui.copy(backfillProgress = backfill) }
+            swipeActions ?: MutableStateFlow(SwipeActions()),
+        ) { ui, backfill, swipe -> ui.copy(backfillProgress = backfill, swipeActions = swipe) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationsUiState())
     }
 

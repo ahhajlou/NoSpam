@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.8 done 2026-09-23. Next: P2.9, swipe actions and the drawer gesture.
+**P2 planned 2026-09-22** (§3). P2.1 to P2.9 done 2026-09-24. Next: P2.10, message sounds.
 
 ## 1. Constraints
 
@@ -217,7 +217,7 @@ Design decisions:
       part stays failed across a multipart message; the receiver ignores foreign
       URIs and ids ≤ 0; reports off sends no delivery intent.
       Device: send to the emulator's own number; then a real SIM.
-- [ ] P2.9 **Swipe actions, and the drawer gesture (D4).**
+- [x] P2.9 **Swipe actions, and the drawer gesture (D4).**
       `SwipeAction {NONE, ARCHIVE, DELETE, TOGGLE_READ}` per direction, default
       ARCHIVE both ways as in Google Messages; DELETE confirms; ARCHIVE offers undo;
       directions follow the layout (RTL). Archived and Spam keep their fixed actions.
@@ -420,6 +420,23 @@ None at the moment. Record new ones here with the answer when given.
   then removed the number from Android's list; the re-read still found it. It
   passed in P2.6 by timing. Android's list is now cleared first;
   `manage_senders` passed three times in a row after.
+- 2026-09-24 — P2.9 done. Inbox rows swipe both ways; Settings → General →
+  Swipe actions picks Archive / Delete / Mark as read or unread / None per
+  physical direction (right and left, as Google Messages names them; in a
+  right-to-left layout a right swipe is still the right setting, checked in
+  Persian on the device). Default Archive both ways. Archive offers Undo; Delete
+  asks first; mark read springs back. Stored in the main `settings` file, not
+  `ui_settings`, so it does not bring back the blocking startup read. The drawer
+  opens from its button only (drag and scrim still close it).
+  Found on the device and fixed: `rememberSwipeToDismissBoxState` is saveable,
+  so a row coming back under the same key (Undo) was restored already swiped
+  away and archived itself again; the row now keeps its swipe state in memory
+  only. The test writer (Sonnet, 35 tests) then found two more, both fixed: a row
+  that stays listed after its action re-fired it on recomposition (each swipe now
+  acts once, re-armed when the row settles), and in selection mode a horizontal
+  drag fell through to the row as a tap and toggled its selection (drags are now
+  absorbed while selecting). New flow `swipe_actions.yaml`. Note for flows: a
+  swipe from the screen's left edge is Android's back gesture.
 
 ## 4. Phase 1 work breakdown
 

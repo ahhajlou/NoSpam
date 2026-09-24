@@ -5,6 +5,7 @@ package com.nospam.nospam.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nospam.nospam.core.data.SettingsRepository
+import com.nospam.nospam.core.model.SwipeActions
 import com.nospam.nospam.core.model.ThemeSetting
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +20,7 @@ import kotlinx.coroutines.launch
 data class GeneralSettingsUiState(
     val theme: ThemeSetting = ThemeSetting.SYSTEM,
     val dynamicColor: Boolean = false,
+    val swipeActions: SwipeActions = SwipeActions(),
 )
 
 /**
@@ -39,6 +41,9 @@ class GeneralSettingsViewModel(
             viewModelScope.launch {
                 repo.dynamicColor.collect { _uiState.value = _uiState.value.copy(dynamicColor = it) }
             }
+            viewModelScope.launch {
+                repo.swipeActions.collect { _uiState.value = _uiState.value.copy(swipeActions = it) }
+            }
         }
     }
 
@@ -52,5 +57,10 @@ class GeneralSettingsViewModel(
     fun setDynamicColor(enabled: Boolean) {
         val repo = settings ?: return run { _uiState.value = _uiState.value.copy(dynamicColor = enabled) }
         viewModelScope.launch { repo.setDynamicColor(enabled) }
+    }
+
+    fun setSwipeActions(actions: SwipeActions) {
+        val repo = settings ?: return run { _uiState.value = _uiState.value.copy(swipeActions = actions) }
+        viewModelScope.launch { repo.setSwipeActions(actions) }
     }
 }
