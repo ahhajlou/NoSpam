@@ -400,6 +400,75 @@ Agreed for a later phase:
   Messages does not bother with; weigh that against a second source of truth,
   which CLAUDE.md §4 warns about.
 
+## Cold start: ~400ms main-thread stall before the inbox (measured 2026-09-25)
+
+Tap to inbox is ~590ms on a Galaxy A26 (Android 16), and the inbox query is not
+where it goes. Release build, 111 conversations in the inbox (1,924 SMS, 295
+threads), baseline profile compiled, cold launches, first launch after install
+discarded:
+
+| Stage | Time |
+|---|---|
+| Process fork → `NoSpamApplication.onCreate` | ~40ms |
+| → first frame (`Displayed … +Nms`) | ~200ms. That frame is only `NoSpamNavHost`'s spinner, shown while `needsOnboarding` runs on IO |
+| → inbox on screen (`NoSpamPerf: inbox loaded`) | ~590ms. **~400ms of main-thread work**, logged as `Choreographer: Skipped ~50 frames` |
+| Inbox query, on a background thread in parallel | ~38ms. Ready long before the screen can show it |
+
+Ruled out by measurement:
+- **The inbox query.** 38ms compiled, ~167ms uncompiled. The number remembered
+  as "under 500ms" (`a13d4d3`, 349-465ms on the SM-A730F) is this one, counted
+  from ViewModel creation, not from the tap.
+- **Code running interpreted.** Regenerating the baseline profile to cover the
+  inbox (`be4f600`; the old one held no inbox or thread entries) moved tap to
+  inbox only ~605ms → ~590ms and left the stall at ~50 frames.
+- **The 2026-09-24/25 onboarding fixes** (`f4e0339`..`2de26c5`). `main` before them
+  and the branch after them measured the same in two rounds each.
+- **An older regression.** `a13d4d3` on the same phone: ~1,870ms tap to inbox,
+  first frame ~530ms. Today is about 3x faster.
+
+Candidates, none measured. Take a system trace of one cold start before
+changing anything:
+- [] Trace a cold start (release, profile compiled) and attribute the ~400ms
+  between the first frame and the inbox.
+- Building the navigation graph: type-safe `@Serializable` routes create their
+  serializers on first use, and `NoSpamNavHost` declares every destination.
+- First composition of `NoSpamAppShell` (the drawer) and `ConversationsScreen`.
+- Loading the bundled fonts (Hanken Grotesk, Inter) on the main thread.
+- `NoSpamNavHost` creates four hoisted ViewModels before the graph, including
+  `SettingsViewModel` and `SpamViewModel`, which the inbox does not need.
+- The spinner frame itself: the real UI cannot start composing until
+  `needsOnboarding` returns from IO.
+
+**How to measure, and the traps hit on 2026-09-25** (each cost a wrong result).
+`tools/bench_startup.sh` applies all of these, and refuses to measure when one
+fails:
+- Measure a release build, signed with `~/.android/debug.keystore`
+  (`apksigner sign`). It then installs over the debug build and keeps
+  `nospam.db`. A release-key APK does not install over a debug one.
+- Compile the profile **after** the first launch. `ProfileInstaller` writes the
+  APK's profile during that launch (`ProfileInstaller: Installing profile for
+  com.nospam.nospam`). `cmd package compile -f -m speed-profile` before it finds
+  no profile and only verifies. Check `dumpsys package dexopt`:
+  `status=speed-profile` is compiled; `status=verify` with `reason=cmdline` is
+  not. Uncompiled numbers are real too: a sideloaded APK runs like that until
+  background dexopt, which waits for the phone to be idle and charging.
+- Installing an APK from before 2026-09-17 drops the `READ_PHONE_NUMBERS` grant,
+  because it does not declare the permission. Every later launch then stops at
+  the onboarding gate. The inbox ViewModel is hoisted, so `inbox loaded` is
+  still logged behind onboarding: the numbers look fine and mean nothing. Grant
+  the permissions again after each install, and check the inbox is on screen
+  before counting a launch.
+- `inbox loaded: N in Xms` counts from ViewModel creation. For tap to inbox,
+  take the logcat `-v epoch` time from `Zygote: Process N created for
+  com.nospam.nospam` to that line.
+- [] CLAUDE.md §10 lost the compile step and the `status=` check that the file
+  had before its 2026-09-15 rewrite; put them back there.
+- Regenerate the profile on an emulator, never a phone in use: the run installs
+  its own build and uninstalls the app, taking its data and the SMS role. Play
+  Store images have no root or `sqlite3`, so `tools/seed.sh` fails there. Send
+  conversations in with `adb emu sms send` while NoSpam is the default SMS
+  app. The generator's comment has the details.
+
 ## Project-wide
 - [~] Reply on the conversation's own SIM. **Done 2026-09-20 for threads with history:** `Message.subscriptionId` is now read from the provider and `ThreadViewModel` defaults the SIM picker to the SIM the thread last used (a manual pick sticks). **Done 2026-09-23 (phase 2, P2.7):** a thread with no SIM history now starts on the system default SMS SIM when it is active (unit-tested; the emulator has one SIM, so not seen on a device). **Still open:** when the SIM list is empty (phone permission missing, or single SIM) `sendMessage` still passes no subscription and `resolveSmsManager` falls back to the system default. Not tested on a dual-SIM device — the emulator has one SIM; the selection logic is covered by `ThreadViewModelContextTest` only
 - [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way
@@ -409,7 +478,7 @@ Agreed for a later phase:
 - [x] **Fixed 2026-09-23:** both ViewModels now start at `null` ("loading"), and both pages show the inbox's skeleton rows until the first load, then the list or the empty state. Spam had the same bug. Original entry: **Archived (and probably Spam) says "Archive is empty" while it is still loading.** `ArchivedViewModel` starts its `stateIn` from `emptyList()` (`feature/conversations/.../SpamViewModel.kt:25`) and `ArchivedScreen` shows the empty state for any empty list, so there is no loading state. Found 2026-09-23 because `archived_unarchive`, the first flow `tools/run-e2e.sh` runs after installing a new build, failed twice with an empty Archived page; the first load after an install is slow enough to outlast Maestro's wait. Rerun alone, and with the runner's exact install/role/grant/reseed sequence, it passes. (An earlier guess, that seeding ran before the database existed, was wrong: the rows were there.) Fix: a nullable or `Loading` initial state and the list skeleton the inbox already has; check `SpamViewModel` for the same
 - [] `tools/persistence_check.sh` sends its test SMS as `NSTEST_UNBLOCK1` through `adb emu sms send`, but the emulator console keeps only a sender's digits (verified 2026-09-23: `NSTEST_NOTIF1` arrived as address `1`), so the script's address checks are probably not testing what they say. It also taps `"Menu"`, which phase 1 renamed to "Open navigation menu". Re-check it before relying on it; `tools/launch_intents_check.sh` uses a numeric sender for this reason
 - [] Rename `com.nospam.nospam` applicationId/package before publishing
-- [] Onboarding does not react to permissions granted outside the app. Fresh install → onboarding shows → user grants the permissions from system Settings (App info → Permissions) instead of the in-app dialog → returns to the app: onboarding still shows the old state and the inbox is never reached until the app is force-closed and reopened. Check first: `NoSpamNavHost`'s resume check (CLAUDE.md §6) may only route *to* onboarding when permissions are missing and never route *away* from it once they are all granted, and the onboarding screen may compute its granted state once instead of re-reading on `ON_RESUME`. Expected: on resume, re-evaluate `requiredPermissions()` and continue to the inbox (or to the next step, the default-SMS role) without a restart. Not covered today — `tools/permission_gate_check.sh` only tests the revoke → resume direction; add the grant → resume direction there and a Robolectric test on the onboarding screen. Searched TODO.md, TASKS.md, REVIEW.md and docs/ on 2026-09-20: no existing report of this
+- [x] **Fixed 2026-09-24 in `7143870`; reproduced first on a Galaxy A26 (Android 16) with the 0.2.0 release.** The onboarding screen now reads the permissions and the SMS role again on every resume, so Continue enables as soon as they are granted, wherever they were granted. A Robolectric test in `OnboardingScreenRobolectricTest` covers it. **Still open:** `tools/permission_gate_check.sh` still tests only revoke → resume, not grant → resume. Original entry: Onboarding does not react to permissions granted outside the app. Fresh install → onboarding shows → user grants the permissions from system Settings (App info → Permissions) instead of the in-app dialog → returns to the app: onboarding still shows the old state and the inbox is never reached until the app is force-closed and reopened. Check first: `NoSpamNavHost`'s resume check (CLAUDE.md §6) may only route *to* onboarding when permissions are missing and never route *away* from it once they are all granted, and the onboarding screen may compute its granted state once instead of re-reading on `ON_RESUME`. Expected: on resume, re-evaluate `requiredPermissions()` and continue to the inbox (or to the next step, the default-SMS role) without a restart. Not covered today — `tools/permission_gate_check.sh` only tests the revoke → resume direction; add the grant → resume direction there and a Robolectric test on the onboarding screen. Searched TODO.md, TASKS.md, REVIEW.md and docs/ on 2026-09-20: no existing report of this
 - [] Sideloaded installs hit Android's "restricted settings" block, with no in-app explanation. Verified 2026-09-20 on a Galaxy A26: the release APK downloaded from GitHub and installed from Samsung My Files (not a store, so Android restricts SMS-related permissions until the user allows it) showed "App was denied access to be default SMS app… restricted permissions", and the permission requests were declined twice so onboarding read "Android will not ask again". Play Protect's "This app looks safe" is a separate malware scan and does not lift it. The app cannot remove the restriction; only a store installer (Play, F-Droid, possibly Galaxy Store) or adb avoids it. Two pieces to build, both for the GitHub-APK route:
   - [] Onboarding hint: when a required permission is permanently denied, or the default-SMS role request comes back denied, show the steps — Settings → Apps → NoSpam → ⋮ → **Allow restricted settings**, then grant the permissions and retry. The user may need to attempt a grant once before the ⋮ entry appears. Add English and Persian strings (each module ships its own, `feature:onboarding`), and test with real Persian text. It can only be shown as advice: there is no API to detect the restricted state, so key it off "denied twice" / role denied.
   - [] README and release notes: put the same steps next to the GitHub download link so people see them before installing. Point `docs/` and the release workflow's notes text at one copy rather than restating it.
