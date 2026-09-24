@@ -337,16 +337,9 @@ fun NoSpamNavHost(
             AboutSettingsScreen(onNavigateUp = { navController.navigateUp() })
         }
         composable<OnboardingRoute> {
-            val scope = rememberCoroutineScope()
             OnboardingScreen(
                 onComplete = {
-                    // The inbox list was first read before the permissions
-                    // existed and cached as empty.
-                    container?.conversationsRepository?.refresh()
-                    scope.launch {
-                        container?.settingsRepository?.setBackfillPending(true)
-                        container?.spamBackfill?.ensureStarted()
-                    }
+                    container?.onSetupComplete()
                     navController.navigate(ConversationsRoute) {
                         popUpTo(OnboardingRoute) { inclusive = true }
                     }

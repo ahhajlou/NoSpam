@@ -2,7 +2,11 @@
 
 package com.nospam.nospam
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import com.nospam.nospam.core.notifications.SystemMessageSoundPlayer
 import com.nospam.nospam.core.notifications.MessageSoundPlayer
 import android.content.Context
@@ -34,6 +38,9 @@ import com.nospam.nospam.ui.ContactPhotoCache
  */
 class AppContainer(private val context: Context) {
     private val appContext: Context = context.applicationContext
+
+    /** For work that must outlive the screen that started it. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val database: NoSpamDatabase by lazy { NoSpamDatabase.persistent(appContext) }
 
@@ -110,5 +117,20 @@ class AppContainer(private val context: Context) {
             spamStateWriter = spamStateWriter,
             isSpamProtectionEnabled = { settingsRepository.isSpamProtectionEnabled() },
         )
+    }
+
+    /**
+     * Onboarding is done: every required permission and the SMS role are held.
+     * Runs here rather than in the onboarding screen's coroutine scope, which is
+     * cancelled as the screen leaves, and could stop the scan from starting.
+     */
+    fun onSetupComplete() {
+        // The inbox list was first read before the permissions existed.
+        conversationsRepository.refresh()
+        scope.launch {
+            // Pending first, so a process that dies mid-scan resumes it.
+            settingsRepository.setBackfillPending(true)
+            spamBackfill.ensureStarted()
+        }
     }
 }
