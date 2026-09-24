@@ -5,7 +5,9 @@ package com.nospam.nospam.feature.thread
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -56,6 +58,30 @@ class ThreadScreenRobolectricTest {
         rule.onNodeWithText("Not sent · Tap to retry").assertIsDisplayed().performClick()
         rule.waitForIdle()
         assertEquals(listOf("did not go"), fake.sentMessages.map { it.second })
+    }
+
+    @Test fun `sending while scrolled up brings the sent message into view`() {
+        val fake = com.nospam.nospam.core.testing.FakeTelephonyDataSource()
+        val thread = com.nospam.nospam.core.model.ThreadId(61)
+        fake.emitMessages(
+            thread,
+            (1..60).map {
+                com.nospam.nospam.core.model.Message(
+                    com.nospam.nospam.core.model.MessageId(it.toLong()), thread,
+                    "+15550061", "older message $it", it * 1_000L, com.nospam.nospam.core.model.MessageType.INBOX, true,
+                )
+            },
+        )
+        rule.setContent { ThreadScreen(threadId = 61L, viewModel = ThreadViewModel(fake)) }
+        rule.waitForIdle()
+        rule.onNode(hasScrollToIndexAction()).performScrollToIndex(60)
+        rule.onNodeWithText("older message 1").assertIsDisplayed()
+
+        rule.onNodeWithText("SMS message").performTextInput("sent from far up")
+        rule.onNodeWithContentDescription("Send message").performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText("sent from far up").assertIsDisplayed()
     }
 
     @Test fun `a message that is still sending says so`() {

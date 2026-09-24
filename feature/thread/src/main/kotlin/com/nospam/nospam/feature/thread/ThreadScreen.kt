@@ -143,6 +143,16 @@ fun ThreadScreen(
             lazyState.animateScrollToItem(0)
         }
     }
+    // Sending shows what was sent, however far up the list was, as Google
+    // Messages does. onSend adds the message to the state before returning, so
+    // by the time this runs it is item 0.
+    var scrollToSent by remember { mutableStateOf(false) }
+    LaunchedEffect(scrollToSent) {
+        if (scrollToSent) {
+            lazyState.animateScrollToItem(0)
+            scrollToSent = false
+        }
+    }
 
     val selection = rememberSelectionState()
     PruneSelection(selection, uiState.messages.map { it.id.value })
@@ -286,7 +296,10 @@ fun ThreadScreen(
                 ComposeBar(
                     draft = uiState.draft,
                     onDraftChanged = viewModel::onDraftChanged,
-                    onSend = viewModel::onSend,
+                    onSend = {
+                        viewModel.onSend()
+                        scrollToSent = true
+                    },
                     sims = uiState.sims,
                     selectedSimId = uiState.selectedSimId,
                     onSimSelected = viewModel::onSimSelected,
