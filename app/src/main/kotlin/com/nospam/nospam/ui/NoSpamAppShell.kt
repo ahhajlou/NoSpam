@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -154,9 +153,17 @@ private fun TopLevelItem(
     )
 }
 
-private fun NavHostController.navigateTopLevel(route: Any) = navigate(route) {
+/**
+ * Opens a drawer destination with only the inbox behind it, so back from any of
+ * them returns to the inbox and back again leaves the app, as in Google
+ * Messages. Pops to the inbox itself, not the graph's start destination: after a
+ * fresh install the start is onboarding, which removes itself on completion, and
+ * a popUpTo naming an entry that is not on the stack does nothing. Every drawer
+ * page then stacked on the last.
+ */
+internal fun NavHostController.navigateTopLevel(route: Any) = navigate(route) {
     launchSingleTop = true
-    popUpTo(graph.findStartDestination().id) { inclusive = false }
+    popUpTo<ConversationsRoute> { inclusive = false }
 }
 
 private fun NavDestination?.isOn(route: KClass<*>): Boolean =
