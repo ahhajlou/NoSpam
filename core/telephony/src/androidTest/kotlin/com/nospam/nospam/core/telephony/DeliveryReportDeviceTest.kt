@@ -41,52 +41,14 @@ class DeliveryReportDeviceTest {
         Manifest.permission.RECEIVE_SMS,
     )
 
+    @get:Rule
+    val smsRole = SmsRoleRule()
+
     private val context: Context get() = ApplicationProvider.getApplicationContext()
     private val inserted = mutableListOf<Uri>()
-    private var previousHolder: String? = null
 
-    private fun shell(command: String): String {
-        val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
-        return android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd).bufferedReader().use { it.readText() }
-    }
-
-    // getDefaultSmsPackage stays stale in this process after the shell changes the role.
-    private fun holdsSmsRole(): Boolean =
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-            context.getSystemService(android.app.role.RoleManager::class.java)
-                .isRoleHeld(android.app.role.RoleManager.ROLE_SMS)
-        } else {
-            Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-        }
-
-    private var roleTaken = false
-    private var addOutput = ""
-
-    /** Takes the SMS role for this test; skips the test when it cannot. */
-    private fun requireSmsRole() {
-        if (roleTaken) return
-        roleTaken = true
-        previousHolder = shell("cmd role get-role-holders android.app.role.SMS").trim().ifEmpty { null }
-        if (previousHolder != context.packageName) {
-            addOutput = shell("cmd role add-role-holder android.app.role.SMS ${context.packageName}")
-            // Role changes land asynchronously.
-            for (i in 0 until 50) {
-                if (holdsSmsRole()) break
-                Thread.sleep(100)
-            }
-        }
-        Assume.assumeTrue(
-            "Could not make ${context.packageName} the default SMS app (was $previousHolder; shell said: $addOutput)",
-            holdsSmsRole(),
-        )
-    }
-
-    @After fun cleanUpAndRestoreRole() {
+    @After fun cleanUp() {
         inserted.forEach { runCatching { context.contentResolver.delete(it, null, null) } }
-        val previous = previousHolder
-        if (roleTaken && previous != null && previous != context.packageName) {
-            shell("cmd role add-role-holder android.app.role.SMS $previous")
-        }
     }
 
     // --- Fixtures ---------------------------------------------------------------
@@ -94,7 +56,7 @@ class DeliveryReportDeviceTest {
     private val address = "+15557650042"
 
     private fun insertSentRow(status: Int): Uri {
-        requireSmsRole()
+        smsRole.require()
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, address)
             put(Telephony.Sms.BODY, "delivery report device test ${System.nanoTime()}")

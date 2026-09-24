@@ -22,7 +22,7 @@ how the previous version drifted into contradicting them.
 |---|---|---|---|
 | Unit, including every Compose screen | `src/test` in 17 modules | no | 339 tests |
 | Instrumented, storage | `core/database/src/androidTest` | yes | 44 tests in 10 files |
-| Instrumented, telephony | `core/telephony/src/androidTest` | yes | 4 tests, 3 run + 1 self-skipped |
+| Instrumented, telephony | `core/telephony/src/androidTest` | yes | 13 tests, all run (2026-09-24) |
 | End-to-end | `.maestro/flows` | yes | 12 flows, 8 run by default |
 | Manual checks | `tools/*.sh` | yes | permission gate, block/unblock persistence |
 
@@ -101,19 +101,23 @@ asserting the same things; those were folded into the JVM suites and deleted.
   `SqliteNoSpamOpenHelperTest` (every table is created, the version is 4, data
   survives a reopen).
 - `core:telephony` — `TelephonyInstrumentedTest` (the notification reply
-  action; plus an SMS insert/query round trip that **always self-skips**, see
-  below) and `TelephonyMapperDeviceTest` (real `ContentValues` mapping, which
-  JVM stubs cannot do). 3 run, 1 skipped.
+  action, and an SMS insert/query round trip), `TelephonyMapperDeviceTest` (real
+  `ContentValues` mapping, which JVM stubs cannot do) and
+  `DeliveryReportDeviceTest` (real 3GPP status-report PDUs recorded on real
+  rows). 13 tests, all run.
 
   Two things about this suite are easy to trip over. It is **self-instrumenting**:
   the test APK is `com.nospam.nospam.core.telephony.test`, and `:app`'s manifest
   is not part of it, so `core/telephony/src/androidTest/AndroidManifest.xml`
   declares the SMS permissions itself — without it `GrantPermissionRule` fails
   before any assertion with "Failed to grant permissions, see logcat for
-  details". And `sms_insert_and_query_round_trip` needs the *test* package to
-  hold the default-SMS role, which it cannot: the role needs the receivers and
-  service that live in `:app`. Its `Assume` therefore always fires, and writing
-  to the provider is covered end-to-end by the Maestro flows instead.
+  details". And a test that writes the provider needs the *test* package to
+  hold the default-SMS role. The role requires an SMS_DELIVER receiver and a
+  SENDTO activity, which live in `:app`, so the androidTest manifest declares
+  two inert stubs, and `SmsRoleRule` takes the role through the shell for the
+  test and hands it back. Until 2026-09-24 the round trip had no way to get the
+  role and always skipped. While a test holds the role a real incoming SMS goes
+  to the stub and is lost: use an emulator or a spare device.
 
 ```bash
 # grant the role first (tools/run-e2e.sh does it, or set it in system settings)

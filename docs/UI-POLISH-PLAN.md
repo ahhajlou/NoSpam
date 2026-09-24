@@ -12,7 +12,7 @@ archive the file when phase 2 merges.
 ## 0. Status
 
 **P1 complete 2026-09-20**, merged in PR #11.
-**P2 planned 2026-09-22** (§3). P2.1 to P2.10 done 2026-09-24. Next: P2.11, close-out.
+**P2 complete 2026-09-24** (§3), on `feat/phase2-backend-wiring`, not yet merged. Open for discussion with the user: the sender-count reset (TODO.md, spam-routing tasks).
 
 ## 1. Constraints
 
@@ -226,7 +226,7 @@ Design decisions:
       sounds with licences in `REUSE.toml`; foreground only (`ProcessLifecycleOwner`),
       background stays with the notification channel; the sent sound plays when a
       send is queued.
-- [ ] P2.11 **Close-out.** Raise the coverage ratchet to the measured value, run
+- [x] P2.11 **Close-out.** Raise the coverage ratchet to the measured value, run
       the full E2E suite, update CLAUDE.md (§2 module count and tier table, §4
       preferences, bulk and delivery, §6 `ACTION_SENDTO` implemented) and TODO.md.
 
@@ -454,6 +454,20 @@ None at the moment. Record new ones here with the answer when given.
   open; the rule is the spec's own table, so the exhaustive test still stands.
   The old test that asserted the sounds switch was disabled was removed: no
   General row is unbacked any more, and `NOT_WIRED_YET` is gone.
+- 2026-09-24 — P2.11, close-out. Coverage ratchet 63 -> 64 (measured 64.20%).
+  Every device suite run: `core:database` 50/50, `core:telephony` 13/13. The
+  telephony round trip, which had always skipped for want of the SMS role, now
+  runs: the role handling from P2.8 became a shared `SmsRoleRule`, and the test
+  was moved off the emulator's own number, whose real conversation it would have
+  deleted once it ran. Final state: 781 unit tests, 64.20% coverage, E2E 11/11
+  (plus `sim_number`, `manage_senders`, `swipe_actions` among them), launch-
+  intent check 4/4. CLAUDE.md, TESTING.md, TODO.md and both reviews updated
+  along the way.
+  Not done in phase 2, by decision: MMS (its own project in TODO.md), the
+  spam-routing rework, "warn about contacts", "simple characters", auto-delete
+  spam. Found and recorded for later: `tools/persistence_check.sh` sends from an
+  alphanumeric sender the emulator strips to digits; Not spam / Report spam reset
+  a sender's counts.
 
 ## 4. Phase 1 work breakdown
 

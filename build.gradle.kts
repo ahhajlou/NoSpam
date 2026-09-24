@@ -91,8 +91,10 @@ kover {
             // 2026-09-23 (phase 2 P2.1-P2.3): preferences, launch intents, the
             // settings pages and the list loading states brought their own
             // suites: 63.56% (3889/6119); ratchet 60 -> 63.
+            //
+            // 2026-09-24 (phase 2 close-out): 64.20% (4398/6851); ratchet 63 -> 64.
             rule("Merged line-coverage ratchet") {
-                minBound(63)
+                minBound(64)
             }
         }
     }

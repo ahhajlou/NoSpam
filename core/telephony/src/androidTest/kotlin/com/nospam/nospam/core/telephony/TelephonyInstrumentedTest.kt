@@ -4,7 +4,6 @@ package com.nospam.nospam.core.telephony
 
 import android.Manifest
 import android.content.Context
-import android.provider.Telephony
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
@@ -12,7 +11,6 @@ import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.notifications.NotificationHelper
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
-import org.junit.Assume
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,10 +18,10 @@ import org.junit.runner.RunWith
 /**
  * Runs on a real device or emulator (`./gradlew :core:telephony:connectedDebugAndroidTest`).
  *
- * The SMS round-trip test requires this app to be the default SMS app
- * (only the default app can write Telephony.Sms) and is skipped otherwise:
- * set it via Settings, or:
- *   adb shell cmd role add-role-holder android.app.role.SMS <test-package>
+ * The SMS round-trip test takes the default-SMS role for itself through
+ * [SmsRoleRule] (only the default app can write Telephony.Sms) and skips only
+ * when the role cannot be taken. It used to skip always, because it waited for
+ * someone to assign the role by hand.
  */
 @RunWith(AndroidJUnit4::class)
 class TelephonyInstrumentedTest {
@@ -35,19 +33,19 @@ class TelephonyInstrumentedTest {
         Manifest.permission.READ_CONTACTS,
     )
 
+    @get:Rule
+    val smsRole = SmsRoleRule()
+
     private val context: Context
         get() = ApplicationProvider.getApplicationContext()
 
-    private fun isDefaultSmsApp(): Boolean =
-        Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
-
     @Test fun sms_insert_and_query_round_trip() = runTest {
-        Assume.assumeTrue(
-            "Needs default-SMS role; skipping on this device",
-            isDefaultSmsApp(),
-        )
+        smsRole.require()
         val dataSource = RealTelephonyDataSource(context)
-        val address = "+15551234567"
+        // A number nobody has: the test deletes this whole conversation at the
+        // end. It used the emulator's own number, whose real thread it would
+        // have wiped once it actually ran.
+        val address = "+15557650077"
         val id = dataSource.insertInboxMessage(address, "instrumented hello", System.currentTimeMillis(), read = false)
         assertNotNull(id)
         val threadId = dataSource.getOrCreateThreadId(address)
