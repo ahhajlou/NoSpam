@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":core:database"))
     implementation(project(":core:telephony"))
     implementation(project(":core:ml"))
+    implementation(project(":core:preferences"))
     implementation(project(":core:common"))
     implementation(libs.kotlinx.coroutines.core)
     testImplementation(project(":core:testing"))

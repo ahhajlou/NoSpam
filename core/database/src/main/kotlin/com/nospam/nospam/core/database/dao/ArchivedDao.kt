@@ -10,6 +10,10 @@ interface ArchivedDao {
     fun observeAll(): Flow<List<ArchivedThreadEntity>>
     suspend fun archive(threadId: Long)
     suspend fun unarchive(threadId: Long)
+    /** Archives every thread in [threadIds] in one write. */
+    suspend fun archiveAll(threadIds: Collection<Long>)
+    /** Unarchives every thread in [threadIds] in one write. */
+    suspend fun unarchiveAll(threadIds: Collection<Long>)
     suspend fun isArchived(threadId: Long): Boolean
 }
 
@@ -28,5 +32,7 @@ class InMemoryArchivedDao : ArchivedDao {
         data.remove(threadId)
         refresh()
     }
+    override suspend fun archiveAll(threadIds: Collection<Long>) { data.addAll(threadIds); refresh() }
+    override suspend fun unarchiveAll(threadIds: Collection<Long>) { data.removeAll(threadIds.toSet()); refresh() }
     override suspend fun isArchived(threadId: Long): Boolean = threadId in data
 }

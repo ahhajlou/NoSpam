@@ -83,6 +83,23 @@ class SqliteArchivedDao(
         } }
     }
 
+    override suspend fun archiveAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.insertThreadIds("archived_threads", threadIds)
+            publish { current -> threadIds.fold(current) { acc, id -> acc.withThread(id) } }
+        } }
+    }
+
+    override suspend fun unarchiveAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.deleteThreadIds("archived_threads", threadIds)
+            val removed = threadIds.toSet()
+            publish { current -> current.filterNot { it.threadId in removed } }
+        } }
+    }
+
     override suspend fun isArchived(threadId: Long): Boolean = withContext(Dispatchers.IO) {
         helper.readableDatabase.query(
             "archived_threads", null, "threadId = ?", arrayOf(threadId.toString()), null, null, null

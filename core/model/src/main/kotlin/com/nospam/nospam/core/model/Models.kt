@@ -44,7 +44,19 @@ data class Message(
     val read: Boolean,
     val seen: Boolean = false,
     val subscriptionId: Int? = null,
+    /** For an outgoing message sent with a delivery report requested. */
+    val deliveryStatus: DeliveryStatus = DeliveryStatus.NONE,
 )
+
+/** What the recipient's network reported about an outgoing message. */
+enum class DeliveryStatus {
+    /** No report was asked for, or none can arrive. */
+    NONE,
+    /** Asked for; not reported yet. */
+    PENDING,
+    DELIVERED,
+    FAILED,
+}
 
 data class Conversation(
     val threadId: ThreadId,

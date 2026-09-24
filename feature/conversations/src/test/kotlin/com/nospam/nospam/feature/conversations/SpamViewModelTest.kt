@@ -14,12 +14,15 @@ import com.nospam.nospam.core.testing.FakeTelephonyDataSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -28,6 +31,10 @@ import org.junit.Test
  * Its KDoc ("Null repository -> null flow") does not match its non-nullable
  * constructor -- the testable contract is simply a pass-through of
  * ConversationsRepository.observeSpam(), per the spec.
+ *
+ * `conversations` is `StateFlow<List<Conversation>?>`: null until the first
+ * repository emission arrives, then the loaded (possibly empty) list. See
+ * the loading-state contract in the task brief.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SpamViewModelTest {
@@ -65,15 +72,47 @@ class SpamViewModelTest {
         val vm = SpamViewModel(repo)
         vm.conversations.test {
             var state = awaitItem()
-            while (state.isEmpty()) state = awaitItem()
+            while (state == null || state.isEmpty()) state = awaitItem()
             assertEquals(setOf(1L, 3L), state.map { it.threadId.value }.toSet())
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun `conversations is empty when no sender is flagged`() = runTest {
+    fun `conversations is null before the first load, then reflects the loaded list`() = runTest {
+        // Deliberately StandardTestDispatcher, not Unconfined: nothing about this
+        // test's assertions should depend on the eager Unconfined dispatch this
+        // file otherwise uses, so the null-before-load window is observed for
+        // real rather than skipped over by eager execution.
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephonyDataSource(listOf(conv(1, "+98911")))
+        val repo = ConversationsRepository(telephony, db, CoroutineScope(dispatcher))
+        db.senderStateDao.upsert(SenderStateEntity(normalizedAddress = "+98911", state = ThreadSpamState.SPAM))
+
+        val vm = SpamViewModel(repo)
+        assertNull(vm.conversations.value)
+
+        advanceUntilIdle()
+
+        vm.conversations.test {
+            var state = awaitItem()
+            while (state == null) state = awaitItem()
+            assertEquals(listOf(1L), state.map { it.threadId.value })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `conversations is an empty, non-null list once loaded when no sender is flagged`() = runTest {
         val vm = SpamViewModel(repository(conv(1, "+98911")))
-        assertEquals(emptyList<Conversation>(), vm.conversations.value)
+        vm.conversations.test {
+            var state = awaitItem()
+            while (state == null) state = awaitItem()
+            assertEquals(emptyList<Conversation>(), state)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }

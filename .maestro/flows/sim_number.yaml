@@ -1,0 +1,54 @@
+appId: com.nospam.nospam
+tags:
+  - settings
+  - sim
+---
+# The SIM page's "Phone number" dialog (phase 2, P2.7), on the device because
+# Robolectric cannot render a text field inside a dialog window. Assumes the
+# emulator's SIM "T-Mobile" reports +15551234567 as its number, and that no
+# number was entered before (the flow clears one it finds, and leaves none).
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- tapOn: "Open navigation menu"
+- tapOn: "Settings"
+- tapOn: "T-Mobile"
+
+# Start clean: clear a number a previous run may have left.
+- tapOn: "Phone number"
+- runFlow:
+    when:
+      visible: "Clear"
+    commands:
+      - tapOn: "Clear"
+      - tapOn: "Phone number"
+
+# Prefilled with the carrier's number; nothing entered yet, so no Clear.
+- assertVisible: "Your number on this SIM"
+- assertVisible: "+15551234567"
+- assertNotVisible: "Clear"
+
+# Save does nothing for text that is not a number, or for a blank field: the
+# dialog stays open. (Maestro reads "enabled" off the button's label, which is
+# always enabled, so the flow asserts the behaviour instead.)
+- tapOn: "+15551234567"
+- eraseText: 20
+- inputText: "abc"
+- tapOn: "Save"
+- assertVisible: "Your number on this SIM"
+- eraseText: 20
+- tapOn: "Save"
+- assertVisible: "Your number on this SIM"
+
+# A number saves, and the row says it was entered.
+- inputText: "+98 912 345 6789"
+- tapOn: "Save"
+- assertVisible: ".*\\+98 912 345 6789.*entered by you.*"
+
+# Clear removes it; the row falls back to the carrier's number.
+- tapOn: "Phone number"
+- assertVisible: "Clear"
+- tapOn: "Clear"
+- assertVisible: ".*\\+15551234567.*"
+- assertNotVisible: ".*entered by you.*"

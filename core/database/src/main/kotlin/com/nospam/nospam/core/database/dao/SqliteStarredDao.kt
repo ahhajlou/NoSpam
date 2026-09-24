@@ -61,5 +61,22 @@ class SqliteStarredDao(private val helper: SqliteNoSpamOpenHelper) : StarredDao 
     }
     override suspend fun star(threadId: Long) = withContext(Dispatchers.IO){ writeLock.withLock { val v = android.content.ContentValues().apply{ put("threadId", threadId)}; helper.writableDatabase.insertWithOnConflict("starred_threads", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE); publish { it.withThread(threadId) } } }
     override suspend fun unstar(threadId: Long) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("starred_threads", "threadId = ?", arrayOf(threadId.toString())); publish { it.withoutThread(threadId) } } } }
+    override suspend fun starAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.insertThreadIds("starred_threads", threadIds)
+            publish { current -> threadIds.fold(current) { acc, id -> acc.withThread(id) } }
+        } }
+    }
+
+    override suspend fun unstarAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.deleteThreadIds("starred_threads", threadIds)
+            val removed = threadIds.toSet()
+            publish { current -> current.filterNot { it.threadId in removed } }
+        } }
+    }
+
     override suspend fun isStarred(threadId: Long): Boolean = withContext(Dispatchers.IO){ helper.readableDatabase.query("starred_threads", null, "threadId = ?", arrayOf(threadId.toString()), null, null, null).use{ it.count>0 } }
 }

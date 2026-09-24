@@ -149,6 +149,7 @@ conversation the new rules would never have hidden.
 - [] Make SPAM non-sticky against ham: a ham message from a SPAM sender moves it
   back to the inbox as MIXED.
 - [] Add the "reply clears automatic spam state, never an explicit block" rule.
+- [] "Not spam" and "Report spam" overwrite the sender's counts. `markSendersNotSpam` writes a fresh `sender_state` (spamCount and hamCount 0) and `markSendersSpam` writes spamCount 1, hamCount 0, so the sender's history is lost. Seen 2026-09-23 through the new senders page: removing an allow can then only return the sender to CLEAN, never MIXED. Safe (it can only hide less) but it throws evidence away; keep the counts and change only state and override
 - [] Re-derive graduated SPAM rows on upgrade.
 
 ### Settings: what to expose, and the rule for deciding
@@ -161,19 +162,58 @@ that can cause a conversation to be hidden that otherwise would not be, is a new
 way to lose an OTP.
 
 Worth having:
-- [] **Manage blocked and allowed senders** — a real gap, not a preference.
+- [x] **Done 2026-09-23 (phase 2, P2.6):** Settings → Spam protection → Blocked and allowed senders lists this app's blocks, Android's system block list and "Not spam" senders, each undoable. Original entry: **Manage blocked and allowed senders** — a real gap, not a preference.
   Sticky rules are keyed to the sender and survive thread deletion, so today a
   user can block a number, delete the thread, and have no way to find or undo
   that rule. There is no such screen in `SettingsScreen.kt` today.
+  **Scheduled: phase 2 step 6** (`docs/UI-POLISH-PLAN.md` §3).
 - [] **"Warn about suspicious messages from contacts"** (default OFF, and only
   if users ask for it). Contacts bypass the classifier by default, so this
   toggle turns labelling on. Safe under the rule above because it can only add
   a warning, never hide a message. Not worth building speculatively.
-- Master spam protection on/off — already exists (`SpamPreferences.isEnabled`).
+  **Decided 2026-09-22:** the disabled placeholder row phase 1 added is removed
+  in phase 2 step 3. It comes back, if ever, with the routing rework above,
+  because until contacts actually bypass the classifier it has nothing to turn on.
+- Master spam protection on/off — already exists (`SettingsRepository.spamProtection`).
 
 Deliberately not offering: sensitivity sliders or aggressive/balanced/relaxed
 presets. Users cannot reason about a threshold they cannot see the effect of,
 and each preset needs its own correctness argument and test matrix.
+
+Also deliberately not offering (decided 2026-09-22):
+- **"Auto-delete spam after 30 days."** Phase 1 added it as a disabled row; phase 2
+  step 3 removes it. It would hide (in fact delete) more, which the rule above
+  forbids, and a 30-day auto-delete was already removed once as contradictory
+  (see "Bulk spam actions are irreversible and unconfirmed" below). Deleted SMS
+  cannot be recovered. `SpamRepository.pruneOldSpam` is unrelated: it drops old
+  automatic verdict rows and never touches messages.
+- **"Use simple characters"** (strip accents so a message fits GSM-7). The usual
+  implementation (NFD, then drop combining marks) also strips Persian harakat,
+  and Persian is sent as UCS-2 whatever we do, so for the first audience it
+  would damage text and save nothing. Revisit only with a GSM-7-aware
+  transliteration table that leaves non-Latin scripts alone.
+
+## MMS — its own project, not started (recorded 2026-09-22)
+
+MMS today is a stub: `core/telephony/.../receiver/MmsReceiver.kt` answers
+`WAP_PUSH_DELIVER` by inserting a fake SMS row from "MMS" reading "Media message
+not supported yet". There is no PDU parsing, no `downloadMultimediaMessage`, no
+MMS sending, no attachments. It was kept out of phase 2 on purpose: it needs its
+own architecture and a device on a carrier with a working MMSC to verify.
+
+Settings that depend on it stay **visible but disabled**, labelled as needing MMS
+support, until this lands: auto-download MMS, auto-download while roaming, and
+group messaging (which is sent as MMS). Scope when it starts:
+- [] Parse the WAP push notification indication, download through
+      `SmsManager.downloadMultimediaMessage` (per subscription), write to the
+      provider's `mms` tables, notify like SMS. Respect the auto-download and
+      roaming settings.
+- [] Classify MMS text parts through the same ingress and spam policy as SMS.
+- [] Render MMS in the thread (text + image parts first), and read MMS rows in
+      the inbox and the history backfill (see "Project-wide" below).
+- [] Send MMS: attachment picker in the compose bar (the dead attachment button
+      was removed in phase 1), `sendMultimediaMessage`, group conversations.
+- [] Persist the group-messaging choice per SIM (today `rememberSaveable` only).
 
 ## Found during the E2E wave (2026-09-14) — verified, not yet fixed
 
@@ -277,7 +317,10 @@ for when a new instrumented test is the right call.
   conversation with no natural undo, so it should follow the bulk-action
   confirmation rule recorded under "Bulk spam actions" above.
 
-- [] **`ACTION_SENDTO` handling is advertised but not implemented.** The
+- [x] **Done 2026-09-23 (phase 2, P2.2):** `SENDTO` opens a conversation with the
+  recipient and any `sms_body`, cold or warm; a notification tap opens its
+  thread too, which it never did. Checked by `tools/launch_intents_check.sh`.
+  Original entry: **`ACTION_SENDTO` handling is advertised but not implemented.** The
   manifest claims `sms:`, `smsto:`, `mms:` and `mmsto:` so other apps can hand
   off "compose SMS to X", and `MainActivity.handleSendToIntent()` normalizes the
   address and then only logs it, under a comment claiming NavHost deep-linking
@@ -296,7 +339,7 @@ left open deliberately.
 
 `ThreadViewModel.loadThread(id, address, context, forwardBody)` only ever
 overwrites `uiState.draft` in two cases: `forwardBody != null` (synchronous),
-or a persisted draft is found via `DraftStore.load(context, id)` on the live
+or a persisted draft is found via `DraftRepository.load(id)` on the live
 path (`dataSource != null`), and only if that thread actually has a saved
 draft. If neither applies — the common case of a plain reload with
 `forwardBody == null` and no persisted draft for the *target* thread — nothing
@@ -316,19 +359,19 @@ without sending.
 
 **Analyze again before touching `ThreadViewModel` code here.** In particular:
 whether a fresh thread with no persisted draft should explicitly reset to
-`""` up front, and whether doing so can race the async `DraftStore.load` (it
+`""` up front, and whether doing so can race the async `DraftRepository.load` (it
 runs in `viewModelScope.launch`, so an eager synchronous reset plus a later
 async overwrite needs to be ordered correctly, not just patched to "clear
 first").
 
 - [x] **Not reproducible through navigation (checked 2026-09-20 on the emulator).** Typing an unsent draft in one thread, going back and opening another leaves the second compose box empty: `composable<ThreadRoute>` creates its `ThreadViewModel` per back-stack entry, so no instance is ever reused across threads. The "one VM can serve successive routes" comment in `ThreadViewModel` is out of date. The code path described above still exists if a VM were ever shared; original item: draft carries over between threads when neither
-  `forwardBody` nor a persisted `DraftStore` entry exists for the
+  `forwardBody` nor a persisted `DraftRepository` entry exists for the
   newly-opened thread. `feature/thread/src/main/kotlin/com/nospam/nospam/feature/thread/ThreadViewModel.kt`, `loadThread()`.
 
 ## Drafts in the inbox — agreed model (2026-09-18)
 
-Today a draft is invisible outside its own thread: `DraftStore` is a DataStore
-in `feature:thread` keyed by thread id, the inbox shows no sign of it, and
+Today a draft is invisible outside its own thread: drafts are stored per thread
+id (`DraftRepository`, `core:data`, since 2026-09-23), the inbox shows no sign of it, and
 `Conversation.hasDraft` exists but is never set or rendered.
 
 **Verified on the emulator (Google Messages 20260331, as default SMS app):**
@@ -346,21 +389,24 @@ Agreed for a later phase:
   user is most likely to return to.
 - [] Set `Conversation.hasDraft` from the draft store rather than leaving the
   field unused.
-- [] Needs a home the inbox can read: `DraftStore` lives in `feature:thread`,
-  and `feature:conversations` must not depend on it. Move it to `core:data` (or
-  `core:database`) when this is built — that is also where the draft-carryover
-  bug below gets fixed.
+- [x] Needs a home the inbox can read. **Done 2026-09-23 (phase 2, P2.1):**
+  `DraftRepository` in `core:data`, same DataStore file and `draft_<id>` keys,
+  with `observeAll()` for the inbox. The old `DraftStore` in `feature:thread` is
+  gone; the draft-carryover bug below still has to be fixed against the new
+  class.
 - [] Decide then whether to also write drafts to the provider as `type=3`. It
   would make drafts visible to other SMS apps and survive a reinstall, which
   Messages does not bother with; weigh that against a second source of truth,
   which CLAUDE.md §4 warns about.
 
 ## Project-wide
-- [~] Reply on the conversation's own SIM. **Done 2026-09-20 for threads with history:** `Message.subscriptionId` is now read from the provider and `ThreadViewModel` defaults the SIM picker to the SIM the thread last used (a manual pick sticks). **Still open:** a thread with no history on an active SIM (a brand-new conversation) still starts on the first SIM instead of the system default SMS SIM, and when the SIM list is empty (phone permission missing, or single SIM) `sendMessage` still passes no subscription and `resolveSmsManager` falls back to the system default. Not tested on a dual-SIM device — the emulator has one SIM; the selection logic is covered by `ThreadViewModelContextTest` only
+- [~] Reply on the conversation's own SIM. **Done 2026-09-20 for threads with history:** `Message.subscriptionId` is now read from the provider and `ThreadViewModel` defaults the SIM picker to the SIM the thread last used (a manual pick sticks). **Done 2026-09-23 (phase 2, P2.7):** a thread with no SIM history now starts on the system default SMS SIM when it is active (unit-tested; the emulator has one SIM, so not seen on a device). **Still open:** when the SIM list is empty (phone permission missing, or single SIM) `sendMessage` still passes no subscription and `resolveSmsManager` falls back to the system default. Not tested on a dual-SIM device — the emulator has one SIM; the selection logic is covered by `ThreadViewModelContextTest` only
 - [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
 - [] Add instrumented tests for `core:telephony` provider query/write logic. Two device suites exist (`TelephonyInstrumentedTest`: one SMS insert/query round trip plus a notification build; `TelephonyMapperDeviceTest`: two `ContentValues` mappers) but nothing covers pagination, delete, mark-read or the SIM path. The thread pagination cursor bug above is exactly the kind this would have caught
 - [] MMS: extend history scan to MMS when the MMS-parsing architecture is ready (currently SMS-only in backfill)
+- [x] **Fixed 2026-09-23:** both ViewModels now start at `null` ("loading"), and both pages show the inbox's skeleton rows until the first load, then the list or the empty state. Spam had the same bug. Original entry: **Archived (and probably Spam) says "Archive is empty" while it is still loading.** `ArchivedViewModel` starts its `stateIn` from `emptyList()` (`feature/conversations/.../SpamViewModel.kt:25`) and `ArchivedScreen` shows the empty state for any empty list, so there is no loading state. Found 2026-09-23 because `archived_unarchive`, the first flow `tools/run-e2e.sh` runs after installing a new build, failed twice with an empty Archived page; the first load after an install is slow enough to outlast Maestro's wait. Rerun alone, and with the runner's exact install/role/grant/reseed sequence, it passes. (An earlier guess, that seeding ran before the database existed, was wrong: the rows were there.) Fix: a nullable or `Loading` initial state and the list skeleton the inbox already has; check `SpamViewModel` for the same
+- [] `tools/persistence_check.sh` sends its test SMS as `NSTEST_UNBLOCK1` through `adb emu sms send`, but the emulator console keeps only a sender's digits (verified 2026-09-23: `NSTEST_NOTIF1` arrived as address `1`), so the script's address checks are probably not testing what they say. It also taps `"Menu"`, which phase 1 renamed to "Open navigation menu". Re-check it before relying on it; `tools/launch_intents_check.sh` uses a numeric sender for this reason
 - [] Rename `com.nospam.nospam` applicationId/package before publishing
 - [] Onboarding does not react to permissions granted outside the app. Fresh install → onboarding shows → user grants the permissions from system Settings (App info → Permissions) instead of the in-app dialog → returns to the app: onboarding still shows the old state and the inbox is never reached until the app is force-closed and reopened. Check first: `NoSpamNavHost`'s resume check (CLAUDE.md §6) may only route *to* onboarding when permissions are missing and never route *away* from it once they are all granted, and the onboarding screen may compute its granted state once instead of re-reading on `ON_RESUME`. Expected: on resume, re-evaluate `requiredPermissions()` and continue to the inbox (or to the next step, the default-SMS role) without a restart. Not covered today — `tools/permission_gate_check.sh` only tests the revoke → resume direction; add the grant → resume direction there and a Robolectric test on the onboarding screen. Searched TODO.md, TASKS.md, REVIEW.md and docs/ on 2026-09-20: no existing report of this
 - [] Sideloaded installs hit Android's "restricted settings" block, with no in-app explanation. Verified 2026-09-20 on a Galaxy A26: the release APK downloaded from GitHub and installed from Samsung My Files (not a store, so Android restricts SMS-related permissions until the user allows it) showed "App was denied access to be default SMS app… restricted permissions", and the permission requests were declined twice so onboarding read "Android will not ask again". Play Protect's "This app looks safe" is a separate malware scan and does not lift it. The app cannot remove the restriction; only a store installer (Play, F-Droid, possibly Galaxy Store) or adb avoids it. Two pieces to build, both for the GitHub-APK route:

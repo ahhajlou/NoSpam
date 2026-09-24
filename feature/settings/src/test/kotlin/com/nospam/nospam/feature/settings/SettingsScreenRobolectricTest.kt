@@ -2,12 +2,13 @@
 
 package com.nospam.nospam.feature.settings
 
+import com.nospam.nospam.core.data.SettingsRepository
+import com.nospam.nospam.core.testing.FakePreferencesDataSource
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -67,17 +68,12 @@ class SettingsScreenRobolectricTest {
         rule.onNodeWithText("فارسی").assertIsDisplayed()
     }
 
-    @Test fun `settings without storage yet are shown disabled, not silently inert`() {
-        rule.setContent { GeneralSettingsScreen() }
-        rule.onNodeWithText("Choose theme").assertIsNotEnabled()
-        rule.onNodeWithText("Use wallpaper colors").assertIsNotEnabled()
-    }
-
     @Test fun `spam protection toggles off and back on`() {
-        rule.setContent { SpamSettingsScreen() }
+        val vm = SpamSettingsViewModel(SettingsRepository(FakePreferencesDataSource()))
+        rule.setContent { SpamSettingsScreen(viewModel = vm) }
         toggleables()[0].assertIsOn()
         toggleables()[0].performClick()
-        // The switch follows DataStore, which writes on its own dispatcher.
+        // The switch follows the stored value, not the click.
         rule.waitUntil(5_000) { toggleables()[0].fetchSemanticsNode().config
             .getOrNull(SemanticsProperties.ToggleableState) == ToggleableState.Off }
         toggleables()[0].performClick()

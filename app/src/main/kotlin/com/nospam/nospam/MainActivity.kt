@@ -2,16 +2,25 @@
 
 package com.nospam.nospam
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.nospam.nospam.navigation.LaunchTarget
+import com.nospam.nospam.navigation.toLaunchTarget
 import com.nospam.nospam.ui.NoSpamAppShell
+import kotlinx.coroutines.flow.MutableStateFlow
 
 // AppCompatActivity (not ComponentActivity): AppCompatDelegate applies
 // per-app locales and recreates activities on pre-33 devices only for
 // activities running through its delegate. Required for fa/RTL switching.
 class MainActivity : AppCompatActivity() {
+    /** A conversation an intent asked for, until the navigation graph opens it. */
+    private val launchTarget = MutableStateFlow<LaunchTarget?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Suppress Samsung Typeface / AppLocalesStorageHelper disk read violations (Fix 4).
         val oldPolicy = android.os.StrictMode.allowThreadDiskReads()
@@ -21,28 +30,26 @@ class MainActivity : AppCompatActivity() {
             android.os.StrictMode.setThreadPolicy(oldPolicy)
         }
         enableEdgeToEdge()
-        handleSendToIntent(intent)
+        // Only a fresh launch reads its intent. A recreated activity (rotation,
+        // process restore) gets the same intent back and must not open the
+        // conversation a second time.
+        if (savedInstanceState == null) launchTarget.value = intent?.toLaunchTarget()
+        val app = application as NoSpamApplication
         setContent {
-            NoSpamAppShell()
+            val target by launchTarget.collectAsState()
+            val dynamicColor by app.dynamicColor.collectAsState()
+            NoSpamAppShell(
+                dynamicColor = dynamicColor,
+                photoLoader = app.container.contactPhotos,
+                launchTarget = target,
+                onLaunchTargetHandled = { launchTarget.value = null },
+            )
         }
     }
 
-    override fun onNewIntent(intent: android.content.Intent) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleSendToIntent(intent)
-    }
-
-    private fun handleSendToIntent(intent: android.content.Intent?) {
-        if (intent?.action != android.content.Intent.ACTION_SENDTO) return
-        val address = intent.data?.schemeSpecificPart?.takeIf { it.isNotBlank() } ?: return
-        // Normalize via PhoneNumberUtils (E.164 when possible, else raw) and log.
-        // NavHost deep-link to NewConversation/Thread is wired via intent data.
-        val normalized = try {
-            android.telephony.PhoneNumberUtils.formatNumberToE164(
-                address, java.util.Locale.getDefault().country
-            ) ?: address.trim()
-        } catch (_: Exception) { address.trim() }
-        android.util.Log.d("MainActivity", "SENDTO for $normalized")
+        intent.toLaunchTarget()?.let { launchTarget.value = it }
     }
 }

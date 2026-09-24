@@ -2,6 +2,16 @@
 
 package com.nospam.nospam.feature.conversations
 
+import kotlinx.coroutines.launch
+import com.nospam.nospam.core.model.Conversation
+import com.nospam.nospam.core.model.SwipeAction
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -81,12 +91,16 @@ fun ConversationsScreen(
     viewModel: ConversationsViewModel = viewModel(),
     onConversationClick: (Long) -> Unit = {},
     onNewMessage: () -> Unit = {},
-    onSetRead: (Long, Boolean) -> Unit = { _, _ -> },
-    onArchive: (Long) -> Unit = {},
-    onReportSpam: (Long, String) -> Unit = { _, _ -> },
-    onBlock: (String) -> Unit = {},
-    onUnblock: (String) -> Unit = {},
-    onDelete: (Long) -> Unit = {},
+    // Multi-select actions hand over the whole selection in one call, so the
+    // data layer can apply it as one write instead of one per conversation.
+    onSetRead: (threadIds: List<Long>, read: Boolean) -> Unit = { _, _ -> },
+    onArchive: (threadIds: List<Long>) -> Unit = {},
+    onReportSpam: (conversations: List<Pair<Long, String>>) -> Unit = {},
+    onBlock: (addresses: List<String>) -> Unit = {},
+    onUnblock: (addresses: List<String>) -> Unit = {},
+    onDelete: (threadIds: List<Long>) -> Unit = {},
+    /** Undo for a swipe-archive. */
+    onUnarchive: (threadIds: List<Long>) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isDefault by viewModel.isDefaultSmsApp.collectAsStateWithLifecycle()
@@ -101,6 +115,41 @@ fun ConversationsScreen(
     val summary = summarize(selected)
     val ids = selected.map { it.threadId.value }
     var confirm by rememberSaveable { mutableStateOf<InboxConfirm?>(null) }
+    // A swipe-delete waiting for its confirmation.
+    var swipeDelete by rememberSaveable { mutableStateOf<Long?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val archivedMessage = stringResource(R.string.swipe_archived)
+    val undoLabel = stringResource(R.string.action_undo)
+    val archiveLabel = stringResource(R.string.menu_archive)
+    val deleteLabel = stringResource(R.string.menu_delete)
+    val markReadLabel = stringResource(R.string.menu_mark_read)
+    val markUnreadLabel = stringResource(R.string.menu_mark_unread)
+    // Settings name physical directions; the row takes layout directions. In a
+    // right-to-left layout a drag toward the end edge is a left swipe.
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val swipe = uiState.swipeActions
+    val startToEndAction = if (rtl) swipe.left else swipe.right
+    val endToStartAction = if (rtl) swipe.right else swipe.left
+    fun swipeSpec(action: SwipeAction, conv: Conversation): SwipeSpec? {
+        val id = conv.threadId.value
+        return when (action) {
+            SwipeAction.NONE -> null
+            SwipeAction.ARCHIVE -> SwipeSpec(archiveLabel, Icons.Outlined.Archive) {
+                onArchive(listOf(id))
+                scope.launch {
+                    val result = snackbar.showSnackbar(archivedMessage, actionLabel = undoLabel, duration = SnackbarDuration.Short)
+                    if (result == SnackbarResult.ActionPerformed) onUnarchive(listOf(id))
+                }
+            }
+            SwipeAction.DELETE -> SwipeSpec(deleteLabel, Icons.Outlined.Delete, keepsRow = true) { swipeDelete = id }
+            SwipeAction.TOGGLE_READ -> if (conv.read) {
+                SwipeSpec(markUnreadLabel, Icons.Outlined.MarkChatUnread, keepsRow = true) { onSetRead(listOf(id), false) }
+            } else {
+                SwipeSpec(markReadLabel, Icons.Outlined.MarkChatRead, keepsRow = true) { onSetRead(listOf(id), true) }
+            }
+        }
+    }
 
     fun act(block: () -> Unit) {
         block()
@@ -113,7 +162,7 @@ fun ConversationsScreen(
             icon = if (summary.allPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
         ) { act { viewModel.setPinned(ids, !summary.allPinned) } })
         add(TopBarAction(stringResource(R.string.menu_archive), Icons.Outlined.Archive) {
-            act { ids.forEach(onArchive) }
+            act { onArchive(ids) }
         })
         add(TopBarAction(stringResource(R.string.menu_delete), Icons.Outlined.Delete) {
             confirm = InboxConfirm.DELETE
@@ -121,7 +170,7 @@ fun ConversationsScreen(
         add(TopBarAction(
             label = stringResource(if (summary.anyUnread) R.string.menu_mark_read else R.string.menu_mark_unread),
             icon = if (summary.anyUnread) Icons.Outlined.MarkChatRead else Icons.Outlined.MarkChatUnread,
-        ) { act { ids.forEach { onSetRead(it, summary.anyUnread) } } })
+        ) { act { onSetRead(ids, summary.anyUnread) } })
         add(TopBarAction(
             label = stringResource(if (summary.allStarred) R.string.action_unstar else R.string.action_star),
             icon = if (summary.allStarred) Icons.Outlined.StarOutline else Icons.Outlined.Star,
@@ -139,11 +188,11 @@ fun ConversationsScreen(
             })
         }
         add(TopBarAction(stringResource(R.string.menu_report_spam), Icons.Outlined.Report, destructive = true) {
-            act { selected.forEach { onReportSpam(it.threadId.value, it.participants.firstOrNull()?.address.orEmpty()) } }
+            act { onReportSpam(selected.map { it.threadId.value to it.participants.firstOrNull()?.address.orEmpty() }) }
         })
         if (summary.allBlocked) {
             add(TopBarAction(stringResource(R.string.menu_unblock), Icons.Outlined.Block) {
-                act { addressesOf(selected).forEach(onUnblock) }
+                act { onUnblock(addressesOf(selected)) }
             })
         } else {
             add(TopBarAction(stringResource(R.string.menu_block), Icons.Outlined.Block, destructive = true) {
@@ -157,6 +206,7 @@ fun ConversationsScreen(
         onOpenDrawer = onOpenDrawer,
         selection = selection,
         selectionActions = actions,
+        snackbarHostState = snackbar,
         floatingActionButton = {
             FloatingActionButton(onClick = onNewMessage) {
                 Icon(Icons.Outlined.AddComment, contentDescription = stringResource(R.string.start_chat))
@@ -210,9 +260,12 @@ fun ConversationsScreen(
                     item(key = "header-pinned") { SectionHeader(stringResource(R.string.section_pinned)) }
                     items(uiState.pinned, key = { it.threadId.value }) { conv ->
                         val id = conv.threadId.value
-                        ConversationRow(
+                        SwipeableConversationRow(
                             conv = conv,
                             selected = id in selection.ids,
+                            swipeEnabled = !selection.isActive,
+                            startToEnd = swipeSpec(startToEndAction, conv),
+                            endToStart = swipeSpec(endToStartAction, conv),
                             onClick = { open(id) },
                             onLongClick = { selection.toggle(id) },
                             modifier = Modifier.animateItem(),
@@ -224,9 +277,12 @@ fun ConversationsScreen(
                 }
                 items(uiState.conversations, key = { it.threadId.value }) { conv ->
                     val id = conv.threadId.value
-                    ConversationRow(
+                    SwipeableConversationRow(
                         conv = conv,
                         selected = id in selection.ids,
+                        swipeEnabled = !selection.isActive,
+                        startToEnd = swipeSpec(startToEndAction, conv),
+                        endToStart = swipeSpec(endToStartAction, conv),
                         onClick = { open(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),
@@ -248,15 +304,25 @@ fun ConversationsScreen(
     when (confirm) {
         InboxConfirm.DELETE -> ConfirmDeleteDialog(
             count = selected.size,
-            onConfirm = { act { ids.forEach(onDelete) } },
+            onConfirm = { act { onDelete(ids) } },
             onDismiss = { confirm = null },
         )
         InboxConfirm.BLOCK -> ConfirmBlockDialog(
             count = addressesOf(selected).size,
-            onConfirm = { act { addressesOf(selected).forEach(onBlock) } },
+            onConfirm = { act { onBlock(addressesOf(selected)) } },
             onDismiss = { confirm = null },
         )
         null -> Unit
+    }
+    swipeDelete?.let { id ->
+        ConfirmDeleteDialog(
+            count = 1,
+            onConfirm = {
+                onDelete(listOf(id))
+                swipeDelete = null
+            },
+            onDismiss = { swipeDelete = null },
+        )
     }
 }
 

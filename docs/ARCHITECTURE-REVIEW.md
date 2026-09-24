@@ -216,6 +216,11 @@ wait for is a KSP release that supports AGP's built-in Kotlin, not a newer Room.
 
 ### P-1 — `allowBackup="true"` with template backup rules  *(carried from `REVIEW.md` L-13)*
 
+**Done 2026-09-23** (phase 2, P2.1): `allowBackup="false"`, `backup_rules.xml`
+deleted, and `data_extraction_rules.xml` excludes everything from cloud backup
+*and* device-to-device transfer. The second part matters: on Android 12+
+`allowBackup="false"` still permits device transfer. Original finding below.
+
 `app/src/main/AndroidManifest.xml:23` enables backup. Both referenced rule
 files, `res/xml/backup_rules.xml` and `res/xml/data_extraction_rules.xml`, are
 the untouched Android Studio templates with every rule commented out. The
@@ -261,7 +266,7 @@ Neither is dead code exactly; both advertise something the app does not do.
 
 - `NoSpamAppShell`'s "Mark all as read" drawer item closes the drawer and does
   nothing else.
-- `MainActivity.handleSendToIntent()` normalizes the incoming address and then
+- **Fixed 2026-09-23 (phase 2, P2.2).** `MainActivity.handleSendToIntent()` normalized the incoming address and then
   only logs it, under a comment claiming NavHost deep-linking is wired. The
   manifest advertises `sms:`, `smsto:`, `mms:` and `mmsto:` to other apps, so
   this is a broken advertised entry point rather than an unused private helper.

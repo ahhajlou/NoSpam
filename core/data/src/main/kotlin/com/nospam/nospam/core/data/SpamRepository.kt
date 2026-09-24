@@ -8,6 +8,7 @@ import com.nospam.nospam.core.database.entity.SpamVerdictEntity
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -42,30 +43,70 @@ class SpamRepository(
      * [SmsIngressUseCase] stores) — never by threadId, which is recycled and
      * caused the inbox/spam-section split (CLAUDE.md §15).
      */
-    suspend fun markSenderNotSpam(threadId: ThreadId, address: String) {
-        // Legacy per-thread row — kept for export/prune paths, no longer drives lists.
-        val existing = db.spamVerdictDao.getByThread(threadId.value)
-        if (existing != null) db.spamVerdictDao.upsert(existing.copy(isSpam = false, isUserOverride = true))
-        else db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = false, score = 0.0, isUserOverride = true))
+    suspend fun markSenderNotSpam(threadId: ThreadId, address: String) =
+        markSendersNotSpam(listOf(threadId to address))
+
+    /** [markSenderNotSpam] for a whole selection, the sender states in one write. */
+    suspend fun markSendersNotSpam(conversations: Collection<Pair<ThreadId, String>>) {
+        if (conversations.isEmpty()) return
+        for ((threadId, _) in conversations) {
+            // Legacy per-thread row — kept for export/prune paths, no longer drives lists.
+            val existing = db.spamVerdictDao.getByThread(threadId.value)
+            if (existing != null) db.spamVerdictDao.upsert(existing.copy(isSpam = false, isUserOverride = true))
+            else db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = false, score = 0.0, isUserOverride = true))
+        }
+        val states = conversations.map { normalizedAddress(it.second) }.distinct().map { addr ->
+            com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.TRUSTED, isUserOverride = true)
+        }
+        spamStateWriter.withSpamStateLock { db.senderStateDao.upsertAll(states) }
+    }
+
+    /** Senders the user marked "Not spam", most recent first, as normalised addresses. */
+    fun observeAllowedSenders(): Flow<List<String>> = db.senderStateDao.observeAll().map { states ->
+        states
+            .filter { it.state == ThreadSpamState.TRUSTED && it.isUserOverride }
+            .sortedByDescending { it.updatedAt }
+            .map { it.normalizedAddress }
+    }
+
+    /**
+     * Undoes "Not spam" for [address], so the sender is filtered automatically
+     * again. The state before the override is not kept, so it is rebuilt from
+     * the stored counts the same way unblocking does: MIXED when the sender has
+     * spam history, CLEAN otherwise; the counts themselves are kept. Only a
+     * user's TRUSTED override is changed, and no conversation is touched.
+     */
+    suspend fun removeAllow(address: String) {
         val addr = normalizedAddress(address)
         spamStateWriter.withSpamStateLock {
+            val current = db.senderStateDao.getByAddress(addr) ?: return@withSpamStateLock
+            if (current.state != ThreadSpamState.TRUSTED || !current.isUserOverride) return@withSpamStateLock
             db.senderStateDao.upsert(
-                com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.TRUSTED, isUserOverride = true)
+                current.copy(
+                    state = if (current.spamCount > 0) ThreadSpamState.MIXED else ThreadSpamState.CLEAN,
+                    isUserOverride = false,
+                    updatedAt = System.currentTimeMillis(),
+                )
             )
         }
     }
 
-    suspend fun markSenderSpam(threadId: ThreadId, address: String) {
-        // The user put this conversation in Spam; a pin would come back with it if
-        // they later say "Not spam" (Google Messages drops it too).
-        db.pinnedDao.unpin(threadId.value)
-        db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = true, score = 1.0, isUserOverride = true))
-        val addr = normalizedAddress(address)
-        spamStateWriter.withSpamStateLock {
-            db.senderStateDao.upsert(
-                com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.SPAM, isUserOverride = true, spamCount = 1)
-            )
+    suspend fun markSenderSpam(threadId: ThreadId, address: String) =
+        markSendersSpam(listOf(threadId to address))
+
+    /** The user's "Report spam" for a whole selection, the sender states in one write. */
+    suspend fun markSendersSpam(conversations: Collection<Pair<ThreadId, String>>) {
+        if (conversations.isEmpty()) return
+        // The user put these conversations in Spam; a pin would come back with one
+        // if they later say "Not spam" (Google Messages drops it too).
+        db.pinnedDao.unpinAll(conversations.map { it.first.value })
+        for ((threadId, _) in conversations) {
+            db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = true, score = 1.0, isUserOverride = true))
         }
+        val states = conversations.map { normalizedAddress(it.second) }.distinct().map { addr ->
+            com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.SPAM, isUserOverride = true, spamCount = 1)
+        }
+        spamStateWriter.withSpamStateLock { db.senderStateDao.upsertAll(states) }
     }
 
     // Per-message actions inside MIXED — do not touch sender override

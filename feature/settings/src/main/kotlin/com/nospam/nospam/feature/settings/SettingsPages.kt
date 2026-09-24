@@ -2,6 +2,13 @@
 
 package com.nospam.nospam.feature.settings
 
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -47,19 +54,23 @@ import com.nospam.nospam.core.designsystem.component.SettingsSectionHeader
 import com.nospam.nospam.core.designsystem.component.SettingsSwitchItem
 import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
+import com.nospam.nospam.core.designsystem.theme.isDynamicColorSupported
 import com.nospam.nospam.core.i18n.LocaleHelper
+import com.nospam.nospam.core.model.SwipeAction
+import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.telephony.DefaultSmsApp
 import kotlinx.coroutines.launch
-
-// Settings whose storage does not exist yet are shown disabled rather than as
-// controls that look live and silently forget (docs/UI-POLISH-PLAN.md §3).
-private const val NOT_WIRED_YET = false
 
 @Composable
 fun GeneralSettingsScreen(
     onNavigateUp: () -> Unit = {},
+    viewModel: GeneralSettingsViewModel = viewModel(),
 ) {
     val context = LocalContext.current
+    val appearance by viewModel.uiState.collectAsState()
+    var showThemeDialog by rememberSaveable { mutableStateOf(false) }
+    // Which direction's swipe dialog is open: true for right, false for left.
+    var swipeDialogRight by rememberSaveable { mutableStateOf<Boolean?>(null) }
     var isDefault by remember { mutableStateOf(isDefaultSmsApp(context)) }
     var notificationsEnabled by remember { mutableStateOf(areNotificationsEnabled(context)) }
     var bubblesAllowed by remember { mutableStateOf(areBubblesAllowed(context)) }
@@ -119,25 +130,64 @@ fun GeneralSettingsScreen(
         SettingsGroup {
             SettingsItem(
                 title = stringResource(R.string.theme_title),
-                supportingText = stringResource(R.string.theme_system),
-                enabled = NOT_WIRED_YET,
-                onClick = {},
+                supportingText = themeName(appearance.theme),
+                onClick = { showThemeDialog = true },
             )
-            SettingsSwitchItem(
-                title = stringResource(R.string.dynamic_color_title),
-                supportingText = stringResource(R.string.dynamic_color_sub),
-                checked = false,
-                onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
-            )
+            // Hidden rather than disabled below Android 12: the device cannot
+            // do it, so there is nothing to wait for.
+            if (isDynamicColorSupported) {
+                SettingsSwitchItem(
+                    title = stringResource(R.string.dynamic_color_title),
+                    supportingText = stringResource(R.string.dynamic_color_sub),
+                    checked = appearance.dynamicColor,
+                    onCheckedChange = viewModel::setDynamicColor,
+                )
+            }
             SettingsSwitchItem(
                 title = stringResource(R.string.sounds_title),
                 supportingText = stringResource(R.string.sounds_sub),
-                checked = false,
-                onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
+                checked = appearance.messageSounds,
+                onCheckedChange = viewModel::setMessageSounds,
             )
         }
+
+        SettingsSectionHeader(stringResource(R.string.section_swipe))
+        SettingsGroup {
+            SettingsItem(
+                title = stringResource(R.string.swipe_right_title),
+                supportingText = swipeActionName(appearance.swipeActions.right),
+                onClick = { swipeDialogRight = true },
+            )
+            SettingsItem(
+                title = stringResource(R.string.swipe_left_title),
+                supportingText = swipeActionName(appearance.swipeActions.left),
+                onClick = { swipeDialogRight = false },
+            )
+        }
+    }
+
+    swipeDialogRight?.let { right ->
+        SwipeActionDialog(
+            title = stringResource(if (right) R.string.swipe_right_title else R.string.swipe_left_title),
+            selected = if (right) appearance.swipeActions.right else appearance.swipeActions.left,
+            onSelect = { action ->
+                val current = appearance.swipeActions
+                viewModel.setSwipeActions(if (right) current.copy(right = action) else current.copy(left = action))
+                swipeDialogRight = null
+            },
+            onDismiss = { swipeDialogRight = null },
+        )
+    }
+
+    if (showThemeDialog) {
+        ThemeDialog(
+            selected = appearance.theme,
+            onSelect = {
+                viewModel.setTheme(it)
+                showThemeDialog = false
+            },
+            onDismiss = { showThemeDialog = false },
+        )
     }
 
     if (showLanguageDialog) {
@@ -159,72 +209,153 @@ fun SimSettingsScreen(
     onNavigateUp: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(),
 ) {
-    val sim = viewModel.simById(subscriptionId)
-    var showGroupDialog by rememberSaveable { mutableStateOf(false) }
-    var groupMode by rememberSaveable { mutableStateOf("mass") }
+    // Collected, not read once: the SIM list loads asynchronously, and a page
+    // opened before it arrives must fill in when it does.
+    val state by viewModel.uiState.collectAsState()
+    val sim = state.sims.firstOrNull { it.subscriptionId == subscriptionId }
+    val needsMms = stringResource(R.string.needs_mms)
+    val entered = state.enteredNumbers[subscriptionId]
+    var editNumber by rememberSaveable { mutableStateOf(false) }
 
     SettingsScaffold(
         title = sim?.displayName ?: stringResource(R.string.sim_title),
         navigation = TopBarNavigation.Back(onNavigateUp),
     ) {
         SettingsGroup {
+            // Group messaging and the two download settings only mean something
+            // once MMS exists (TODO.md "MMS"). Shown, so the page says what is
+            // coming, but disabled and saying why.
             SettingsItem(
                 title = stringResource(R.string.group_title),
-                supportingText = if (groupMode == "mass") stringResource(R.string.group_mass_individual) else stringResource(R.string.group_mms),
-                onClick = { showGroupDialog = true },
+                supportingText = needsMms,
+                enabled = false,
+                onClick = {},
             )
             SettingsSwitchItem(
                 title = stringResource(R.string.mms_title),
-                supportingText = stringResource(R.string.mms_sub),
-                checked = true,
+                supportingText = needsMms,
+                checked = false,
                 onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
+                enabled = false,
             )
             SettingsSwitchItem(
                 title = stringResource(R.string.mms_roaming_title),
-                supportingText = stringResource(R.string.mms_roaming_sub),
+                supportingText = needsMms,
                 checked = false,
                 onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
+                enabled = false,
             )
             SettingsSwitchItem(
                 title = stringResource(R.string.delivery_reports_title),
                 supportingText = stringResource(R.string.delivery_reports_sub),
-                checked = false,
-                onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
+                checked = subscriptionId in state.deliveryReportSims,
+                onCheckedChange = { viewModel.setDeliveryReports(subscriptionId, it) },
             )
         }
 
         SettingsSectionHeader(stringResource(R.string.sim_section_details))
         SettingsGroup {
+            // Many carriers leave the number off the SIM, so the user can say it.
+            val number = entered ?: sim?.number
             SettingsItem(
                 title = stringResource(R.string.sim_number_title),
-                supportingText = sim?.number?.let(::isolateIfPhoneNumber) ?: stringResource(R.string.sim_number_unknown),
-                onClick = null,
+                supportingText = when {
+                    number == null -> stringResource(R.string.sim_number_unknown_enter)
+                    entered != null -> stringResource(R.string.sim_number_entered, isolateIfPhoneNumber(number))
+                    else -> isolateIfPhoneNumber(number)
+                },
+                onClick = { editNumber = true },
             )
         }
     }
 
-    if (showGroupDialog) {
-        GroupMessagingDialog(
-            selected = groupMode,
-            onSelect = {
-                groupMode = it
-                showGroupDialog = false
+    if (editNumber) {
+        SimNumberDialog(
+            initial = entered ?: sim?.number.orEmpty(),
+            canClear = entered != null,
+            onSave = {
+                viewModel.setSimNumber(subscriptionId, it)
+                editNumber = false
             },
-            onDismiss = { showGroupDialog = false },
+            onClear = {
+                viewModel.setSimNumber(subscriptionId, null)
+                editNumber = false
+            },
+            onDismiss = { editNumber = false },
         )
     }
+}
+
+/**
+ * Whether [text] can be saved as a SIM's number: not blank, and only digits and
+ * the usual phone punctuation (`+ - ( )` and spaces), because it is shown as a
+ * number. Length is capped separately, by [MAX_SIM_NUMBER_LENGTH].
+ */
+internal fun isValidSimNumber(text: String): Boolean =
+    text.isNotBlank() && text.all { it.isDigit() || it in "+-() " }
+
+/** Longest number accepted; E.164 is at most 15 digits, this leaves room for formatting. */
+private const val MAX_SIM_NUMBER_LENGTH = 24
+
+@Composable
+private fun SimNumberDialog(
+    initial: String,
+    canClear: Boolean,
+    onSave: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // The cursor starts after the prefilled number, so typing continues it
+    // rather than landing in the middle of it.
+    var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initial, TextRange(initial.length)))
+    }
+    val text = field.text
+    val valid = isValidSimNumber(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sim_number_dialog_title)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.sim_number_dialog_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = field,
+                    onValueChange = { if (it.text.length <= MAX_SIM_NUMBER_LENGTH) field = it },
+                    label = { Text(stringResource(R.string.sim_number_title)) },
+                    singleLine = true,
+                    isError = text.isNotBlank() && !valid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    // A number reads left to right in every language.
+                    textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
+                    modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }, enabled = valid) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            Row {
+                if (canClear) {
+                    TextButton(onClick = onClear) { Text(stringResource(R.string.action_clear)) }
+                }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+            }
+        },
+    )
 }
 
 @Composable
 fun SpamSettingsScreen(
     onNavigateUp: () -> Unit = {},
+    onOpenSenders: () -> Unit = {},
+    viewModel: SpamSettingsViewModel = viewModel(),
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val spamEnabled by remember { SpamPreferences.flow(context) }.collectAsState(initial = true)
+    val state by viewModel.uiState.collectAsState()
 
     SettingsScaffold(
         title = stringResource(R.string.section_spam),
@@ -234,21 +365,13 @@ fun SpamSettingsScreen(
             SettingsSwitchItem(
                 title = stringResource(R.string.spam_title),
                 supportingText = stringResource(R.string.spam_sub),
-                checked = spamEnabled,
-                onCheckedChange = { scope.launch { SpamPreferences.setEnabled(context, it) } },
+                checked = state.spamProtection,
+                onCheckedChange = viewModel::setSpamProtection,
             )
             SettingsItem(
                 title = stringResource(R.string.blocked_senders_title),
                 supportingText = stringResource(R.string.blocked_senders_sub),
-                enabled = NOT_WIRED_YET,
-                onClick = {},
-            )
-            SettingsSwitchItem(
-                title = stringResource(R.string.warn_contacts_title),
-                supportingText = stringResource(R.string.warn_contacts_sub),
-                checked = false,
-                onCheckedChange = {},
-                enabled = NOT_WIRED_YET,
+                onClick = onOpenSenders,
             )
         }
     }
@@ -278,12 +401,6 @@ fun AdvancedSettingsScreen(
                     onRecheck()
                     scope.launch { snackbarHostState.showSnackbar(recheckStarted) }
                 },
-            )
-            SettingsItem(
-                title = stringResource(R.string.auto_delete_spam_title),
-                supportingText = stringResource(R.string.auto_delete_spam_sub),
-                enabled = NOT_WIRED_YET,
-                onClick = {},
             )
             SettingsItem(
                 title = stringResource(R.string.data_title),
@@ -378,24 +495,42 @@ private fun LanguageDialog(selected: String, onSelect: (String) -> Unit, onDismi
 }
 
 @Composable
-private fun GroupMessagingDialog(selected: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
+private fun themeName(theme: ThemeSetting): String = when (theme) {
+    ThemeSetting.SYSTEM -> stringResource(R.string.theme_system)
+    ThemeSetting.LIGHT -> stringResource(R.string.theme_light)
+    ThemeSetting.DARK -> stringResource(R.string.theme_dark)
+}
+
+@Composable
+private fun swipeActionName(action: SwipeAction): String = stringResource(
+    when (action) {
+        SwipeAction.NONE -> R.string.swipe_none
+        SwipeAction.ARCHIVE -> R.string.swipe_archive
+        SwipeAction.DELETE -> R.string.swipe_delete
+        SwipeAction.TOGGLE_READ -> R.string.swipe_toggle_read
+    }
+)
+
+@Composable
+private fun SwipeActionDialog(
+    title: String,
+    selected: SwipeAction,
+    onSelect: (SwipeAction) -> Unit,
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.group_title)) },
+        title = { Text(title) },
         text = {
             Column {
-                RadioRow(
-                    selected = selected == "mass",
-                    title = stringResource(R.string.group_mass),
-                    subtitle = stringResource(R.string.group_mass_sub),
-                    onClick = { onSelect("mass") },
-                )
-                RadioRow(
-                    selected = selected == "mms",
-                    title = stringResource(R.string.group_mms),
-                    subtitle = stringResource(R.string.group_mms_sub),
-                    onClick = { onSelect("mms") },
-                )
+                SwipeAction.entries.forEach { action ->
+                    RadioRow(
+                        selected = selected == action,
+                        title = swipeActionName(action),
+                        subtitle = null,
+                        onClick = { onSelect(action) },
+                    )
+                }
             }
         },
         confirmButton = {
@@ -405,7 +540,30 @@ private fun GroupMessagingDialog(selected: String, onSelect: (String) -> Unit, o
 }
 
 @Composable
-private fun RadioRow(selected: Boolean, title: String, subtitle: String, onClick: () -> Unit) {
+private fun ThemeDialog(selected: ThemeSetting, onSelect: (ThemeSetting) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.theme_title)) },
+        text = {
+            Column {
+                ThemeSetting.entries.forEach { theme ->
+                    RadioRow(
+                        selected = selected == theme,
+                        title = themeName(theme),
+                        subtitle = if (theme == ThemeSetting.SYSTEM) stringResource(R.string.theme_system_sub) else null,
+                        onClick = { onSelect(theme) },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
+        },
+    )
+}
+
+@Composable
+private fun RadioRow(selected: Boolean, title: String, subtitle: String?, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -416,7 +574,9 @@ private fun RadioRow(selected: Boolean, title: String, subtitle: String, onClick
         RadioButton(selected = selected, onClick = null)
         Column(modifier = Modifier.padding(start = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

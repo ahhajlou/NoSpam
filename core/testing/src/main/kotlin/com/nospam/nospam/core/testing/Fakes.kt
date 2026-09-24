@@ -6,6 +6,7 @@ import com.nospam.nospam.core.common.PermissionChecker
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.*
 import com.nospam.nospam.core.telephony.TelephonyDataSource
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -109,6 +110,12 @@ class FakeTelephonyDataSource(
     var nextThreadId: Long = 42L
     var sendResult: Result<Unit> = Result.success(Unit)
     var subscriptions: List<TelephonyDataSource.SimInfo> = emptyList()
+
+    /**
+     * When set, [getActiveSubscriptions] suspends until it completes: a seam for
+     * testing screens opened before the SIM list has loaded.
+     */
+    var subscriptionsGate: CompletableDeferred<Unit>? = null
     /** When true, `insertInboxMessage` returns null instead of an incrementing id
      *  -- simulates a failed provider write (e.g. Result.messageId == null). */
     var failInsertInbox: Boolean = false
@@ -153,7 +160,17 @@ class FakeTelephonyDataSource(
         return older.takeLast(limit)
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?, messageId: Long?): Result<Unit> {
+    /** The [SendOptions] passed to each `sendMessage`, in order. */
+    val sentOptions = mutableListOf<com.nospam.nospam.core.telephony.SendOptions>()
+
+    override suspend fun sendMessage(
+        address: String,
+        body: String,
+        subscriptionId: Int?,
+        messageId: Long?,
+        options: com.nospam.nospam.core.telephony.SendOptions,
+    ): Result<Unit> {
+        sentOptions.add(options)
         sentMessages.add(Triple(address, body, subscriptionId))
         sentMessageIds.add(messageId)
         return sendResult
@@ -174,8 +191,24 @@ class FakeTelephonyDataSource(
 
     override suspend fun markAsUnread(threadId: ThreadId) {}
 
+    /** One entry per `setThreadsRead` call: the thread ids and the read flag. */
+    val setThreadsReadCalls = mutableListOf<Pair<List<Long>, Boolean>>()
+
+    override suspend fun setThreadsRead(threadIds: Collection<ThreadId>, read: Boolean) {
+        setThreadsReadCalls += threadIds.map { it.value } to read
+        if (read) markedReadThreadIds.addAll(threadIds.map { it.value })
+    }
+
     override suspend fun deleteConversation(threadId: ThreadId) {
         deletedThreadIds.add(threadId.value)
+    }
+
+    /** One entry per `deleteConversations` call. */
+    val deleteConversationsCalls = mutableListOf<List<Long>>()
+
+    override suspend fun deleteConversations(threadIds: Collection<ThreadId>) {
+        deleteConversationsCalls += threadIds.map { it.value }
+        deletedThreadIds.addAll(threadIds.map { it.value })
     }
 
     override suspend fun deleteMessage(messageId: Long) {
@@ -203,13 +236,37 @@ class FakeTelephonyDataSource(
 
     override suspend fun isSystemBlocked(address: String): Boolean = address in systemBlocked
 
+    override suspend fun getSystemBlockedNumbers(): List<String> = systemBlocked.toList()
+
     override suspend fun lookupContact(address: String): Participant? = contacts[address]
+
+    /** Photo bytes by photo URI; a URI not in the map has no photo. */
+    val contactPhotos = mutableMapOf<String, ByteArray>()
+    /** Every URI [loadContactPhoto] was asked for, in order. */
+    val loadedContactPhotos = mutableListOf<String>()
+
+    /** When set, [loadContactPhoto] throws it: a stand-in for a provider failure. */
+    var contactPhotoError: Exception? = null
+
+    override suspend fun loadContactPhoto(photoUri: String): ByteArray? {
+        loadedContactPhotos += photoUri
+        contactPhotoError?.let { throw it }
+        return contactPhotos[photoUri]
+    }
 
     override suspend fun hasOutboundMessages(threadId: ThreadId): Boolean = false
 
     override suspend fun getOutboundSenderAddresses(): Set<String> = outboundAddresses
 
-    override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> = subscriptions
+    /** What [getDefaultSmsSubscriptionId] returns. */
+    var defaultSmsSubscriptionId: Int? = null
+
+    override suspend fun getDefaultSmsSubscriptionId(): Int? = defaultSmsSubscriptionId
+
+    override suspend fun getActiveSubscriptions(): List<TelephonyDataSource.SimInfo> {
+        subscriptionsGate?.await()
+        return subscriptions
+    }
 
     override suspend fun searchBodyMatch(query: String): Set<Long> = emptySet()
 

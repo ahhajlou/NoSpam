@@ -12,6 +12,7 @@ import android.net.Uri
 import android.provider.Telephony
 import android.util.Log
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.telephony.receiver.SmsDeliveredReceiver
 import com.nospam.nospam.core.telephony.receiver.SmsSentReceiver
 
 /**
@@ -34,16 +35,33 @@ internal object SmsSender {
      * the outcome, or null when this app could not write one (not the default
      * SMS app; the system then stores the message itself).
      */
-    fun send(context: Context, address: String, body: String, subscriptionId: Int?, messageUri: Uri?) {
+    fun send(
+        context: Context,
+        address: String,
+        body: String,
+        subscriptionId: Int?,
+        messageUri: Uri?,
+        options: SendOptions = SendOptions(),
+    ) {
         val mgr = context.resolveSmsManager(subscriptionId)
         val parts = mgr.divideMessage(body)
         val sent = messageUri?.let { sentIntent(context, it) }
+        // A report can only be recorded against a row, so none is asked for without one.
+        val delivered = if (options.deliveryReport && messageUri != null) {
+            setDeliveryStatus(context, messageUri, ProviderStatus.PENDING)
+            deliveredIntent(context, messageUri)
+        } else null
         if (parts.size <= 1) {
-            mgr.sendTextMessage(address, null, body, sent, null)
+            mgr.sendTextMessage(address, null, body, sent, delivered)
         } else {
-            // One result per part; the same intent for each. FAILED sticks: a
-            // later part that succeeds only moves an OUTBOX row (see [recordResult]).
-            mgr.sendMultipartTextMessage(address, null, parts, sent?.let { s -> ArrayList(parts.map { s }) }, null)
+            // One result and one report per part; the same intents for each.
+            // FAILED sticks: a later part that succeeds only moves an OUTBOX row
+            // (see [recordResult]) and never clears a failed report (see [recordDelivery]).
+            mgr.sendMultipartTextMessage(
+                address, null, parts,
+                sent?.let { s -> ArrayList(parts.map { s }) },
+                delivered?.let { d -> ArrayList(parts.map { d }) },
+            )
         }
     }
 
@@ -56,6 +74,39 @@ internal object SmsSender {
             .setClassName(context.packageName, SmsSentReceiver::class.java.name)
             .setData(messageUri)
         return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /** Explicit and immutable, like [sentIntent]; the platform adds the report's PDU. */
+    private fun deliveredIntent(context: Context, messageUri: Uri): PendingIntent {
+        val intent = Intent(SmsDeliveredReceiver.ACTION_SMS_DELIVERED)
+            .setClassName(context.packageName, SmsDeliveredReceiver::class.java.name)
+            .setData(messageUri)
+        return PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    /**
+     * Records a delivery report ([pdu] in [format]) on the row, following
+     * [nextDeliveryStatus] so parts of one message cannot undo each other.
+     */
+    fun recordDelivery(context: Context, messageUri: Uri, pdu: ByteArray, format: String?) {
+        try {
+            val report = android.telephony.SmsMessage.createFromPdu(pdu, format) ?: return
+            val current = context.contentResolver.query(messageUri, arrayOf(Telephony.Sms.STATUS), null, null, null)
+                ?.use { c -> if (c.moveToFirst()) c.getInt(0) else null } ?: return
+            val next = nextDeliveryStatus(current, statusForReport(report.status)) ?: return
+            setDeliveryStatus(context, messageUri, next)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not record delivery report for $messageUri", e)
+        }
+    }
+
+    private fun setDeliveryStatus(context: Context, messageUri: Uri, status: Int) {
+        try {
+            val values = ContentValues().apply { put(Telephony.Sms.STATUS, status) }
+            context.contentResolver.update(messageUri, values, null, null)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not set delivery status $status for $messageUri", e)
+        }
     }
 
     /** Applies the radio's verdict to the row. A part failure is never overwritten by a later success. */

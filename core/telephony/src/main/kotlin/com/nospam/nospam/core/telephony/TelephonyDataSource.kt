@@ -24,13 +24,30 @@ interface TelephonyDataSource {
      * truncated and never loaded in one query.
      */
     suspend fun getMessages(threadId: ThreadId, limit: Int = MESSAGES_PAGE_SIZE, before: Message? = null): List<Message>
-    suspend fun sendMessage(address: String, body: String, subscriptionId: Int? = null, messageId: Long? = null): Result<Unit>
+    suspend fun sendMessage(
+        address: String,
+        body: String,
+        subscriptionId: Int? = null,
+        messageId: Long? = null,
+        options: SendOptions = SendOptions(),
+    ): Result<Unit>
     /** Writes an outgoing message as OUTBOX (sending) before it is sent. Null when this app may not write the provider. */
     suspend fun insertOutboxMessage(address: String, body: String, date: Long, subscriptionId: Int? = null): Long?
     suspend fun updateMessageType(messageId: Long, type: com.nospam.nospam.core.model.MessageType)
     suspend fun markAsRead(threadId: ThreadId)
     suspend fun markAsUnread(threadId: ThreadId)
+    /**
+     * Marks every message of every thread in [threadIds] read or unread, in one
+     * provider write per few hundred threads rather than one per thread.
+     * Best-effort, like the single-thread forms.
+     */
+    suspend fun setThreadsRead(threadIds: Collection<ThreadId>, read: Boolean)
     suspend fun deleteConversation(threadId: ThreadId)
+    /**
+     * Deletes every message of every thread in [threadIds], in one provider
+     * delete per few hundred threads rather than one per thread. Best-effort.
+     */
+    suspend fun deleteConversations(threadIds: Collection<ThreadId>)
     /** Deletes a single message row. Best-effort: a no-op if it no longer exists. */
     suspend fun deleteMessage(messageId: Long)
     /** Inserts an incoming message into the system inbox. Returns the row id, or null on failure. */
@@ -41,11 +58,25 @@ interface TelephonyDataSource {
     suspend fun getOrCreateThreadId(address: String): Long
     suspend fun updateMessageRead(messageId: Long, read: Boolean)
     suspend fun isSystemBlocked(address: String): Boolean
+    /**
+     * Every number in Android's own block list (blocks made from the dialer or
+     * another app as well as ours), as stored. Empty when this app may not read
+     * it, which is whenever it is not the default SMS app.
+     */
+    suspend fun getSystemBlockedNumbers(): List<String>
     suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant?
+    /**
+     * The encoded image behind a contact's photo URI (as found in
+     * [com.nospam.nospam.core.model.Participant.photoUri]), or null when there is
+     * none, it cannot be read, or the URI is not a contacts-provider URI.
+     */
+    suspend fun loadContactPhoto(photoUri: String): ByteArray?
     suspend fun hasOutboundMessages(threadId: com.nospam.nospam.core.model.ThreadId): Boolean
     /** All sender addresses this app has sent to — batch protectFromSpam signal for history scans. */
     suspend fun getOutboundSenderAddresses(): Set<String>
     suspend fun getActiveSubscriptions(): List<SimInfo>
+    /** The SIM the system uses for SMS by default, or null when there is none (single SIM, or "ask every time"). */
+    suspend fun getDefaultSmsSubscriptionId(): Int?
     suspend fun searchBodyMatch(query: String): Set<Long>
     suspend fun getContacts(limit: Int = 50, query: String? = null): List<com.nospam.nospam.core.model.ContactEntry>
     suspend fun getAllMessages(): List<com.nospam.nospam.core.model.Message>

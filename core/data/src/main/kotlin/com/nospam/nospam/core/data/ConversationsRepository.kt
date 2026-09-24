@@ -216,9 +216,21 @@ class ConversationsRepository(
         }.flowOn(Dispatchers.IO)
     }
 
-    suspend fun setRead(threadId: ThreadId, read: Boolean) {
-        if (read) telephony.markAsRead(threadId) else telephony.markAsUnread(threadId)
+    // Every multi-thread action is one call taking the whole selection. Each
+    // flag table is written in one transaction and publishes once, so the
+    // inbox changes once per table touched rather than once per thread, and a
+    // failure cannot leave half a selection done within a table. The provider
+    // and nospam.db are separate databases, so an action spanning both is not
+    // atomic across them: the provider is written first.
+
+    suspend fun setRead(threadId: ThreadId, read: Boolean) = setRead(listOf(threadId), read)
+
+    suspend fun setRead(threadIds: Collection<ThreadId>, read: Boolean) {
+        if (threadIds.isEmpty()) return
+        telephony.setThreadsRead(threadIds, read)
     }
+
+    suspend fun archive(threadId: ThreadId) = archive(listOf(threadId))
 
     /**
      * Archiving also drops the pin, as Google Messages does (checked on the
@@ -226,12 +238,19 @@ class ConversationsRepository(
      * A pin on a conversation the user has put away would otherwise reappear
      * the day they unarchive it.
      */
-    suspend fun archive(threadId: ThreadId) {
-        db.pinnedDao.unpin(threadId.value)
-        db.archivedDao.archive(threadId.value)
+    suspend fun archive(threadIds: Collection<ThreadId>) {
+        if (threadIds.isEmpty()) return
+        val ids = threadIds.map { it.value }
+        db.pinnedDao.unpinAll(ids)
+        db.archivedDao.archiveAll(ids)
     }
 
-    suspend fun unarchive(threadId: ThreadId) = db.archivedDao.unarchive(threadId.value)
+    suspend fun unarchive(threadId: ThreadId) = unarchive(listOf(threadId))
+
+    suspend fun unarchive(threadIds: Collection<ThreadId>) {
+        if (threadIds.isEmpty()) return
+        db.archivedDao.unarchiveAll(threadIds.map { it.value })
+    }
 
     suspend fun toggleStar(threadId: ThreadId) {
         if (db.starredDao.isStarred(threadId.value)) db.starredDao.unstar(threadId.value) else db.starredDao.star(threadId.value)
@@ -242,20 +261,48 @@ class ConversationsRepository(
     suspend fun toggleMute(threadId: ThreadId) {
         if (db.mutedDao.isMuted(threadId.value)) db.mutedDao.unmute(threadId.value) else db.mutedDao.mute(threadId.value)
     }
-    suspend fun setStar(threadId: ThreadId, starred: Boolean) { if (starred) db.starredDao.star(threadId.value) else db.starredDao.unstar(threadId.value) }
-    suspend fun setPin(threadId: ThreadId, pinned: Boolean) { if (pinned) db.pinnedDao.pin(threadId.value) else db.pinnedDao.unpin(threadId.value) }
-    suspend fun setMute(threadId: ThreadId, muted: Boolean) { if (muted) db.mutedDao.mute(threadId.value) else db.mutedDao.unmute(threadId.value) }
+    suspend fun setStar(threadId: ThreadId, starred: Boolean) = setStar(listOf(threadId), starred)
+    suspend fun setPin(threadId: ThreadId, pinned: Boolean) = setPin(listOf(threadId), pinned)
+    suspend fun setMute(threadId: ThreadId, muted: Boolean) = setMute(listOf(threadId), muted)
+
+    suspend fun setStar(threadIds: Collection<ThreadId>, starred: Boolean) {
+        val ids = threadIds.map { it.value }.ifEmpty { return }
+        if (starred) db.starredDao.starAll(ids) else db.starredDao.unstarAll(ids)
+    }
+
+    suspend fun setPin(threadIds: Collection<ThreadId>, pinned: Boolean) {
+        val ids = threadIds.map { it.value }.ifEmpty { return }
+        if (pinned) db.pinnedDao.pinAll(ids) else db.pinnedDao.unpinAll(ids)
+    }
+
+    suspend fun setMute(threadIds: Collection<ThreadId>, muted: Boolean) {
+        val ids = threadIds.map { it.value }.ifEmpty { return }
+        if (muted) db.mutedDao.muteAll(ids) else db.mutedDao.unmuteAll(ids)
+    }
 
     suspend fun searchBodyMatch(query: String): Set<Long> = telephony.searchBodyMatch(query)
 
+    suspend fun deleteConversation(threadId: ThreadId) = deleteConversations(listOf(threadId))
+
     /**
-     * Deletes the provider thread and drops app-owned rows (verdicts, archive
-     * flags) so a re-created thread doesn't inherit stale state.
+     * Deletes the provider threads, then drops every app-owned row keyed by
+     * those thread ids: verdicts and all four flags. The provider recycles
+     * thread ids, so a flag left behind would land on an unrelated future
+     * conversation; archive was cleared before, pin, star and mute were not.
+     * The sender's state (block, not-spam, counts) is kept: it is keyed by
+     * address and deliberately survives deleting the conversation.
      */
-    suspend fun deleteConversation(threadId: ThreadId) {
-        telephony.deleteConversation(threadId)
-        db.spamVerdictDao.deleteByThread(threadId.value)
-        db.messageVerdictDao.deleteByThread(threadId.value)
-        db.archivedDao.unarchive(threadId.value)
+    suspend fun deleteConversations(threadIds: Collection<ThreadId>) {
+        if (threadIds.isEmpty()) return
+        telephony.deleteConversations(threadIds)
+        val ids = threadIds.map { it.value }
+        for (id in ids) {
+            db.spamVerdictDao.deleteByThread(id)
+            db.messageVerdictDao.deleteByThread(id)
+        }
+        db.archivedDao.unarchiveAll(ids)
+        db.pinnedDao.unpinAll(ids)
+        db.starredDao.unstarAll(ids)
+        db.mutedDao.unmuteAll(ids)
     }
 }

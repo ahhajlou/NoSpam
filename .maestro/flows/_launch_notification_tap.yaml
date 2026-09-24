@@ -1,0 +1,15 @@
+appId: com.nospam.nospam
+tags:
+  - launch
+  - manual-only
+---
+# Parts 3 and 4 of tools/launch_intents_check.sh: a real incoming SMS
+# (`adb emu sms send 15557770002 ...`) posted a notification and the script
+# opened the shade. Tapping it opens that conversation, not just the inbox:
+# the compose box only exists inside a thread.
+- tapOn: "${TEXT}"
+- assertVisible: ".*5557770002.*"
+- assertVisible: "${TEXT}"
+- assertVisible: "SMS message"
+- tapOn: "Navigate up"
+- assertVisible: "Inbox"

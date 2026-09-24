@@ -87,8 +87,14 @@ kover {
             // were folded into their Robolectric counterparts and three dead
             // components deleted, so the uncovered Compose surface shrank:
             // 60.39% (3470/5746); ratchet 54 -> 60.
+            //
+            // 2026-09-23 (phase 2 P2.1-P2.3): preferences, launch intents, the
+            // settings pages and the list loading states brought their own
+            // suites: 63.56% (3889/6119); ratchet 60 -> 63.
+            //
+            // 2026-09-24 (phase 2 close-out): 64.20% (4398/6851); ratchet 63 -> 64.
             rule("Merged line-coverage ratchet") {
-                minBound(60)
+                minBound(64)
             }
         }
     }
@@ -106,6 +112,7 @@ dependencies {
     kover(project(":core:ml"))
     kover(project(":core:notifications"))
     kover(project(":core:i18n"))
+    kover(project(":core:preferences"))
     kover(project(":core:data"))
     kover(project(":core:testing"))
     kover(project(":feature:conversations"))

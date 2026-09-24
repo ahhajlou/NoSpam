@@ -5,17 +5,21 @@ package com.nospam.nospam.feature.thread
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nospam.nospam.core.data.DraftRepository
+import com.nospam.nospam.core.data.SettingsRepository
 import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.isOutgoing
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.telephony.SendOptions
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class ThreadUiState(
@@ -25,6 +29,8 @@ data class ThreadUiState(
     val address: String? = null,
     /** Contact name for [address], when the address is in the user's contacts. */
     val contactName: String? = null,
+    /** That contact's photo, when they have one. */
+    val contactPhotoUri: String? = null,
     val draft: String = "",
     val spamMessageIds: Set<Long> = emptySet(),
     val onMarkNotSpam: ((Long) -> Unit)? = null,
@@ -42,18 +48,27 @@ data class ThreadUiState(
  * system provider via [TelephonyDataSource.observeMessages], so incoming SMS
  * appear without leaving the screen; sending goes through SmsManager +
  * sent-box write with an optimistic row for instant feedback.
+ * @param drafts when null (previews, tests that do not care), drafts are not
+ * persisted.
+ * @param settings when null, the SIM picker shows the carrier's numbers only,
+ * not ones the user entered.
  */
 class ThreadViewModel(
     private val dataSource: TelephonyDataSource? = null,
     initialAddress: String? = null,
     private val spamRepository: SpamRepository? = null,
+    private val drafts: DraftRepository? = null,
+    private val settings: SettingsRepository? = null,
+    /** Called once a message the user sent was handed to the radio: the sent sound. */
+    private val onMessageQueued: suspend () -> Unit = {},
 ) : ViewModel() {
     // The other party for threads reached from New Conversation, which have
     // no messages yet. Mutable because one VM instance can serve successive
     // ThreadRoutes (same navigation scope).
     private var pendingAddress: String? = initialAddress
-    private var lastContext: android.content.Context? = null
     private var simPickedByUser = false
+    // The system's default SMS SIM, read with the SIM list.
+    private var defaultSimId: Int? = null
 
     private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
@@ -75,18 +90,18 @@ class ThreadViewModel(
 
     fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null, forwardBody: String? = null) {
         if (address != null) pendingAddress = address
-        if (context != null) lastContext = context.applicationContext
         // Cancel notification for this thread when user opens it (no core:notifications dep)
         context?.let { ctx ->
             runCatching { androidx.core.app.NotificationManagerCompat.from(ctx).cancel(id.toInt()) }
         }
         // A forwarded message's body wins over any previously-saved draft for
-        // this thread; skip the DataStore load so it doesn't get overwritten.
+        // this thread; skip the saved-draft load so it doesn't get overwritten.
+        val drafts = this.drafts
         if (forwardBody != null) {
             _uiState.value = _uiState.value.copy(draft = forwardBody)
-        } else if (context != null) {
+        } else if (drafts != null) {
             viewModelScope.launch {
-                val draft = runCatching { DraftStore.load(context, id) }.getOrNull()
+                val draft = drafts.load(id)
                 // Never overwrite text the user has already started typing.
                 if (draft != null && _uiState.value.draft.isEmpty()) {
                     _uiState.value = _uiState.value.copy(draft = draft)
@@ -96,7 +111,10 @@ class ThreadViewModel(
         if (context != null) {
             // Load SIMs for dual-SIM picker
             viewModelScope.launch {
-                val sims = dataSource?.getActiveSubscriptions() ?: emptyList()
+                val carrier = dataSource?.getActiveSubscriptions() ?: emptyList()
+                val entered = settings?.simNumbers?.first().orEmpty()
+                val sims = carrier.map { sim -> entered[sim.subscriptionId]?.let { sim.copy(number = it) } ?: sim }
+                defaultSimId = runCatching { dataSource?.getDefaultSmsSubscriptionId() }.getOrNull()
                 _uiState.value = _uiState.value.copy(sims = sims)
                 syncSelectedSim()
             }
@@ -122,7 +140,7 @@ class ThreadViewModel(
         _uiState.value = _uiState.value.copy(
             threadId = id, messages = emptyList(), spamMessageIds = emptySet(),
             hasMoreOlder = false, loadingOlder = false,
-            address = pendingAddress, contactName = null,
+            address = pendingAddress, contactName = null, contactPhotoUri = null,
         )
         pendingAddress?.let(::resolveContact)
         messagesJob?.cancel()
@@ -162,15 +180,21 @@ class ThreadViewModel(
     }
 
     /**
-     * Contact name for the title. A miss (unknown number, no permission) leaves
-     * [ThreadUiState.contactName] null and the screen falls back to the address.
+     * Contact name and photo for the title. A miss (unknown number, no
+     * permission) leaves both null and the screen falls back to the address and
+     * a letter avatar.
      */
     private fun resolveContact(address: String) {
         val dataSource = this.dataSource ?: return
         contactJob?.cancel()
         contactJob = viewModelScope.launch {
-            val name = runCatching { dataSource.lookupContact(address)?.displayName }.getOrNull()
-            if (name != null) _uiState.value = _uiState.value.copy(contactName = name)
+            val contact = runCatching { dataSource.lookupContact(address) }.getOrNull()
+            if (contact?.displayName != null) {
+                _uiState.value = _uiState.value.copy(
+                    contactName = contact.displayName,
+                    contactPhotoUri = contact.photoUri,
+                )
+            }
         }
     }
 
@@ -229,9 +253,9 @@ class ThreadViewModel(
 
     fun onDraftChanged(text: String) {
         _uiState.value = _uiState.value.copy(draft = text)
-        lastContext?.let { ctx ->
+        drafts?.let { store ->
             val id = _uiState.value.threadId
-            viewModelScope.launch { runCatching { DraftStore.save(ctx, id, text) } }
+            viewModelScope.launch { store.save(id, text) }
         }
     }
 
@@ -245,6 +269,13 @@ class ThreadViewModel(
      * recorded it, not always on the first SIM. Falls back to the first SIM when
      * the thread has no history on an active one. Never overrides the user's pick.
      */
+    /**
+     * Which SIM a reply goes out on, unless the user picked one: the SIM this
+     * thread last used, else the one already selected, else the system's
+     * default SMS SIM, else the first. The default matters for a conversation
+     * with no history, which used to start on the first SIM whatever the
+     * phone's setting was.
+     */
     private fun syncSelectedSim() {
         if (simPickedByUser) return
         val state = _uiState.value
@@ -253,7 +284,10 @@ class ThreadViewModel(
         val threadSim = state.messages
             .lastOrNull { it.subscriptionId != null && it.subscriptionId in active && it.id.value > 0 }
             ?.subscriptionId
-        val chosen = threadSim ?: state.selectedSimId?.takeIf { it in active } ?: state.sims.first().subscriptionId
+        val chosen = threadSim
+            ?: state.selectedSimId?.takeIf { it in active }
+            ?: defaultSimId?.takeIf { it in active }
+            ?: state.sims.first().subscriptionId
         if (chosen != state.selectedSimId) _uiState.value = state.copy(selectedSimId = chosen)
     }
 
@@ -306,8 +340,8 @@ class ThreadViewModel(
         _uiState.value = current.copy(draft = "", messages = merged())
         // The persisted draft is the text just sent; leaving it would bring the
         // sent message back as a draft the next time the thread opens.
-        lastContext?.let { ctx ->
-            viewModelScope.launch { runCatching { DraftStore.save(ctx, current.threadId, "") } }
+        drafts?.let { store ->
+            viewModelScope.launch { store.save(current.threadId, "") }
         }
         val selectedSim = current.selectedSimId
         viewModelScope.launch { deliver(address, body, selectedSim, existingId = null) }
@@ -321,10 +355,15 @@ class ThreadViewModel(
     private suspend fun deliver(address: String, body: String, sim: Int?, existingId: Long?) {
         val dataSource = this.dataSource ?: return
         val rowId = existingId ?: dataSource.insertOutboxMessage(address, body, System.currentTimeMillis(), sim)
-        val result = dataSource.sendMessage(address, body, subscriptionId = sim, messageId = rowId)
+        val reports = sim != null && settings?.deliveryReportSims?.first()?.contains(sim) == true
+        val result = dataSource.sendMessage(
+            address, body, subscriptionId = sim, messageId = rowId, options = SendOptions(deliveryReport = reports),
+        )
         if (result.isFailure) {
             Log.w(TAG, "SmsManager send failed", result.exceptionOrNull())
             if (rowId == null) restoreUnsent(address, body)
+        } else {
+            runCatching { onMessageQueued() }
         }
         // No manual reload: the provider observer re-emits and reconciles.
     }

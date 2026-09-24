@@ -21,13 +21,13 @@ A full replacement SMS/MMS messenger for Android.
 
 ## 2. Modules
 
-18 Gradle modules. They are not all the same kind of thing, and the distinction
+19 Gradle modules. They are not all the same kind of thing, and the distinction
 matters more than the count:
 
 | Tier | Modules | Rule |
 |---|---|---|
 | Leaf | `core:model`, `core:common`, `core:designsystem` | No project dependencies at all. Anything may depend on them. |
-| Capability | `core:database`, `core:telephony`, `core:ml`, `core:notifications`, `core:i18n` | One platform capability each. Depend only on leaf modules, **never on each other**. |
+| Capability | `core:database`, `core:telephony`, `core:ml`, `core:notifications`, `core:i18n`, `core:preferences` | One platform capability each. Depend only on leaf modules, **never on each other**. |
 | Aggregator | `core:data` | The repository layer. Depends on leaf plus every capability module it needs. |
 | Test support | `core:testing` | Fakes. Depends on leaf plus the capability modules whose interfaces it implements. Never on a production classpath. |
 | Shipping feature | `feature:conversations`, `feature:thread`, `feature:settings`, `feature:onboarding` | One navigable area each. |
@@ -41,7 +41,7 @@ here rather than restate a count, which is how the previous file drifted.
 **The real dependency rule**, as the code actually enforces it: a capability
 module never depends on another capability module. Verified — `core:database`
 sees only `core:model`; `core:telephony`, `core:ml` and `core:i18n` see only
-leaves. `core:data` depending on four capability modules is the point of
+leaves; `core:preferences` sees nothing. `core:data` depending on five capability modules is the point of
 `core:data`, not a violation.
 
 The previous file claimed no `core` module depended on any other `core` module,
@@ -93,6 +93,22 @@ DAOs never query in `<init>`. They expose a `MutableStateFlow` initialised
 lazily via `onStart { withContext(IO) { … } }` behind an `AtomicBoolean`, so
 building the DI container does not touch disk on the main thread.
 
+**Preferences live in `core:preferences`**, an untyped key-value
+`PreferencesDataSource` over DataStore, one file per `PreferenceFile`. What the
+keys mean, their defaults and the failure policy belong to the repositories in
+`core:data` (`SettingsRepository`, `DraftRepository`); features and `:app` use
+only those, never DataStore directly. Two rules: a `PreferenceFile.fileName` is
+the on-disk name installed apps already have, so never rename one; and each file
+has exactly one `preferencesDataStore` delegate in the process, because DataStore
+fails when two instances open the same file. Storage errors never reach callers:
+a failed read is the default (chosen so that degrading is safe, e.g. spam
+protection on), a failed write is logged and dropped.
+
+**Nothing is backed up or transferred.** `allowBackup="false"` plus
+`data_extraction_rules.xml` excluding every domain; the second is what stops
+device-to-device transfer on Android 12+. The app's data is keyed by phone
+number, and subscription ids mean nothing on another phone.
+
 **Ingress ordering.** `SmsIngressUseCase` inserts the incoming message into the
 provider with `READ=0` *before* classifying, then updates read state and verdict
 afterwards. Classification is wrapped in `withTimeout(8_000)` so a slow model
@@ -109,6 +125,40 @@ user's side of the thread"; do not compare against `SENT` alone. Both send
 paths (`RealTelephonyDataSource`, `HeadlessSmsSendService`) go through
 `SmsSender`. When this app is not the default SMS app the `OUTBOX` insert fails
 and the send proceeds without a row (the system stores that message itself).
+
+**Delivery reports** are per SIM and off by default (`SettingsRepository
+.deliveryReportSims`). When on, `SmsSender` marks the row `status = PENDING` and
+passes a `deliveryIntent` naming `SmsDeliveredReceiver` (explicit, immutable,
+not exported), which reads the report's TP-Status from its PDU and updates
+`status`. Parts of a long message report separately against one row, so a
+failure sticks and "delivered" never overwrites it (`nextDeliveryStatus`).
+`HeadlessSmsSendService` cannot take parameters, so it reads the setting from
+`SendOptionsRegistry`, which `:app` fills from memory at startup: the service
+must not block on a DataStore read. The emulator's network never sends
+status reports, so on an emulator a requested report stays PENDING; the parsing
+is covered by a device test that builds a real status-report PDU.
+
+**How an incoming message announces itself** is `incomingAlert`
+(`core:notifications`): only a message the spam policy lets notify does
+anything; if its conversation is the one on screen (`AppContainer.visibleThread`,
+set by the thread screen while resumed) there is no notification, only the
+in-app received sound when message sounds are on (the default), as Google
+Messages does. Sounds are Android's own (`SystemMessageSoundPlayer`: default
+notification sound, a system confirmation tone for sent), nothing bundled, and
+silent unless the ringer is in normal mode.
+
+**Multi-select actions are one call with the whole selection**, never a loop
+of single calls from the UI. Each flag table (archived, pinned, starred, muted)
+takes the selection in one transaction and publishes once, so the inbox changes
+once per table rather than once per conversation (a loop of 50 archives was
+measured at 37 intermediate inbox states), and a failure cannot leave half a
+selection done within a table. Provider writes go as `thread_id IN (...)` in
+chunks of 500. The provider and `nospam.db` are separate databases, so an action
+spanning both is not atomic across them; the provider is written first. Deleting
+a conversation clears every thread-keyed row (verdicts and all four flags,
+because the provider recycles thread ids) and keeps `sender_state`. Block and
+unblock still go sender by sender inside the call: Android's own block list has
+no bulk form.
 
 **Address normalisation is the join key everywhere.** E.164 via
 `PhoneNumberUtils`, falling back to the trimmed upper-cased raw value for
@@ -150,7 +200,12 @@ self-contained:
 - `HeadlessSmsSendService` for `ACTION_RESPOND_VIA_MESSAGE`, requiring
   `SEND_RESPOND_VIA_MESSAGE`. Also the direct-reply target.
 - An activity handling `ACTION_SENDTO` for `sms:`/`smsto:`/`mms:`/`mmsto:`.
-  **Advertised but not implemented** — see `TODO.md`.
+  `parseLaunchIntent` (`:app` navigation) turns it, and a notification's
+  `VIEW` + `thread_id`, into a `LaunchTarget`; `NoSpamNavHost` opens it once,
+  after the onboarding gate. `MainActivity` is `singleTop` so a tap lands in
+  `onNewIntent` rather than a second copy of the app, and reads its start
+  intent only when `savedInstanceState` is null so rotation does not reopen it.
+  Device check: `tools/launch_intents_check.sh`.
 - Role request on API 29+ through `roleManager.createRequestRoleIntent(ROLE_SMS)`
   launched via the Activity Result API. There is no public intent action to
   build by hand. Pre-Q, fall back to `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT`
@@ -287,6 +342,17 @@ val LightColors = lightColorScheme(
 )
 ```
 
+**The user's light/dark choice is applied as `AppCompatDelegate` night mode**,
+not as a flag passed to `NoSpamTheme`. Night mode also reaches what Compose does
+not draw: the window background, the system bar icons (`enableEdgeToEdge`'s auto
+style reads the configuration) and AppCompat views such as the emoji picker, and
+`NoSpamTheme`'s default `isSystemInDarkTheme()` then reflects it. It must be set
+before the first activity exists, or AppCompat recreates the activity and a
+forced theme flashes the system one: `NoSpamApplication.applyAppearance()` reads
+it there, blocking, but only when `ui_settings` exists on disk (measured 21-38ms
+for the read on a debug emulator, 1ms for the existence check). Dynamic color is
+a `StateFlow` the activity passes to `NoSpamTheme`.
+
 **Open item:** the export only defines a light scheme. Either hand-tune a dark
 scheme with the same role semantics, or generate one from the seed color
 (`dynamicColorScheme` / Material color-scheme builder) and eyeball it — don't ship
@@ -313,12 +379,12 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 ## 9. Testing
 
-| Layer | Where | State as of 2026-09-20 |
+| Layer | Where | State as of 2026-09-24 |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 17 modules | 339 tests, 60.49% line coverage |
-| Instrumented, storage | `core/database/src/androidTest` | 44 tests, all passing on a device |
-| Instrumented, telephony | `core/telephony/src/androidTest` | 4 tests, real `ContentResolver`; 3 run, 1 always skips (see `docs/TESTING.md` §2) |
-| End-to-end | `.maestro/flows` | 12 flows; 8 run by default (debug, destructive and manual-only tags are skipped), all 8 passing on 2026-09-20 |
+| Unit, including every Compose screen | `src/test` across 18 modules | 781 tests, 64.20% line coverage (2026-09-24) |
+| Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
+| Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, all run against a real `ContentResolver` (2026-09-24). Tests that write the provider take the SMS role through `SmsRoleRule` and two stub components in the test manifest, and hand it back (see `docs/TESTING.md` §2) |
+| End-to-end | `.maestro/flows` | 18 flows; 11 run by default (debug, destructive and manual-only tags are skipped), all 11 passing on 2026-09-24 |
 
 Tests are written against behaviour, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
@@ -420,7 +486,7 @@ reader could not tell which were safe to change.
 | `core:testing` is an Android library, not JVM | **Deliberate** | Its fakes must implement interfaces that live in Android modules. See §2. |
 | No `build-logic` convention plugins | **Accidental drift** | 16 near-identical build files repeat the same `compileSdk`/`minSdk`/`jvmTarget` block. The threshold for doing this was passed long ago. |
 | R8 disabled in release | **Accidental drift** | `isMinifyEnabled = false` and an empty keep-rules file. The largest available size win, and it needs a keep-rule pass for the `@Serializable` routes. |
-| `allowBackup="true"` with template rules | **Accidental drift** | Both backup XML files are untouched Android Studio templates with everything commented out, so the effective policy is "back up everything", including a verdict database keyed by phone number. |
+| `allowBackup="false"` and no device transfer | **Deliberate** (2026-09-23) | Was accidental "back up everything" through untouched template rules. See §4. |
 | Spam graduation ratio | **Accidental, decided against** | See §5 and `TODO.md`. |
 
 ## 12. Intent and PendingIntent rules

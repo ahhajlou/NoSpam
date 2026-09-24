@@ -2,20 +2,29 @@
 
 package com.nospam.nospam
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import com.nospam.nospam.core.notifications.SystemMessageSoundPlayer
+import com.nospam.nospam.core.notifications.MessageSoundPlayer
 import android.content.Context
 import com.nospam.nospam.core.data.BlocklistRepository
 import com.nospam.nospam.core.data.ConversationsRepository
+import com.nospam.nospam.core.data.DraftRepository
 import com.nospam.nospam.core.data.ExportRepository
+import com.nospam.nospam.core.data.SettingsRepository
 import com.nospam.nospam.core.data.SmsIngressUseCase
 import com.nospam.nospam.core.data.SpamBackfillUseCase
 import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.data.SpamStateWriter
 import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.ml.TfidfSpamClassifier
+import com.nospam.nospam.core.preferences.DataStorePreferencesDataSource
+import com.nospam.nospam.core.preferences.PreferencesDataSource
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import com.nospam.nospam.core.telephony.RealTelephonyDataSource
 import com.nospam.nospam.core.telephony.TelephonyDataSource
+import com.nospam.nospam.ui.ContactPhotoCache
 
 /**
  * Manual service locator. No Hilt/Koin: the graph is four singletons and a
@@ -29,6 +38,20 @@ class AppContainer(private val context: Context) {
     val database: NoSpamDatabase by lazy { NoSpamDatabase.persistent(appContext) }
 
     val telephony: TelephonyDataSource by lazy { RealTelephonyDataSource(appContext) }
+
+    /** In-app message sounds (sent, and received in the conversation on screen). */
+    val messageSounds: MessageSoundPlayer by lazy { SystemMessageSoundPlayer(appContext) }
+
+    /** The conversation on screen, if any; set by the thread screen while resumed. */
+    val visibleThread = MutableStateFlow<Long?>(null)
+
+    /** Contact photos for every avatar in the app, through `LocalContactPhotoLoader`. */
+    val contactPhotos: ContactPhotoLoader by lazy { ContactPhotoCache(telephony) }
+
+    /** Opening it touches no disk; each file is read on first collection. */
+    val preferences: PreferencesDataSource by lazy { DataStorePreferencesDataSource(appContext) }
+    val settingsRepository: SettingsRepository by lazy { SettingsRepository(preferences) }
+    val draftRepository: DraftRepository by lazy { DraftRepository(preferences) }
 
     /**
      * Lazily loaded off the main thread (1.2 MB JSON). Callers must invoke
@@ -65,7 +88,7 @@ class AppContainer(private val context: Context) {
     val smsIngress: SmsIngressUseCase by lazy {
         SmsIngressUseCase(
             telephony, classifier, database, appContext,
-            isSpamProtectionEnabled = { com.nospam.nospam.feature.settings.SpamPreferences.isEnabled(appContext) },
+            isSpamProtectionEnabled = { settingsRepository.isSpamProtectionEnabled() },
             spamStateWriter = spamStateWriter,
         )
     }
@@ -85,7 +108,7 @@ class AppContainer(private val context: Context) {
             db = database,
             context = appContext,
             spamStateWriter = spamStateWriter,
-            isSpamProtectionEnabled = { com.nospam.nospam.feature.settings.SpamPreferences.isEnabled(appContext) },
+            isSpamProtectionEnabled = { settingsRepository.isSpamProtectionEnabled() },
         )
     }
 }

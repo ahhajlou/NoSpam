@@ -9,8 +9,7 @@ tasks.withType<Test> {
     // object-level field for the life of the process (by design -- see its
     // KDoc). Robolectric can reuse one JVM/classloader across test classes, so
     // one JVM fork per test class keeps each class's first resolution
-    // independent of any other class's Locale/SIM setup (same fix as
-    // feature:settings' SpamPreferences DataStore singleton).
+    // independent of any other class's Locale/SIM setup.
     forkEvery = 1
 }
 

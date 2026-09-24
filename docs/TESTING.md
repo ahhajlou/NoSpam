@@ -22,7 +22,7 @@ how the previous version drifted into contradicting them.
 |---|---|---|---|
 | Unit, including every Compose screen | `src/test` in 17 modules | no | 339 tests |
 | Instrumented, storage | `core/database/src/androidTest` | yes | 44 tests in 10 files |
-| Instrumented, telephony | `core/telephony/src/androidTest` | yes | 4 tests, 3 run + 1 self-skipped |
+| Instrumented, telephony | `core/telephony/src/androidTest` | yes | 13 tests, all run (2026-09-24) |
 | End-to-end | `.maestro/flows` | yes | 12 flows, 8 run by default |
 | Manual checks | `tools/*.sh` | yes | permission gate, block/unblock persistence |
 
@@ -53,7 +53,7 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=�
 ## 1. Unit tests — no device, run everywhere
 
 ```bash
-./gradlew test                              # all 17 modules
+./gradlew test                              # all 18 modules
 ./gradlew :feature:thread:testDebugUnitTest # one module
 ```
 
@@ -61,20 +61,21 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=�
 |---|---|---|
 | `core:model` | 24 | Domain types, `ThreadSpamPolicy`, `TelephonyConstants` |
 | `core:common` | 8 | `Result` map/fold, dispatchers, permission constants |
-| `core:testing` | 9 | The fakes themselves (classifier counts, telephony filters) |
+| `core:testing` | 10 | The fakes themselves (classifier counts, telephony filters) |
 | `core:database` | 31 | DAO logic against `NoSpamDatabase.inMemory()` |
-| `core:data` | 49 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune) |
+| `core:data` | 205 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune); `SettingsRepository`/`DraftRepository` defaults, stored key names and failure fallbacks |
 | `core:ml` | 10 | Preprocessing (URL/NUM tokens, Persian normalisation, ZWNJ), `char_wb` n-grams, classifier parity |
-| `core:telephony` | 24 | Address normalisation, default-SMS detection, `SmsManager` resolution |
-| `core:notifications` | 3 | Channel ids and reply-extra constants **only** — see Known gaps |
+| `core:telephony` | 62 | Address normalisation, default-SMS detection, `SmsManager` resolution |
+| `core:preferences` | 12 | The DataStore source against real files: type round-trips, removal, serialised edits, unsupported types |
+| `core:notifications` | 9 | Channel ids, reply-extra constants and the incoming-alert rule (notify / in-app sound / nothing) — see Known gaps |
 | `core:i18n` | 3 | RTL detection, date formatting |
-| `core:designsystem` | 29 | Color roles, type scale, shapes, avatar palette, top-bar action partition, bidi isolation, avatar semantics |
-| `feature:conversations` | 31 | `ConversationsViewModel` + the inbox/spam screens |
-| `feature:thread` | 57 | `ThreadViewModel`, SMS segment counting, emoji insertion + the thread and new-conversation screens |
-| `feature:settings` | 19 | `SettingsViewModel`, spam preferences + the settings pages and dialogs |
+| `core:designsystem` | 36 | Color roles, type scale, shapes, avatar palette, top-bar action partition, bidi isolation, avatar semantics and contact photos |
+| `feature:conversations` | 50 | `ConversationsViewModel` + the inbox/spam screens |
+| `feature:thread` | 113 | `ThreadViewModel`, SMS segment counting, emoji insertion + the thread and new-conversation screens |
+| `feature:settings` | 106 | `SettingsViewModel`, `SpamSettingsViewModel`, `GeneralSettingsViewModel` + the settings pages and dialogs |
 | `feature:onboarding` | 12 | The permission list and the onboarding screen |
 | `feature:export`, `feature:mldebug` | 21 | Debug-only features; absent from release |
-| `:app` | 9 | `AppContainer` wiring and `AppSmsReceiver` |
+| `:app` | 69 | `AppContainer` wiring, `AppSmsReceiver`, and launch-intent parsing (`SENDTO`, notification taps) |
 
 **Compose screens are tested here, not on a device.** Suites use
 `createComposeRule` under Robolectric:
@@ -100,19 +101,23 @@ asserting the same things; those were folded into the JVM suites and deleted.
   `SqliteNoSpamOpenHelperTest` (every table is created, the version is 4, data
   survives a reopen).
 - `core:telephony` — `TelephonyInstrumentedTest` (the notification reply
-  action; plus an SMS insert/query round trip that **always self-skips**, see
-  below) and `TelephonyMapperDeviceTest` (real `ContentValues` mapping, which
-  JVM stubs cannot do). 3 run, 1 skipped.
+  action, and an SMS insert/query round trip), `TelephonyMapperDeviceTest` (real
+  `ContentValues` mapping, which JVM stubs cannot do) and
+  `DeliveryReportDeviceTest` (real 3GPP status-report PDUs recorded on real
+  rows). 13 tests, all run.
 
   Two things about this suite are easy to trip over. It is **self-instrumenting**:
   the test APK is `com.nospam.nospam.core.telephony.test`, and `:app`'s manifest
   is not part of it, so `core/telephony/src/androidTest/AndroidManifest.xml`
   declares the SMS permissions itself — without it `GrantPermissionRule` fails
   before any assertion with "Failed to grant permissions, see logcat for
-  details". And `sms_insert_and_query_round_trip` needs the *test* package to
-  hold the default-SMS role, which it cannot: the role needs the receivers and
-  service that live in `:app`. Its `Assume` therefore always fires, and writing
-  to the provider is covered end-to-end by the Maestro flows instead.
+  details". And a test that writes the provider needs the *test* package to
+  hold the default-SMS role. The role requires an SMS_DELIVER receiver and a
+  SENDTO activity, which live in `:app`, so the androidTest manifest declares
+  two inert stubs, and `SmsRoleRule` takes the role through the shell for the
+  test and hands it back. Until 2026-09-24 the round trip had no way to get the
+  role and always skipped. While a test holds the role a real incoming SMS goes
+  to the stub and is lost: use an emulator or a spare device.
 
 ```bash
 # grant the role first (tools/run-e2e.sh does it, or set it in system settings)

@@ -55,7 +55,7 @@ fun SettingsScreen(
                     title = sim.displayName,
                     // Carriers often leave the number out of the SIM; the page
                     // says so rather than showing an empty line.
-                    supportingText = sim.number?.let(::isolateIfPhoneNumber) ?: stringResource(R.string.sim_number_unknown),
+                    supportingText = uiState.numberOf(sim)?.let(::isolateIfPhoneNumber) ?: stringResource(R.string.sim_number_unknown),
                     icon = Icons.Outlined.SimCard,
                     onClick = { onOpenSim(sim.subscriptionId) },
                 )

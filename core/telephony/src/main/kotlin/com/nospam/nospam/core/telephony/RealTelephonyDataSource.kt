@@ -33,6 +33,10 @@ class RealTelephonyDataSource(
 ) : TelephonyDataSource {
     companion object {
         private const val TAG = "RealTelephony"
+        /** A contact's display photo is well under this; anything larger is not one. */
+        private const val MAX_CONTACT_PHOTO_BYTES = 2 * 1024 * 1024
+        /** Threads per provider write; well under SQLite's bound-parameter limit. */
+        private const val THREAD_CHUNK = 500
     }
 
     private val contactLookup by lazy { ContactLookup(context) }
@@ -42,7 +46,7 @@ class RealTelephonyDataSource(
     private var cachedLatestMap: Map<Long, SmsLatest> = emptyMap()
 
     // ThreadMeta and SmsLatest are shared for cache comparison
-    private data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
+    internal data class ThreadMeta(val id: Long, val date: Long, val count: Int, val snippet: String, val read: Boolean)
     private data class SmsLatest(val address: String, val body: String, val date: Long)
 
     /** One consistent read of the three cache fields, taken under the mutex. */
@@ -134,6 +138,28 @@ class RealTelephonyDataSource(
         }.sortedByDescending { it.date }
     }
 
+    /**
+     * Threads that are new since [cached] or whose date, count, read state or
+     * snippet differ. Removed threads are not in it: they have nothing to
+     * re-read, and [inboxChanged] catches them.
+     */
+    internal fun changedThreadIds(cached: List<ThreadMeta>?, current: List<ThreadMeta>): Set<Long> {
+        val cachedById = cached?.associateBy { it.id } ?: emptyMap()
+        return current.filter { meta -> cachedById[meta.id] != meta }.map { it.id }.toSet()
+    }
+
+    /**
+     * Whether the inbox built from [cached] is out of date for [current]:
+     * no cache yet, a thread added or changed, or a thread gone. Checking only
+     * the threads still present missed deletions, so a deleted conversation
+     * stayed in the inbox until the app restarted.
+     */
+    internal fun inboxChanged(cached: List<ThreadMeta>?, current: List<ThreadMeta>): Boolean {
+        if (cached == null) return true
+        if (changedThreadIds(cached, current).isNotEmpty()) return true
+        return cached.map { it.id }.toSet() != current.map { it.id }.toSet()
+    }
+
     private suspend fun tryThreadsQuery(): List<Conversation>? {
         return try {
             val proj = arrayOf(
@@ -171,22 +197,12 @@ class RealTelephonyDataSource(
             }
             val cached = snapshot.metas
 
-            // Cache check: if metas identical to cached, reuse cached conversations without Sms re-query
-            if (cached != null && cached == metas) {
+            // Nothing added, changed or removed: reuse the cached list without
+            // touching the Sms table.
+            if (!inboxChanged(cached, metas)) {
                 snapshot.conversations?.let { return it }
             }
-
-            // Determine which threadIds actually changed (DATE/count/read/snippet)
-            val cachedMap = cached?.associateBy { it.id } ?: emptyMap()
-            val changedIds = metas.filter { meta ->
-                val prev = cachedMap[meta.id]
-                prev == null || prev.date != meta.date || prev.count != meta.count || prev.read != meta.read || prev.snippet != meta.snippet
-            }.map { it.id }.toSet()
-
-            // If all metas unchanged, reuse cache
-            if (changedIds.isEmpty() && cached != null) {
-                return snapshot.conversations
-            }
+            val changedIds = changedThreadIds(cached, metas)
 
             // Batch Sms lookup only for changed (or all if no cache) to get latest address/body/date
             val idsToQuery = if (cached == null) metas.map { it.id } else changedIds.toList()
@@ -297,6 +313,7 @@ class RealTelephonyDataSource(
             Telephony.Sms.TYPE,
             Telephony.Sms.READ,
             Telephony.Sms.SUBSCRIPTION_ID,
+            Telephony.Sms.STATUS,
         )
         // Backward pagination: newest [limit] rows, or rows strictly older than
         // [before] when scrolling up — never a hard thread truncation. The cursor
@@ -320,10 +337,16 @@ class RealTelephonyDataSource(
         return list.sortedWith(compareBy({ it.date }, { it.id.value }))
     }
 
-    override suspend fun sendMessage(address: String, body: String, subscriptionId: Int?, messageId: Long?): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun sendMessage(
+        address: String,
+        body: String,
+        subscriptionId: Int?,
+        messageId: Long?,
+        options: SendOptions,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         val uri = messageId?.let(SmsSender::rowUri)
         try {
-            SmsSender.send(context, address, body, subscriptionId, uri)
+            SmsSender.send(context, address, body, subscriptionId, uri, options)
             Result.success(Unit)
         } catch (e: Exception) {
             if (uri != null) SmsSender.setType(context, uri, MessageType.FAILED)
@@ -347,50 +370,47 @@ class RealTelephonyDataSource(
         SmsSender.setType(context, SmsSender.rowUri(messageId), type)
     }
 
-    override suspend fun markAsRead(threadId: ThreadId) = withContext(Dispatchers.IO) {
-        try {
-            val values = android.content.ContentValues().apply { put(Telephony.Sms.READ, 1) }
-            context.contentResolver.update(
-                Telephony.Sms.CONTENT_URI,
-                values,
-                "${Telephony.Sms.THREAD_ID} = ? AND ${Telephony.Sms.READ} = 0",
-                arrayOf(threadId.value.toString())
-            )
-        } catch (e: Exception) {
-            // Best effort: provider may deny the write when not default app.
-            Log.w(TAG, "markAsRead failed", e)
+    override suspend fun markAsRead(threadId: ThreadId) = setThreadsRead(listOf(threadId), read = true)
+
+    override suspend fun markAsUnread(threadId: ThreadId) = setThreadsRead(listOf(threadId), read = false)
+
+    override suspend fun setThreadsRead(threadIds: Collection<ThreadId>, read: Boolean) = withContext(Dispatchers.IO) {
+        val values = android.content.ContentValues().apply { put(Telephony.Sms.READ, if (read) 1 else 0) }
+        // Only rows that change: an unchanged row still costs a write and a
+        // change notification.
+        val unchanged = if (read) 0 else 1
+        forEachThreadChunk(threadIds) { selection, args ->
+            try {
+                context.contentResolver.update(
+                    Telephony.Sms.CONTENT_URI,
+                    values,
+                    "$selection AND ${Telephony.Sms.READ} = ?",
+                    args + unchanged.toString(),
+                )
+            } catch (e: Exception) {
+                // Best effort: provider may deny the write when not default app.
+                Log.w(TAG, "setThreadsRead failed", e)
+            }
         }
-        Unit
     }
 
-    override suspend fun markAsUnread(threadId: ThreadId) = withContext(Dispatchers.IO) {
-        try {
-            val values = android.content.ContentValues().apply { put(Telephony.Sms.READ, 0) }
-            context.contentResolver.update(
-                Telephony.Sms.CONTENT_URI,
-                values,
-                "${Telephony.Sms.THREAD_ID} = ?",
-                arrayOf(threadId.value.toString())
-            )
-        } catch (e: Exception) {
-            // Best effort: provider may deny the write when not default app.
-            Log.w(TAG, "markAsUnread failed", e)
-        }
-        Unit
-    }
+    override suspend fun deleteConversation(threadId: ThreadId) = deleteConversations(listOf(threadId))
 
-    override suspend fun deleteConversation(threadId: ThreadId) = withContext(Dispatchers.IO) {
-        try {
-            // Delete the message rows (the provider-supported operation); the
-            // thread drops out of the conversation list once empty. A Threads
-            // delete is attempted best-effort for providers supporting it —
-            // Threads.CONTENT_URI is a query UNION on most builds, so deleting
-            // there alone is a silent no-op.
-            context.contentResolver.delete(
-                Telephony.Sms.CONTENT_URI,
-                "${Telephony.Sms.THREAD_ID} = ?",
-                arrayOf(threadId.value.toString())
-            )
+    override suspend fun deleteConversations(threadIds: Collection<ThreadId>) = withContext(Dispatchers.IO) {
+        forEachThreadChunk(threadIds) { selection, args ->
+            try {
+                // Delete the message rows (the provider-supported operation); a
+                // thread drops out of the conversation list once empty.
+                context.contentResolver.delete(Telephony.Sms.CONTENT_URI, selection, args)
+            } catch (e: Exception) {
+                // Best effort: provider denies writes unless this is the default app.
+                Log.w(TAG, "deleteConversations failed", e)
+            }
+        }
+        // A Threads delete is attempted best-effort for providers supporting it.
+        // Threads.CONTENT_URI is a query UNION on most builds, so this is usually
+        // a silent no-op, and it takes one thread at a time.
+        for (threadId in threadIds) {
             runCatching {
                 context.contentResolver.delete(
                     ContentUris.withAppendedId(Telephony.Threads.CONTENT_URI, threadId.value),
@@ -398,11 +418,23 @@ class RealTelephonyDataSource(
                     null,
                 )
             }
-        } catch (e: Exception) {
-            // Best effort: provider denies writes unless this is the default app.
-            Log.w(TAG, "deleteConversation failed", e)
         }
-        Unit
+    }
+
+    /**
+     * Runs [block] with a `thread_id IN (...)` selection per chunk of
+     * [threadIds], because SQLite caps the number of bound parameters.
+     */
+    private inline fun forEachThreadChunk(
+        threadIds: Collection<ThreadId>,
+        block: (selection: String, args: Array<String>) -> Unit,
+    ) {
+        threadIds.map { it.value }.distinct().chunked(THREAD_CHUNK).forEach { chunk ->
+            block(
+                "${Telephony.Sms.THREAD_ID} IN (${chunk.joinToString(",") { "?" }})",
+                chunk.map { it.toString() }.toTypedArray(),
+            )
+        }
     }
 
     override suspend fun deleteMessage(messageId: Long) = withContext(Dispatchers.IO) {
@@ -483,8 +515,52 @@ class RealTelephonyDataSource(
         }
     }
 
+    override suspend fun getSystemBlockedNumbers(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val numbers = mutableListOf<String>()
+            context.contentResolver.query(
+                android.provider.BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                arrayOf(android.provider.BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER),
+                null, null, null,
+            )?.use { c ->
+                while (c.moveToNext()) c.getString(0)?.takeIf { it.isNotBlank() }?.let(numbers::add)
+            }
+            numbers
+        } catch (e: Exception) {
+            // SecurityException unless this is the default SMS app (or dialer).
+            Log.w(TAG, "System block list not readable", e)
+            emptyList()
+        }
+    }
+
     override suspend fun lookupContact(address: String): com.nospam.nospam.core.model.Participant? = withContext(Dispatchers.IO) {
         contactLookup.lookup(address)
+    }
+
+    override suspend fun loadContactPhoto(photoUri: String): ByteArray? = withContext(Dispatchers.IO) {
+        val uri = runCatching { android.net.Uri.parse(photoUri) }.getOrNull()
+        // Only the contacts provider's own photos: a URI arriving here from
+        // anywhere else is not something to open.
+        if (uri == null || uri.scheme != "content" ||
+            uri.authority != android.provider.ContactsContract.AUTHORITY
+        ) return@withContext null
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                // Bounded by hand: InputStream.readNBytes is API 33+.
+                val out = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(16 * 1024)
+                while (true) {
+                    val n = stream.read(buffer)
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                    if (out.size() > MAX_CONTACT_PHOTO_BYTES) return@use null
+                }
+                out.toByteArray().takeIf { it.isNotEmpty() }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Contact photo load failed", e)
+            null
+        }
     }
 
     override suspend fun hasOutboundMessages(threadId: ThreadId): Boolean = withContext(Dispatchers.IO) {
@@ -518,6 +594,12 @@ class RealTelephonyDataSource(
             Log.w(TAG, "getOutboundSenderAddresses failed", e)
             emptySet()
         }
+    }
+
+    override suspend fun getDefaultSmsSubscriptionId(): Int? = withContext(Dispatchers.IO) {
+        runCatching { android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId() }
+            .getOrNull()
+            ?.takeIf { it != android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID }
     }
 
     @Suppress("DEPRECATION")

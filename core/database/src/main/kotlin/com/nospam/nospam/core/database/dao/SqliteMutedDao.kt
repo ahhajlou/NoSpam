@@ -61,5 +61,22 @@ class SqliteMutedDao(private val helper: SqliteNoSpamOpenHelper) : MutedDao {
     }
     override suspend fun mute(threadId: Long) = withContext(Dispatchers.IO){ writeLock.withLock { val v = android.content.ContentValues().apply{ put("threadId", threadId)}; helper.writableDatabase.insertWithOnConflict("muted_threads", null, v, android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE); publish { it.withThread(threadId) } } }
     override suspend fun unmute(threadId: Long) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("muted_threads", "threadId = ?", arrayOf(threadId.toString())); publish { it.withoutThread(threadId) } } } }
+    override suspend fun muteAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.insertThreadIds("muted_threads", threadIds)
+            publish { current -> threadIds.fold(current) { acc, id -> acc.withThread(id) } }
+        } }
+    }
+
+    override suspend fun unmuteAll(threadIds: Collection<Long>) {
+        if (threadIds.isEmpty()) return
+        withContext(Dispatchers.IO) { writeLock.withLock {
+            helper.writableDatabase.deleteThreadIds("muted_threads", threadIds)
+            val removed = threadIds.toSet()
+            publish { current -> current.filterNot { it.threadId in removed } }
+        } }
+    }
+
     override suspend fun isMuted(threadId: Long): Boolean = withContext(Dispatchers.IO){ helper.readableDatabase.query("muted_threads", null, "threadId = ?", arrayOf(threadId.toString()), null, null, null).use{ it.count>0 } }
 }

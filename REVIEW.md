@@ -517,7 +517,7 @@ existing perf gates use before treating it as real.
 | L-10 | The default-SMS check is reimplemented at 6 sites and the role request at 2. `feature:settings` calls `RoleManager` while declaring no telephony dependency. | see §4 |
 | L-11 | Root Kover config omits `:feature:export` and `:feature:mldebug`, so 1,084 lines never count toward the coverage ratchet. | `build.gradle.kts:63-77` |
 | L-12 | **Fixed.** `abortOnError = true`; `checkReleaseBuilds` and the promoted `UnsafeIntentLaunch`/`MutableImplicitPendingIntent` checks are unchanged. | `app/build.gradle.kts` |
-| L-13 | `allowBackup="true"` with no backup rules, on an app holding a spam-verdict database keyed by phone number. | `app/src/main/AndroidManifest.xml:23` |
+| L-13 | **Fixed 2026-09-23** (phase 2, P2.1). `allowBackup="false"`, and `data_extraction_rules.xml` excludes every domain from both cloud backup and device-to-device transfer, which `allowBackup` alone does not stop on Android 12+. | `app/src/main/AndroidManifest.xml`, `res/xml/data_extraction_rules.xml` |
 
 ---
 

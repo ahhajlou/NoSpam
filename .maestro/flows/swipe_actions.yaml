@@ -1,0 +1,61 @@
+appId: com.nospam.nospam
+tags:
+  - inbox
+  - swipe
+---
+# Inbox swipe actions (phase 2, P2.9). Requires tools/seed.sh core. Leaves the
+# swipe settings at their defaults (Archive both ways) when it finishes.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "Inbox"
+
+# The drawer opens from its button only: a drag across the top bar does not.
+# (Not from the screen edge: that is the system back gesture.)
+- swipe:
+    start: 30%, 6%
+    end: 90%, 6%
+- assertNotVisible: "Spam & blocked"
+- assertVisible: "Inbox"
+
+# Right swipe (default Archive) archives and offers Undo; Undo brings it back
+# and it stays back.
+- scrollUntilVisible:
+    element: "NSTEST_STAR1"
+- swipe:
+    from: "NSTEST_STAR1"
+    direction: RIGHT
+- assertVisible: "Conversation archived"
+- assertNotVisible: "NSTEST_STAR1"
+- tapOn: "Undo"
+- assertVisible: "NSTEST_STAR1"
+
+# Left swipe set to Delete asks first; Cancel keeps the row.
+- tapOn: "Open navigation menu"
+- tapOn: "Settings"
+- tapOn: "General"
+- scrollUntilVisible:
+    element: "Left swipe"
+- tapOn: "Left swipe"
+- tapOn: "Delete"
+- tapOn: "Navigate up"
+- tapOn: "Open navigation menu"
+- tapOn: "Inbox"
+- scrollUntilVisible:
+    element: "NSTEST_STAR1"
+- swipe:
+    from: "NSTEST_STAR1"
+    direction: LEFT
+- assertVisible: "Delete 1 conversation?"
+- tapOn: "Cancel"
+- assertVisible: "NSTEST_STAR1"
+
+# Back to the default.
+- tapOn: "Open navigation menu"
+- tapOn: "Settings"
+- tapOn: "General"
+- scrollUntilVisible:
+    element: "Left swipe"
+- tapOn: "Left swipe"
+- tapOn: "Archive"

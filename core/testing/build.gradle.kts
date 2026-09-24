@@ -39,6 +39,8 @@ dependencies {
     // The interfaces these fakes implement.
     api(project(":core:ml"))
     api(project(":core:telephony"))
+    api(project(":core:preferences"))
+    api(project(":core:notifications"))
     api(libs.kotlinx.coroutines.core)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
