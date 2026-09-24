@@ -72,4 +72,28 @@ class OnboardingScreenRobolectricTest {
         rule.waitForIdle()
         assertEquals(1, completed)
     }
+
+    @Test fun `steps completed outside the screen enable continue on resume`() {
+        // The state granted in system settings: the screen is paused meanwhile,
+        // and nothing but the resume can tell it anything changed.
+        val owner = object : androidx.lifecycle.LifecycleOwner {
+            val registry = androidx.lifecycle.LifecycleRegistry.createUnsafe(this)
+            override val lifecycle: androidx.lifecycle.Lifecycle get() = registry
+        }
+        owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED
+        rule.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.lifecycle.compose.LocalLifecycleOwner provides owner
+            ) { OnboardingScreen() }
+        }
+        rule.onNodeWithText("Continue").assertIsNotEnabled()
+
+        rule.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.STARTED }
+        grantRequiredPermissions()
+        holdSmsRole()
+        rule.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+
+        rule.onNodeWithText("Continue").assertIsEnabled()
+        rule.onNodeWithText("Granted").assertIsDisplayed()
+    }
 }

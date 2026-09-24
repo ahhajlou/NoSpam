@@ -5,7 +5,7 @@
     <string name="grant">Grant SMS, Contacts &amp; Phone permissions</string>
     <string name="granted">Granted</string>
     <string name="set_default">Set as default SMS app</string>
-    <string name="is_default">Set as default</string>
+    <string name="is_default">Default</string>
     <string name="continue_btn">Continue</string>
     <string name="privacy_note">Everything happens on this device. NoSpam has no internet permission, so your messages cannot leave your phone.</string>
     <string name="step_permissions_title">Messages, contacts and SIM</string>
