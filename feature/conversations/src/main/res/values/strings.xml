@@ -18,7 +18,6 @@
     <string name="unknown_sender">Unknown</string>
     <string name="archive_empty_title">Archive is empty</string>
     <string name="archive_empty_subtitle">Messages you archive will appear here.</string>
-    <string name="unarchive">Unarchive</string>
     <string name="not_spam">Not spam</string>
     <string name="marked_as_not_spam">%1$s marked as not spam</string>
     <string name="menu_mark_read">Mark as read</string>

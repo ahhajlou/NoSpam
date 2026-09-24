@@ -124,9 +124,8 @@ tags:
     when:
       visible: "NSTEST_SPAM3"
     commands:
-      - swipe:
-          from: "NSTEST_SPAM3"
-          direction: RIGHT
+      - longPressOn: "NSTEST_SPAM3"
+      - tapOn: "Not spam"
 - stopApp
 - launchApp:
     clearState: false

@@ -202,7 +202,7 @@ seed_unknown_spam() {
 }
 
 # NSTEST_SPAM1 above is owned by .maestro/flows/spam_notspam_and_bulk.yaml,
-# which swipes it to not-spam. NSTEST_SPAM2 below is the same shape but is
+# which marks it not-spam. NSTEST_SPAM2 below is the same shape but is
 # never mutated by any flow — .maestro/flows/inbox_filters_and_search.yaml's
 # "spam never appears in the inbox" check uses this one so it stays true
 # regardless of what order the suite runs flows in. NSTEST_SPAM3 is the one

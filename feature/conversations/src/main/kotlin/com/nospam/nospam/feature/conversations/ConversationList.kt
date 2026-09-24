@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -353,53 +352,4 @@ private fun isCurrentYear(millis: Long): Boolean {
     val calNow = java.util.Calendar.getInstance()
     val calThen = java.util.Calendar.getInstance().apply { timeInMillis = millis }
     return calNow.get(java.util.Calendar.YEAR) == calThen.get(java.util.Calendar.YEAR)
-}
-
-/**
- * [ConversationRow] with one swipe action toward the end edge (Unarchive,
- * Not spam). Swiping is off while selecting, so a drag cannot act on a row
- * the user is trying to select.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun SwipeableConversationRow(
-    conv: Conversation,
-    selected: Boolean,
-    swipeEnabled: Boolean,
-    swipeLabel: String,
-    swipeIcon: ImageVector,
-    onSwiped: () -> Unit,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val state = androidx.compose.material3.rememberSwipeToDismissBoxState()
-    androidx.compose.material3.SwipeToDismissBox(
-        state = state,
-        modifier = modifier,
-        enableDismissFromStartToEnd = true,
-        enableDismissFromEndToStart = false,
-        gesturesEnabled = swipeEnabled,
-        onDismiss = { onSwiped() },
-        backgroundContent = {
-            Row(
-                modifier = Modifier.fillMaxSize()
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(horizontal = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(swipeIcon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                Spacer(Modifier.width(12.dp))
-                Text(swipeLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            }
-        },
-    ) {
-        ConversationRow(
-            conv = conv,
-            selected = selected,
-            onClick = onClick,
-            onLongClick = onLongClick,
-            modifier = Modifier.background(MaterialTheme.colorScheme.surface),
-        )
-    }
 }

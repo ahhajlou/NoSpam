@@ -14,10 +14,10 @@ tags:
 - assertVisible: "NSTEST_ARCHIVE1"
 - assertVisible: "Your package has been delivered."
 
-# Swipe-to-unarchive (SwipeToDismissBox, StartToEnd only).
-- swipe:
-    from: "NSTEST_ARCHIVE1"
-    direction: RIGHT
+# Rows do not swipe; unarchive through the selection bar.
+- longPressOn: "NSTEST_ARCHIVE1"
+- assertVisible: "1 selected"
+- tapOn: "Unarchive"
 - assertNotVisible: "NSTEST_ARCHIVE1"
 
 # It must reappear in the inbox once unarchived. NSTEST_ARCHIVE1's message is

@@ -2,7 +2,7 @@ appId: com.nospam.nospam
 tags:
   - spam
 ---
-# Spam & blocked: selection mode, swipe to "Not spam", and a multi-row action.
+# Spam & blocked: selection mode, "Not spam" on one row, and a multi-row action.
 # Rewritten 2026-09-17: the auto-delete banner and the Block all / Delete all
 # row this flow used to assert were removed in 6898a35 because they were
 # unconfirmed hard deletes. Requires tools/seed.sh seed (NSTEST_SPAM1,
@@ -33,10 +33,9 @@ tags:
 - assertVisible: "NSTEST_SPAM1"
 - tapOn: "Clear selection"
 
-# --- Swipe toward the end edge marks one conversation not spam ---
-- swipe:
-    from: "NSTEST_SPAM1"
-    direction: RIGHT
+# --- Not spam on one conversation (rows do not swipe) ---
+- longPressOn: "NSTEST_SPAM1"
+- tapOn: "Not spam"
 - assertNotVisible: "NSTEST_SPAM1"
 - assertVisible:
     text: ".*moved to Inbox.*"

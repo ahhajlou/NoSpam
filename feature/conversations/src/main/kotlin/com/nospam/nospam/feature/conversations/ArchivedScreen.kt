@@ -84,13 +84,9 @@ fun ArchivedScreen(
             ) {
                 items(archived, key = { it.threadId.value }) { conv ->
                     val id = conv.threadId.value
-                    SwipeableConversationRow(
+                    ConversationRow(
                         conv = conv,
                         selected = id in selection.ids,
-                        swipeEnabled = !selection.isActive,
-                        swipeLabel = stringResource(R.string.unarchive),
-                        swipeIcon = Icons.Outlined.Unarchive,
-                        onSwiped = { unarchive(id) },
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),

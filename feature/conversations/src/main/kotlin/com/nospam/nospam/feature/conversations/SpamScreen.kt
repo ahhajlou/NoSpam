@@ -113,13 +113,9 @@ fun SpamScreen(
             ) {
                 items(spam, key = { it.threadId.value }) { conv ->
                     val id = conv.threadId.value
-                    SwipeableConversationRow(
+                    ConversationRow(
                         conv = conv,
                         selected = id in selection.ids,
-                        swipeEnabled = !selection.isActive,
-                        swipeLabel = stringResource(R.string.not_spam),
-                        swipeIcon = Icons.Outlined.MoveToInbox,
-                        onSwiped = { notSpam(listOf(conv)) },
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
                         modifier = Modifier.animateItem(),
