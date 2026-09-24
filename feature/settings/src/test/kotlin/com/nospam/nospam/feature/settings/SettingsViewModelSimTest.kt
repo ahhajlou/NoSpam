@@ -76,6 +76,20 @@ class SettingsViewModelSimTest {
         assertEquals(listOf(sim(1, "+15550001111"), sim(2, "+15559998888")), vm.uiState.value.sims)
     }
 
+    @Test fun `refreshSims picks up SIMs that could not be read at creation`() = runTest {
+        // First run: the view model exists before READ_PHONE_STATE, so the first
+        // read comes back empty.
+        val fake = FakeTelephonyDataSource()
+        val vm = SettingsViewModel(dataSource = fake)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(emptyList<TelephonyDataSource.SimInfo>(), vm.uiState.value.sims)
+
+        fake.subscriptions = listOf(sim(1, number = "+15550001111"))
+        vm.refreshSims()
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(sim(1, "+15550001111")), vm.uiState.value.sims)
+    }
+
     @Test fun `without a repository, setSimNumber only changes state in memory`() = runTest {
         val vm = SettingsViewModel()
         vm.setSimNumber(1, "+15550001111")

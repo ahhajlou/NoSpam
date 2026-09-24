@@ -105,6 +105,20 @@ class SettingsAppearanceAndSimRobolectricTest {
 
     // --- SIM page -------------------------------------------------------------
 
+    @Test fun `opening settings lists SIMs that could not be read when the view model was made`() {
+        // First run: the view model is created before the phone permission, and
+        // its first read of the SIMs is empty.
+        val fake = FakeTelephonyDataSource()
+        val vm = SettingsViewModel(fake)
+        fake.subscriptions = listOf(
+            TelephonyDataSource.SimInfo(subscriptionId = 4, displayName = "Work SIM", number = null),
+        )
+        rule.setContent { SettingsScreen(title = "Settings", viewModel = vm) }
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Work SIM").assertIsDisplayed()
+    }
+
     @Test fun `the SIM page fills in the display name and number once they arrive`() {
         val fake = FakeTelephonyDataSource().apply {
             subscriptions = listOf(

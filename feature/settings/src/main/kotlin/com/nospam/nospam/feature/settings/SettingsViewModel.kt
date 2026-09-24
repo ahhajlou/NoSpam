@@ -36,13 +36,7 @@ class SettingsViewModel(
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     init {
-        val source = dataSource
-        if (source != null) {
-            viewModelScope.launch {
-                val sims = runCatching { source.getActiveSubscriptions() }.getOrDefault(emptyList())
-                _uiState.value = _uiState.value.copy(sims = sims)
-            }
-        }
+        refreshSims()
         settings?.let { repo ->
             viewModelScope.launch {
                 repo.simNumbers.collect { _uiState.value = _uiState.value.copy(enteredNumbers = it) }
@@ -50,6 +44,21 @@ class SettingsViewModel(
             viewModelScope.launch {
                 repo.deliveryReportSims.collect { _uiState.value = _uiState.value.copy(deliveryReportSims = it) }
             }
+        }
+    }
+
+    /**
+     * Reads the active SIMs again. This view model is created with the app's
+     * navigation, which on first run is before READ_PHONE_STATE is granted: the
+     * list read then is empty, and without a re-read the SIM pages stayed hidden
+     * until the process restarted. The screen calls this on every resume, which
+     * also picks up a SIM inserted or swapped while the app is running.
+     */
+    fun refreshSims() {
+        val source = dataSource ?: return
+        viewModelScope.launch {
+            val sims = runCatching { source.getActiveSubscriptions() }.getOrDefault(emptyList())
+            _uiState.value = _uiState.value.copy(sims = sims)
         }
     }
 
