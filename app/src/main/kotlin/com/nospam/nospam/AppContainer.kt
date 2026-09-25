@@ -21,6 +21,7 @@ import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.data.SpamStateWriter
 import com.nospam.nospam.core.database.NoSpamDatabase
 import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
+import com.nospam.nospam.core.ml.DeferredSpamClassifier
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.ml.TfidfSpamClassifier
 import com.nospam.nospam.core.preferences.DataStorePreferencesDataSource
@@ -69,12 +70,23 @@ class AppContainer(private val context: Context) {
     }
 
     /**
+     * What the use cases hold instead of [classifier]: building them no longer
+     * loads the model. The inbox's ViewModel builds [spamBackfill] on the main
+     * thread during the first composition, and that waited ~430ms for the model
+     * on every cold start; a thread's ViewModel does the same with
+     * [spamRepository].
+     */
+    private val deferredClassifier: SpamClassifier by lazy {
+        DeferredSpamClassifier(Dispatchers.Default) { classifier }
+    }
+
+    /**
      * Single-writer gate shared by ingress, backfill and user overrides so the
      * check-then-write on `sender_state` cannot interleave (CLAUDE.md §15).
      */
     val spamStateWriter: SpamStateWriter by lazy { SpamStateWriter(database.senderStateDao) }
 
-    val spamRepository: SpamRepository by lazy { SpamRepository(database, classifier, appContext, spamStateWriter) }
+    val spamRepository: SpamRepository by lazy { SpamRepository(database, deferredClassifier, appContext, spamStateWriter) }
     val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database, appContext, telephony = telephony) }
     val conversationsRepository: ConversationsRepository by lazy {
         // Normalize in the same way SmsIngressUseCase/BlocklistRepository key
@@ -94,7 +106,7 @@ class AppContainer(private val context: Context) {
 
     val smsIngress: SmsIngressUseCase by lazy {
         SmsIngressUseCase(
-            telephony, classifier, database, appContext,
+            telephony, deferredClassifier, database, appContext,
             isSpamProtectionEnabled = { settingsRepository.isSpamProtectionEnabled() },
             spamStateWriter = spamStateWriter,
         )
@@ -111,7 +123,7 @@ class AppContainer(private val context: Context) {
     val spamBackfill: SpamBackfillUseCase by lazy {
         SpamBackfillUseCase(
             telephony = telephony,
-            classifier = classifier,
+            classifier = deferredClassifier,
             db = database,
             context = appContext,
             spamStateWriter = spamStateWriter,
