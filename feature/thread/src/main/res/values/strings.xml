@@ -49,4 +49,6 @@
     <string name="clipboard_label">Message</string>
     <string name="new_no_contacts">No contacts yet</string>
     <string name="new_no_matches">No contacts match that</string>
+    <string name="spam_banner_suspected">The on-device filter flagged messages here as possible spam.</string>
+    <string name="spam_banner_in_spam">The on-device filter moved this conversation to Spam.</string>
 </resources>

@@ -6,4 +6,8 @@
     <string name="drawer_archived">Archived</string>
     <string name="drawer_spam_blocked">Spam &amp; blocked</string>
     <string name="drawer_settings">Settings</string>
+    <plurals name="drawer_new_count">
+        <item quantity="one">%d new</item>
+        <item quantity="other">%d new</item>
+    </plurals>
 </resources>

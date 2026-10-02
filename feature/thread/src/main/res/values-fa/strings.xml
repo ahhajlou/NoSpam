@@ -49,4 +49,6 @@
     <string name="clipboard_label">پیام</string>
     <string name="new_no_contacts">هنوز مخاطبی ندارید</string>
     <string name="new_no_matches">مخاطبی با این عبارت پیدا نشد</string>
+    <string name="spam_banner_suspected">پالایه‌ی روی دستگاه برخی پیام‌های این گفتگو را هرزنامه‌ی احتمالی تشخیص داده است.</string>
+    <string name="spam_banner_in_spam">پالایه‌ی روی دستگاه این گفتگو را به هرزنامه منتقل کرده است.</string>
 </resources>

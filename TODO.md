@@ -175,7 +175,16 @@ conversation the new rules would never have hidden.
 - [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Add the "reply clears automatic spam state, never an explicit block" rule. `sender_state.hasReplied` (db v5), set by `SpamRepository.recordReply` on a successful send from the thread screen, by ingress and by the history scan. Not set by a reply sent from a notification (`HeadlessSmsSendService`, `core:telephony`, which cannot reach `core:data`); ingress picks that one up from the provider on the sender's next message.
 - [x] **Done 2026-10-02 (`feat/spam-routing-model`).** "Not spam" and "Report spam" keep the counts now; the per-message actions move one count from spam to ham (or add spam) and re-derive. Original entry: "Not spam" and "Report spam" overwrite the sender's counts. `markSendersNotSpam` writes a fresh `sender_state` (spamCount and hamCount 0) and `markSendersSpam` writes spamCount 1, hamCount 0, so the sender's history is lost. Seen 2026-09-23 through the new senders page: removing an allow can then only return the sender to CLEAN, never MIXED. Safe (it can only hide less) but it throws evidence away; keep the counts and change only state and override
 - [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Re-derive graduated SPAM rows on upgrade. `SqliteNoSpamOpenHelper` v5 re-derives every automatic row and never hides one that was showing; a MIXED row with no ham (protected as a contact or replied-to) is marked replied. Covered by a device test, `upgrade_to_5_rederives_automatic_states_and_leaves_user_decisions`.
-- [] **The inbox "Mixed" badge shows the sender's history, not the
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`):** one inbox badge,
+  "Suspected spam", from `Conversation.hasSuspectedSpam`: the conversation
+  holds a message flagged spam right now (not for saved contacts or senders
+  marked "Not spam"). Deleting a message drops its verdict
+  (`SpamRepository.onMessageDeleted`), the sender's counts stay. The "Mixed"
+  string is gone. Also done in the same change: the drawer's Spam & blocked
+  entry counts conversations filtered since the page was last opened
+  (`ConversationsRepository.observeNewSpamCount`, `SettingsRepository.spamSeenAt`),
+  and a flagged conversation shows a banner saying why, with "Not spam" for the
+  whole sender (`ThreadViewModel.spamBanner`). Original entry: **The inbox "Mixed" badge shows the sender's history, not the
   conversation's content** (found 2026-10-02). The badge reads `sender_state`
   (`ConversationsRepository` sets `spamState`, `ConversationList` shows
   `badge_mixed` for MIXED), so deleting the spam message from the thread, or

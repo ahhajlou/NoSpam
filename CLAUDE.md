@@ -206,6 +206,11 @@ in `TODO.md` under "Spam routing — agreed model". Read that before touching it
   suspected message into two, which is SPAM.
 - `nospam.db` v5 re-derived existing rows on upgrade, never hiding a
   conversation that was showing.
+- **What the user sees follows two different things.** The folder follows the
+  sender's state. The inbox "Suspected spam" badge and the in-thread labels
+  follow the messages: a conversation holding a message flagged right now
+  (`Conversation.hasSuspectedSpam`). Deleting a message drops its verdict and
+  keeps the sender's counts.
 
 What survives from before: two levels, immutable per-message `MessageVerdict`
 evidence plus a derived per-sender `SenderState`; keying on normalised address

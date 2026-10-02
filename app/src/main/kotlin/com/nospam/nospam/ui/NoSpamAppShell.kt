@@ -31,7 +31,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -40,6 +43,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nospam.nospam.R
+import com.nospam.nospam.core.designsystem.component.isolateLtr
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.navigation.LaunchTarget
 import com.nospam.nospam.navigation.ArchivedRoute
@@ -59,6 +63,8 @@ import kotlin.reflect.KClass
 @Composable
 fun NoSpamAppShell(
     dynamicColor: Boolean = false,
+    /** Conversations filtered into Spam & blocked since the user last looked. */
+    newSpamCount: Int = 0,
     photoLoader: ContactPhotoLoader? = null,
     launchTarget: LaunchTarget? = null,
     onLaunchTargetHandled: () -> Unit = {},
@@ -95,7 +101,7 @@ fun NoSpamAppShell(
                         TopLevelItem(R.string.drawer_archived, Icons.Filled.Archive, Icons.Outlined.Archive,
                             destination.isOn(ArchivedRoute::class)) { go(ArchivedRoute) }
                         TopLevelItem(R.string.drawer_spam_blocked, Icons.Filled.Report, Icons.Outlined.Report,
-                            destination.isOn(SpamRoute::class)) { go(SpamRoute) }
+                            destination.isOn(SpamRoute::class), count = newSpamCount) { go(SpamRoute) }
                         // Developer tools. Empty in release: the feature modules are
                         // debugImplementation, so nothing to show and nothing linked.
                         if (debugTools.isNotEmpty()) {
@@ -133,10 +139,22 @@ private fun TopLevelItem(
     selectedIcon: ImageVector,
     icon: ImageVector,
     selected: Boolean,
+    count: Int = 0,
     onClick: () -> Unit,
 ) {
+    val newLabel = pluralStringResource(R.plurals.drawer_new_count, count, count)
     NavigationDrawerItem(
         label = { Text(stringResource(labelRes)) },
+        badge = if (count > 0) {
+            {
+                Text(
+                    // A count the user reads as one unit; a Persian layout must
+                    // not reorder its digits.
+                    isolateLtr(count.toString()),
+                    modifier = Modifier.semantics { contentDescription = newLabel },
+                )
+            }
+        } else null,
         icon = { Icon(if (selected) selectedIcon else icon, contentDescription = null) },
         selected = selected,
         onClick = onClick,

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Report
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -251,6 +253,9 @@ fun ThreadScreen(
                 // Reverse the grouped map so the latest date group sits at the bottom (index 0)
                 val reversedGrouped = remember(grouped) { grouped.entries.reversed() }
                 val deliveredId = remember(uiState.messages) { newestDeliveredId(uiState.messages) }
+                uiState.spamBanner?.let { banner ->
+                    SpamBannerRow(banner = banner, onNotSpam = viewModel::onBannerNotSpam)
+                }
                 LazyColumn(
                     state = lazyState,
                     modifier = Modifier.weight(1f),
@@ -558,6 +563,41 @@ internal fun addToContacts(context: android.content.Context, address: String) {
                 putExtra(android.provider.ContactsContract.Intents.Insert.PHONE, address)
             }
         )
+    }
+}
+
+/**
+ * Why this conversation is flagged, with the one action that undoes it for the
+ * whole sender. Above the messages rather than on each bubble, so the reason
+ * is read before the content.
+ */
+@Composable
+private fun SpamBannerRow(banner: SpamBanner, onNotSpam: () -> Unit) {
+    Surface(
+        // Not tertiaryContainer: in this palette it is a mid blue, and the
+        // button's primary text on it was barely legible.
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        ) {
+            Icon(Icons.Outlined.Report, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(
+                stringResource(
+                    when (banner) {
+                        SpamBanner.SUSPECTED_MESSAGES -> R.string.spam_banner_suspected
+                        SpamBanner.IN_SPAM -> R.string.spam_banner_in_spam
+                    }
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onNotSpam) { Text(stringResource(R.string.action_not_spam)) }
+        }
     }
 }
 

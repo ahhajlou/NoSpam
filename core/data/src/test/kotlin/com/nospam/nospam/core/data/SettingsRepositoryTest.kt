@@ -170,6 +170,15 @@ class SettingsRepositoryTest {
         assertEquals(default, fake.contents(PreferenceFile.SETTINGS)["notify_suspected_spam"])
     }
 
+    @Test fun `spam seen at starts at zero and round trips`() = runTest {
+        val fake = FakePreferencesDataSource()
+        val repo = SettingsRepository(fake)
+        assertEquals(0L, repo.spamSeenAt.first())
+        repo.setSpamSeenAt(1234L)
+        assertEquals(1234L, repo.spamSeenAt.first())
+        assertEquals(1234L, fake.contents(PreferenceFile.SETTINGS)["spam_seen_at"])
+    }
+
     @Test fun `a value of the wrong type under spam protection key reads as the default`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.SETTINGS to mapOf("spam_protection_enabled" to "no")),

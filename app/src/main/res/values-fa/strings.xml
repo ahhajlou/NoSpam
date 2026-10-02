@@ -6,4 +6,8 @@
     <string name="drawer_archived">بایگانی</string>
     <string name="drawer_spam_blocked">هرزنامه و مسدودشده</string>
     <string name="drawer_settings">تنظیمات</string>
+    <plurals name="drawer_new_count">
+        <item quantity="one">%d مورد جدید</item>
+        <item quantity="other">%d مورد جدید</item>
+    </plurals>
 </resources>

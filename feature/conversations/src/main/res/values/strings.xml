@@ -40,7 +40,6 @@
     <string name="action_unpin">Unpin</string>
     <string name="action_mute">Mute</string>
     <string name="action_unmute">Unmute</string>
-    <string name="badge_mixed">Mixed</string>
     <string name="badge_suspected">Suspected spam</string>
     <string name="status_muted">Muted</string>
     <string name="action_call">Call</string>

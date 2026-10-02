@@ -12,6 +12,7 @@ import android.provider.Telephony
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -262,6 +263,12 @@ fun NoSpamNavHost(
         }
         composable<SpamRoute> {
             val scope = rememberCoroutineScope()
+            // Seen on the way in and again on the way out, so what arrives while
+            // the page is open is not counted as new afterwards.
+            DisposableEffect(Unit) {
+                container?.markSpamSeen()
+                onDispose { container?.markSpamSeen() }
+            }
             SpamScreen(
                 title = stringResource(R.string.drawer_spam_blocked),
                 onOpenDrawer = onOpenDrawer,

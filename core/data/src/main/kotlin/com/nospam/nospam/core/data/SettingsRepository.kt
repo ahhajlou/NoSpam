@@ -100,6 +100,17 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
     suspend fun setNotifySuspectedSpam(enabled: Boolean) = write { it[KEY_NOTIFY_SUSPECTED_SPAM] = enabled }
 
     /**
+     * When the user last looked at Spam & blocked, in epoch millis; 0 before
+     * the first time, so everything already there counts as new once. Drives
+     * the drawer's count of what was filtered since.
+     */
+    val spamSeenAt: Flow<Long> = prefs.data(PreferenceFile.SETTINGS)
+        .map { it[KEY_SPAM_SEEN_AT] as? Long ?: 0L }
+        .catch { emit(0L) }
+
+    suspend fun setSpamSeenAt(epochMillis: Long) = write { it[KEY_SPAM_SEEN_AT] = epochMillis }
+
+    /**
      * The inbox's swipe actions. In the main settings file rather than
      * `ui_settings`, whose mere existence makes app startup read it before the
      * first screen. An unknown stored value reads as the default for that side.
@@ -224,6 +235,7 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         private const val KEY_SWIPE_LEFT = "swipe_left"
         private const val KEY_MESSAGE_SOUNDS = "message_sounds"
         private const val KEY_NOTIFY_SUSPECTED_SPAM = "notify_suspected_spam"
+        private const val KEY_SPAM_SEEN_AT = "spam_seen_at"
         private const val SIM_PREFIX = "sim_"
         private const val SIM_NUMBER_SUFFIX = "_number"
         private const val SIM_DELIVERY_SUFFIX = "_delivery_reports"
