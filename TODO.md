@@ -4,8 +4,8 @@
 > ticked or rewritten in that pass say so inline; everything else was confirmed
 > still open in the code.
 
-- [] Lists all SMS from other SMS apps before app is installed — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
-- [] Message orders are wrong in conversations after i installed the app on a phone with old messages — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
+- [x] Lists all SMS from other SMS apps before app is installed — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
+- [x] Message orders are wrong in conversations after i installed the app on a phone with old messages — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
 
   **Both root-caused on 2026-09-14 to one mechanism** — the thread pagination
   cursor. See "Thread pagination strands older messages on imported history"
@@ -18,6 +18,18 @@
   imported out of order. Still verified on the seeded emulator fixture only.
   Needs a phone whose history came from a restore or transfer (e.g. Samsung
   Smart Switch).
+
+  **Verified with a restore scenario on the emulator, 2026-10-03:**
+  `tools/import_history_check.sh` restores history the way backup tools do while
+  Google Messages is the default SMS app, installs NoSpam afterwards, and checks
+  every restored message is reachable in date order: RESTORE_A, 450 messages
+  restored newest first (every older message has a higher row id) plus a live
+  SMS after the restore; RESTORE_B, 120 shuffled; RESTORE_C, 30 in order. The
+  build just before the fix (`bd867bd^`) fails it as the bug was reported:
+  RESTORE_A stops at 199 of 450, the 251 oldest unreachable. Current `main`
+  passes: 450/450 plus the live message, 120/120, 30/30, all in order, and the
+  inbox lists all three. Ticked on that basis; a phone with history restored
+  from a real backup would still be the last word.
 
 ## Backfill (Phase 12) follow-ups — clear fixes
 - [x] Progress UX: emit `Running(0, total)` when a scan starts — done: `SpamBackfillUseCase.run()` announces `Running(0, total)` before the first batch, `statusProgress` adapts its step to history size, and `SpamBackfillProgressTest` asserts the start tick
