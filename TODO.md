@@ -4,13 +4,32 @@
 > ticked or rewritten in that pass say so inline; everything else was confirmed
 > still open in the code.
 
-- [] Lists all SMS from other SMS apps before app is installed — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
-- [] Message orders are wrong in conversations after i installed the app on a phone with old messages — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
+- [x] Lists all SMS from other SMS apps before app is installed — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
+- [x] Message orders are wrong in conversations after i installed the app on a phone with old messages — cursor fix done 2026-09-20 and verified on the seeded emulator fixture; not yet checked against a real imported history
 
   **Both root-caused on 2026-09-14 to one mechanism** — the thread pagination
   cursor. See "Thread pagination strands older messages on imported history"
   below. They are not two bugs; fixing the cursor should close both. Verify
   against a real imported history before ticking either.
+
+  **Checked on the Galaxy A26 on 2026-10-02, inconclusive:** its 2,086 messages
+  in 298 threads have no message whose row id and date disagree (0 inversions),
+  so the condition the bug needs never occurs there; its history was never
+  imported out of order. Still verified on the seeded emulator fixture only.
+  Needs a phone whose history came from a restore or transfer (e.g. Samsung
+  Smart Switch).
+
+  **Verified with a restore scenario on the emulator, 2026-10-03:**
+  `tools/import_history_check.sh` restores history the way backup tools do while
+  Google Messages is the default SMS app, installs NoSpam afterwards, and checks
+  every restored message is reachable in date order: RESTORE_A, 450 messages
+  restored newest first (every older message has a higher row id) plus a live
+  SMS after the restore; RESTORE_B, 120 shuffled; RESTORE_C, 30 in order. The
+  build just before the fix (`bd867bd^`) fails it as the bug was reported:
+  RESTORE_A stops at 199 of 450, the 251 oldest unreachable. Current `main`
+  passes: 450/450 plus the live message, 120/120, 30/30, all in order, and the
+  inbox lists all three. Ticked on that basis; a phone with history restored
+  from a real backup would still be the last word.
 
 ## Backfill (Phase 12) follow-ups — clear fixes
 - [x] Progress UX: emit `Running(0, total)` when a scan starts — done: `SpamBackfillUseCase.run()` announces `Running(0, total)` before the first batch, `statusProgress` adapts its step to history size, and `SpamBackfillProgressTest` asserts the start tick
@@ -445,7 +464,7 @@ Agreed for a later phase:
   Messages does not bother with; weigh that against a second source of truth,
   which CLAUDE.md §4 warns about.
 
-## Cold start: ~400ms main-thread stall before the inbox (measured 2026-09-25)
+## Cold start: ~400ms main-thread stall before the inbox (measured 2026-09-25) — **fixed in `0806511`**
 
 Tap to inbox is ~590ms on a Galaxy A26 (Android 16), and the inbox query is not
 where it goes. Release build, 111 conversations in the inbox (1,924 SMS, 295
@@ -473,7 +492,7 @@ Ruled out by measurement:
 
 Candidates, none measured. Take a system trace of one cold start before
 changing anything:
-- [] Trace a cold start (release, profile compiled) and attribute the ~400ms
+- [x] **Done in `0806511` (PR #25, v0.3.2).** The trace showed the inbox's first composition blocked 427ms on the spam-model lazy lock (a 1.2 MB JSON model, ~540ms to parse); `DeferredSpamClassifier` removed the wait. Tap to inbox ~590ms → ~288ms median, skipped frames ~50 → 0 (release, profile compiled, 5 cold launches, Galaxy A26). The candidates listed below were not the cause. Original item: Trace a cold start (release, profile compiled) and attribute the ~400ms
   between the first frame and the inbox.
 - Building the navigation graph: type-safe `@Serializable` routes create their
   serializers on first use, and `NoSpamNavHost` declares every destination.
@@ -515,7 +534,7 @@ fails:
   app. The generator's comment has the details.
 
 ## Project-wide
-- [~] Reply on the conversation's own SIM. **Done 2026-09-20 for threads with history:** `Message.subscriptionId` is now read from the provider and `ThreadViewModel` defaults the SIM picker to the SIM the thread last used (a manual pick sticks). **Done 2026-09-23 (phase 2, P2.7):** a thread with no SIM history now starts on the system default SMS SIM when it is active (unit-tested; the emulator has one SIM, so not seen on a device). **Still open:** when the SIM list is empty (phone permission missing, or single SIM) `sendMessage` still passes no subscription and `resolveSmsManager` falls back to the system default. Not tested on a dual-SIM device — the emulator has one SIM; the selection logic is covered by `ThreadViewModelContextTest` only
+- [x] **Verified on a dual-SIM phone 2026-10-02** (Galaxy A26, Irancell as SIM 1 and default SMS SIM, IR-MCI as SIM 2, NoSpam 0.3.2). Five conversations opened on the right SIM: only SIM 2, only SIM 1, both with SIM 1 latest, both with SIM 2 latest; a conversation with no history started on Irancell, the default. A message sent with IR-MCI picked was stored as SENT on subscription 2 and arrived on Irancell from the IR-MCI number. **The "SIM list is empty" case is closed, not a bug:** onboarding requires READ_PHONE_STATE and re-checks it on resume, so the app never runs without it; what remains (no SIM inserted, or SubscriptionManager failing) has nothing better to fall back to than the system default. Original item: Reply on the conversation's own SIM. **Done 2026-09-20 for threads with history:** `Message.subscriptionId` is now read from the provider and `ThreadViewModel` defaults the SIM picker to the SIM the thread last used (a manual pick sticks). **Done 2026-09-23 (phase 2, P2.7):** a thread with no SIM history now starts on the system default SMS SIM when it is active (unit-tested; the emulator has one SIM, so not seen on a device). **Still open:** when the SIM list is empty (phone permission missing, or single SIM) `sendMessage` still passes no subscription and `resolveSmsManager` falls back to the system default. Not tested on a dual-SIM device — the emulator has one SIM; the selection logic is covered by `ThreadViewModelContextTest` only
 - [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way
 - [] perf: `SpamStateWriter.upsertAllIfNotOverridden` does one `getByAddress` per address per flush — batch `IN (...)` read under the lock
 - [] Add instrumented tests for `core:telephony` provider query/write logic. Two device suites exist (`TelephonyInstrumentedTest`: one SMS insert/query round trip plus a notification build; `TelephonyMapperDeviceTest`: two `ContentValues` mappers) but nothing covers pagination, delete, mark-read or the SIM path. The thread pagination cursor bug above is exactly the kind this would have caught

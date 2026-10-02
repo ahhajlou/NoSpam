@@ -454,6 +454,12 @@ reseeds before every flow, because flows mutate shared fixtures and otherwise
 break each other in ways that look like flakes. `tools/seed.sh` is idempotent —
 it resets the addresses it is about to write before writing them.
 
+`tools/import_history_check.sh` (emulator only; it uninstalls NoSpam) restores
+history out of order the way backup tools do, with another app as the default
+SMS app, then checks that every restored message is reachable in date order.
+It is the regression check for the thread pagination cursor: the build before
+`bd867bd` fails it, and it takes about 15 minutes.
+
 Seeding also creates the contact "NoSpam QA Contact" (+15551110001), which is
 what the "Known" filter and contact-name resolution are asserted against. Note
 that **`content insert` prints nothing on success**, so a new row's id has to be
