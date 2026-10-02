@@ -68,6 +68,7 @@ class ConversationsRepository(
         db.starredDao.observeAll(),
         db.pinnedDao.observeAll(),
         db.mutedDao.observeAll(),
+        db.messageVerdictDao.observeAll(),
     ) { args ->
         val blocklist = args[0] as List<com.nospam.nospam.core.database.entity.BlocklistEntity>
         val archived = args[1] as List<com.nospam.nospam.core.database.entity.ArchivedThreadEntity>
@@ -75,6 +76,7 @@ class ConversationsRepository(
         val starred = args[3] as List<com.nospam.nospam.core.database.entity.StarredThreadEntity>
         val pinned = args[4] as List<com.nospam.nospam.core.database.entity.PinnedThreadEntity>
         val muted = args[5] as List<com.nospam.nospam.core.database.entity.MutedThreadEntity>
+        val verdicts = args[6] as List<com.nospam.nospam.core.database.entity.MessageVerdictEntity>
         Flags(
             blockedAddresses = blocklist.map { it.address }.toSet(),
             archivedIds = archived.map { it.threadId }.toSet(),
@@ -82,6 +84,8 @@ class ConversationsRepository(
             starredIds = starred.map { it.threadId }.toSet(),
             pinnedIds = pinned.map { it.threadId }.toSet(),
             mutedIds = muted.map { it.threadId }.toSet(),
+            // The same test the thread screen labels messages with.
+            suspectedThreadIds = verdicts.filter { it.userLabel ?: it.isSpam }.mapTo(HashSet()) { it.threadId },
         )
     }.shareIn(repositoryScope, SharingStarted.Eagerly, replay = 1)
 
@@ -133,6 +137,7 @@ class ConversationsRepository(
         starredIds: Set<Long>,
         pinnedIds: Set<Long>,
         mutedIds: Set<Long>,
+        suspectedThreadIds: Set<Long>,
     ): List<Conversation> = conversations.map { conv ->
         val st = senderStateFor(conv, senderStates)
         val isSpam = st?.state == com.nospam.nospam.core.model.ThreadSpamState.SPAM || st?.state == com.nospam.nospam.core.model.ThreadSpamState.BLOCKED
@@ -144,8 +149,25 @@ class ConversationsRepository(
             isStarred = conv.threadId.value in starredIds,
             isPinned = conv.threadId.value in pinnedIds,
             isMuted = conv.threadId.value in mutedIds,
+            hasSuspectedSpam = hasSuspectedSpam(conv, st, suspectedThreadIds),
         )
     }
+
+    /**
+     * Whether the inbox row is labelled "Suspected spam": the conversation holds
+     * a message flagged as spam right now, the same messages the thread screen
+     * labels. It follows the messages, not the sender's history, so deleting the
+     * flagged message or marking it "Not spam" removes it. Never for a saved
+     * contact (they bypass the classifier) or a sender the user marked "Not spam".
+     */
+    private fun hasSuspectedSpam(
+        conv: Conversation,
+        st: com.nospam.nospam.core.database.entity.SenderStateEntity?,
+        suspectedThreadIds: Set<Long>,
+    ): Boolean =
+        conv.threadId.value in suspectedThreadIds &&
+            conv.participants.none { it.displayName != null } &&
+            st?.state != com.nospam.nospam.core.model.ThreadSpamState.TRUSTED
 
     private fun applyFilter(conversations: List<Conversation>, senderStates: Map<String, com.nospam.nospam.core.database.entity.SenderStateEntity>, filter: ConversationFilter): List<Conversation> =
         conversations.filter { conv ->
@@ -173,6 +195,7 @@ class ConversationsRepository(
                 flags.starredIds,
                 flags.pinnedIds,
                 flags.mutedIds,
+                flags.suspectedThreadIds,
             )
             val sorted = withFlags.sortedWith(compareByDescending<Conversation> { it.isPinned }.thenByDescending { it.date })
             applyFilter(sorted, flags.senderStates, filter)
@@ -190,6 +213,8 @@ class ConversationsRepository(
         val starredIds: Set<Long>,
         val pinnedIds: Set<Long>,
         val mutedIds: Set<Long>,
+        /** Threads holding a message flagged as spam (user label, else the classifier). */
+        val suspectedThreadIds: Set<Long>,
     )
 
     private suspend fun adjustMixedSnippet(conversations: List<Conversation>): List<Conversation> {
@@ -232,6 +257,16 @@ class ConversationsRepository(
                 .sortedByDescending { it.date }
         }.flowOn(Dispatchers.IO)
     }
+
+    /**
+     * Conversations in Spam & blocked whose newest message arrived after
+     * [seenAt]: the drawer's sign that something was filtered since the user
+     * last looked. Spam is marked read on arrival, so an unread count would
+     * always be zero.
+     */
+    fun observeNewSpamCount(seenAt: Flow<Long>): Flow<Int> =
+        combine(observeSpam(), seenAt) { spam, since -> spam.count { it.date > since } }
+            .distinctUntilChanged()
 
     fun observeArchived(): Flow<List<Conversation>> {
         return combine(

@@ -23,7 +23,7 @@ tags:
     element:
         text: "NSTEST_MIXED1"
     direction: DOWN
-- assertVisible: "Mixed"                 # badge on the mixed conversation row
+- assertVisible: "Suspected spam"        # badge: the mixed row holds a flagged message
 # Spam and archived conversations must never appear on the inbox list.
 # NSTEST_SPAM2 (not NSTEST_SPAM1) on purpose: NSTEST_SPAM1 is mutated to
 # not-spam by spam_notspam_and_bulk.yaml, and this flow must hold regardless

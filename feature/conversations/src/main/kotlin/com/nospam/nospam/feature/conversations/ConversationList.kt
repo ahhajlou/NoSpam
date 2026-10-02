@@ -72,7 +72,6 @@ import com.nospam.nospam.core.designsystem.component.TopBarAction
 import com.nospam.nospam.core.designsystem.component.rememberSelectionState
 import com.nospam.nospam.core.designsystem.component.TopBarNavigation
 import com.nospam.nospam.core.model.Conversation
-import com.nospam.nospam.core.model.ThreadSpamState
 
 /** Material guidance and Google Messages both keep three action icons before ⋮. */
 private const val SELECTION_INLINE_ACTIONS = 3
@@ -176,9 +175,7 @@ internal fun ConversationRow(
                     )
                     when {
                         conv.isBlocked -> Badge(stringResource(R.string.badge_blocked), colors.errorContainer, colors.onErrorContainer)
-                        conv.spamState == ThreadSpamState.MIXED ->
-                            Badge(stringResource(R.string.badge_mixed), colors.tertiaryContainer, colors.onTertiaryContainer)
-                        conv.spamState == ThreadSpamState.SUSPECTED ->
+                        conv.hasSuspectedSpam ->
                             Badge(stringResource(R.string.badge_suspected), colors.tertiaryContainer, colors.onTertiaryContainer)
                     }
                 }

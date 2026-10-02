@@ -86,6 +86,15 @@ class SqliteMessageVerdictDaoTest {
     }
 
     @Test
+    fun deleteByMessageId_removes_only_that_row_and_publishes() = runTest {
+        dao.insert(MessageVerdictEntity(messageId = 1, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0))
+        dao.insert(MessageVerdictEntity(messageId = 2, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0))
+        dao.deleteByMessageId(1)
+        assertNull(dao.getByMessageId(1))
+        assertEquals(listOf(2L), dao.observeAll().first().map { it.messageId })
+    }
+
+    @Test
     fun updateUserLabel_touches_only_the_named_row() = runTest {
         dao.insert(MessageVerdictEntity(messageId = 1, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0))
         dao.insert(MessageVerdictEntity(messageId = 2, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0))

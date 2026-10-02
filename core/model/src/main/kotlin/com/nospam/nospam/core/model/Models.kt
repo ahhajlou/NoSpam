@@ -74,6 +74,12 @@ data class Conversation(
     val hasDraft: Boolean = false,
     val photoUri: String? = null,
     val spamState: ThreadSpamState? = null,
+    /**
+     * The conversation holds a message flagged as spam right now: the inbox
+     * badge. Follows the messages, unlike [spamState], which is the sender's
+     * history and decides the folder.
+     */
+    val hasSuspectedSpam: Boolean = false,
 )
 
 data class RawMessage(

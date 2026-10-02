@@ -87,6 +87,11 @@ class FlowDeltasTest {
         assertEquals(listOf(2L), result.map { it.messageId })
     }
 
+    @Test fun `a verdict is removed by message id`() {
+        val result = listOf(verdict(1, threadId = 7), verdict(2, threadId = 7)).withoutMessage(1)
+        assertEquals(listOf(2L), result.map { it.messageId })
+    }
+
     @Test fun `retention prunes only old auto ham`() {
         val cutoff = 1_000L
         val rows = listOf(

@@ -69,6 +69,10 @@ internal fun List<MessageVerdictEntity>.withVerdicts(
 internal fun List<MessageVerdictEntity>.withoutThread(threadId: Long): List<MessageVerdictEntity> =
     filterNot { it.threadId == threadId }
 
+/** `DELETE FROM message_verdict WHERE messageId = ?` */
+internal fun List<MessageVerdictEntity>.withoutMessage(messageId: Long): List<MessageVerdictEntity> =
+    filterNot { it.messageId == messageId }
+
 /**
  * `DELETE FROM message_verdict WHERE userLabel IS NULL AND isSpam = 0 AND createdAt < ?`
  *

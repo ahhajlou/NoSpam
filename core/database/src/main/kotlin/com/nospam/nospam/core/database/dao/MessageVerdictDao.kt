@@ -16,6 +16,8 @@ interface MessageVerdictDao {
     fun observeAll(): Flow<List<MessageVerdictEntity>>
     suspend fun getByThread(threadId: Long): List<MessageVerdictEntity>
     suspend fun deleteByThread(threadId: Long)
+    /** The message itself was deleted; its verdict goes with it. */
+    suspend fun deleteByMessageId(messageId: Long)
     suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int
     suspend fun updateUserLabel(messageId: Long, userLabel: Boolean?)
 }
@@ -35,6 +37,7 @@ class InMemoryMessageVerdictDao : MessageVerdictDao {
     override fun observeAll(): Flow<List<MessageVerdictEntity>> = flow
     override suspend fun getByThread(threadId: Long) = data.values.filter { it.threadId == threadId }
     override suspend fun deleteByThread(threadId: Long) { data.entries.removeIf { it.value.threadId == threadId }; refresh() }
+    override suspend fun deleteByMessageId(messageId: Long) { data.remove(messageId); refresh() }
     override suspend fun deleteAutoOlderThan(cutoffMillis: Long): Int {
         var r = 0
         val it = data.entries.iterator()

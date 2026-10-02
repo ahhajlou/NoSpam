@@ -40,7 +40,6 @@
     <string name="action_unpin">حذف سنجاق</string>
     <string name="action_mute">بی‌صدا کردن</string>
     <string name="action_unmute">فعال کردن صدا</string>
-    <string name="badge_mixed">ترکیبی</string>
     <string name="badge_suspected">هرزنامه مشکوک</string>
     <string name="status_muted">بی‌صدا</string>
     <string name="action_call">تماس</string>

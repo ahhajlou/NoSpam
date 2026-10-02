@@ -75,6 +75,20 @@ class SpamRepository(
             ?: SenderStateEntity(address, state, isUserOverride = true)
     }
 
+    /** What the app knows about [address]: its routing state, counts and the user's decision; null if nothing. */
+    fun observeSenderState(address: String): Flow<com.nospam.nospam.core.model.SenderState?> {
+        val addr = normalizedAddress(address)
+        return db.senderStateDao.observeAll()
+            .map { states ->
+                states.firstOrNull { it.normalizedAddress == addr }?.let {
+                    com.nospam.nospam.core.model.SenderState(
+                        it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt, it.hasReplied,
+                    )
+                }
+            }
+            .distinctUntilChanged()
+    }
+
     /** Senders the user marked "Not spam", most recent first, as normalised addresses. */
     fun observeAllowedSenders(): Flow<List<String>> = db.senderStateDao.observeAll().map { states ->
         states
@@ -157,6 +171,14 @@ class SpamRepository(
             )
         }
     }
+
+    /**
+     * A message was deleted. Its verdict goes with it, so it no longer marks the
+     * conversation as holding suspected spam. The sender's counts stay: they are
+     * the evidence routing rests on, and deleting must not take protection away
+     * or make a spam sender look new.
+     */
+    suspend fun onMessageDeleted(messageId: Long) = db.messageVerdictDao.deleteByMessageId(messageId)
 
     /**
      * The user sent a message to [address]. A reply clears an automatic spam
