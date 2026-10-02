@@ -89,4 +89,23 @@ class SpamSettingsViewModelTest {
         // (default) value is true, and the state must not claim false.
         assertTrue(vm.uiState.value.spamProtection)
     }
+
+    @Test fun `notify for suspected spam starts at the default constant`() = runTest {
+        val vm = SpamSettingsViewModel(SettingsRepository(FakePreferencesDataSource()))
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM, vm.uiState.value.notifySuspectedSpam)
+    }
+
+    @Test fun `setNotifySuspectedSpam writes through to storage and the state follows it`() = runTest {
+        val fake = FakePreferencesDataSource()
+        val vm = SpamSettingsViewModel(SettingsRepository(fake))
+        dispatcher.scheduler.advanceUntilIdle()
+        val flipped = !SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM
+
+        vm.setNotifySuspectedSpam(flipped)
+        dispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(flipped, vm.uiState.value.notifySuspectedSpam)
+        assertEquals(flipped, fake.contents(PreferenceFile.SETTINGS)["notify_suspected_spam"])
+    }
 }

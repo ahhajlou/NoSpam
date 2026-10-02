@@ -83,6 +83,23 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
     suspend fun setMessageSounds(enabled: Boolean) = write { it[KEY_MESSAGE_SOUNDS] = enabled }
 
     /**
+     * Whether a message that looks like spam but stays in the inbox posts a
+     * quiet notification: a new sender's first such message (SUSPECTED), or one
+     * from a sender that has sent ham or been replied to (MIXED). Off: no
+     * notification, and the message stays unread and labelled. Saved contacts
+     * are never classified, so it never applies to them.
+     *
+     * It decides only whether a notification is posted, never which folder a
+     * message lands in, so it cannot make the filter hide more. The default is
+     * [DEFAULT_NOTIFY_SUSPECTED_SPAM]; a failed read returns it too.
+     */
+    val notifySuspectedSpam: Flow<Boolean> = prefs.data(PreferenceFile.SETTINGS)
+        .map { it[KEY_NOTIFY_SUSPECTED_SPAM] as? Boolean ?: DEFAULT_NOTIFY_SUSPECTED_SPAM }
+        .catch { emit(DEFAULT_NOTIFY_SUSPECTED_SPAM) }
+
+    suspend fun setNotifySuspectedSpam(enabled: Boolean) = write { it[KEY_NOTIFY_SUSPECTED_SPAM] = enabled }
+
+    /**
      * The inbox's swipe actions. In the main settings file rather than
      * `ui_settings`, whose mere existence makes app startup read it before the
      * first screen. An unknown stored value reads as the default for that side.
@@ -188,18 +205,27 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         }
     }
 
-    private companion object {
-        const val TAG = "SettingsRepository"
-        const val KEY_SPAM_PROTECTION = "spam_protection_enabled"
-        const val KEY_BACKFILL_PENDING = "history_backfill_pending"
-        const val KEY_INSTALL_ID = "install_id"
-        const val KEY_THEME = "theme"
-        const val KEY_DYNAMIC_COLOR = "dynamic_color"
-        const val KEY_SWIPE_RIGHT = "swipe_right"
-        const val KEY_SWIPE_LEFT = "swipe_left"
-        const val KEY_MESSAGE_SOUNDS = "message_sounds"
-        const val SIM_PREFIX = "sim_"
-        const val SIM_NUMBER_SUFFIX = "_number"
-        const val SIM_DELIVERY_SUFFIX = "_delivery_reports"
+    companion object {
+        /**
+         * Default for [notifySuspectedSpam] until the user changes it. Off,
+         * decided 2026-10-02. Change it here: the settings switch, the incoming
+         * message path and the tests all read this constant. An install where
+         * the user already set the switch keeps its own value.
+         */
+        const val DEFAULT_NOTIFY_SUSPECTED_SPAM = false
+
+        private const val TAG = "SettingsRepository"
+        private const val KEY_SPAM_PROTECTION = "spam_protection_enabled"
+        private const val KEY_BACKFILL_PENDING = "history_backfill_pending"
+        private const val KEY_INSTALL_ID = "install_id"
+        private const val KEY_THEME = "theme"
+        private const val KEY_DYNAMIC_COLOR = "dynamic_color"
+        private const val KEY_SWIPE_RIGHT = "swipe_right"
+        private const val KEY_SWIPE_LEFT = "swipe_left"
+        private const val KEY_MESSAGE_SOUNDS = "message_sounds"
+        private const val KEY_NOTIFY_SUSPECTED_SPAM = "notify_suspected_spam"
+        private const val SIM_PREFIX = "sim_"
+        private const val SIM_NUMBER_SUFFIX = "_number"
+        private const val SIM_DELIVERY_SUFFIX = "_delivery_reports"
     }
 }

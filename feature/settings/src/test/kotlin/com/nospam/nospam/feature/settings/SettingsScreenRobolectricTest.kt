@@ -9,6 +9,8 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -79,6 +81,28 @@ class SettingsScreenRobolectricTest {
         toggleables()[0].performClick()
         rule.waitUntil(5_000) { toggleables()[0].fetchSemanticsNode().config
             .getOrNull(SemanticsProperties.ToggleableState) == ToggleableState.On }
+    }
+
+    @Test fun `notify for suspected spam starts at its default and toggles`() {
+        val vm = SpamSettingsViewModel(SettingsRepository(FakePreferencesDataSource()))
+        rule.setContent { SpamSettingsScreen(viewModel = vm) }
+        val expected = if (SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM) ToggleableState.On else ToggleableState.Off
+        val flipped = if (SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM) ToggleableState.Off else ToggleableState.On
+        fun state() = rule.onNodeWithText("Notify for suspected spam").fetchSemanticsNode().config
+            .getOrNull(SemanticsProperties.ToggleableState)
+        rule.waitUntil(5_000) { state() == expected }
+        rule.onNodeWithText("Notify for suspected spam").performClick()
+        rule.waitUntil(5_000) { state() == flipped }
+    }
+
+    @Test fun `notify for suspected spam is disabled while spam protection is off`() {
+        val vm = SpamSettingsViewModel(SettingsRepository(FakePreferencesDataSource()))
+        rule.setContent { SpamSettingsScreen(viewModel = vm) }
+        rule.onNodeWithText("Notify for suspected spam").assertIsEnabled()
+        toggleables()[0].performClick()
+        rule.waitUntil(5_000) {
+            runCatching { rule.onNodeWithText("Notify for suspected spam").assertIsNotEnabled() }.isSuccess
+        }
     }
 
     @Test fun `re-check reports to its caller and confirms in a snackbar`() {

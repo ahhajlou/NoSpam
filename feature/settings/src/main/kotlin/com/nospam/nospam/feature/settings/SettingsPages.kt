@@ -368,6 +368,15 @@ fun SpamSettingsScreen(
                 checked = state.spamProtection,
                 onCheckedChange = viewModel::setSpamProtection,
             )
+            // With protection off nothing is labelled, so there is nothing for
+            // this switch to announce.
+            SettingsSwitchItem(
+                title = stringResource(R.string.notify_suspected_title),
+                supportingText = stringResource(R.string.notify_suspected_sub),
+                checked = state.notifySuspectedSpam,
+                onCheckedChange = viewModel::setNotifySuspectedSpam,
+                enabled = state.spamProtection,
+            )
             SettingsItem(
                 title = stringResource(R.string.blocked_senders_title),
                 supportingText = stringResource(R.string.blocked_senders_sub),

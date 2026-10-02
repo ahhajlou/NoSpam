@@ -23,6 +23,8 @@
     <string name="default_sms_off">Tap to set as default</string>
     <string name="spam_title">Spam protection</string>
     <string name="spam_sub">Filter spam, scams and phishing on this device</string>
+    <string name="notify_suspected_title">Notify for suspected spam</string>
+    <string name="notify_suspected_sub">A quiet notification for a message that looks like spam but stays in your inbox, such as a new sender’s first message</string>
     <string name="scan_title">Re-check all messages</string>
     <string name="scan_sub">Re-scan every SMS with the current spam filter. Manual spam decisions are kept.</string>
     <string name="recheck_started">Re-check started in the background</string>

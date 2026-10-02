@@ -7,6 +7,7 @@ import com.nospam.nospam.core.preferences.PreferenceFile
 import com.nospam.nospam.core.testing.FakePreferencesDataSource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -142,6 +143,31 @@ class SettingsRepositoryTest {
         val repo = SettingsRepository(fake)
         val id = repo.installId()
         assertNotNull(UUID.fromString(id))
+    }
+
+    @Test fun `notify suspected spam reads the default constant when absent`() = runTest {
+        val repo = SettingsRepository(FakePreferencesDataSource())
+        assertEquals(SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM, repo.notifySuspectedSpam.first())
+    }
+
+    @Test fun `notify suspected spam reads the default constant when reads fail`() = runTest {
+        val fake = FakePreferencesDataSource().apply { failReads = true }
+        val repo = SettingsRepository(fake)
+        assertEquals(SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM, repo.notifySuspectedSpam.first())
+    }
+
+    @Test fun `notifySuspectedSpam follows changes and stores under the documented key`() = runTest {
+        val fake = FakePreferencesDataSource()
+        val repo = SettingsRepository(fake)
+        val default = SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM
+        repo.notifySuspectedSpam.test {
+            assertEquals(default, awaitItem())
+            repo.setNotifySuspectedSpam(!default)
+            assertEquals(!default, awaitItem())
+            repo.setNotifySuspectedSpam(default)
+            assertEquals(default, awaitItem())
+        }
+        assertEquals(default, fake.contents(PreferenceFile.SETTINGS)["notify_suspected_spam"])
     }
 
     @Test fun `a value of the wrong type under spam protection key reads as the default`() = runTest {
