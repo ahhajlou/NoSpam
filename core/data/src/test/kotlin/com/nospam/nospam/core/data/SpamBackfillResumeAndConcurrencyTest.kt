@@ -72,10 +72,10 @@ class SpamBackfillResumeAndConcurrencyTest {
         backfill.ensureStarted()
         advanceUntilIdle()
 
-        // Only the new message was classified; sticky SPAM keeps its single count.
+        // Only the new message was classified, and each message counts once.
         assertEquals(3, classifier.callCount)
         assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
-        assertEquals(1, db.senderStateDao.getByAddress("+98912")!!.spamCount)
+        assertEquals(3, db.senderStateDao.getByAddress("+98912")!!.spamCount)
         org.junit.Assert.assertNotNull(db.messageVerdictDao.getByMessageId(3))
     }
 
@@ -100,8 +100,10 @@ class SpamBackfillResumeAndConcurrencyTest {
         backfill.ensureStarted()
         advanceUntilIdle()
 
-        // Backfill aggregates 1 for the old message; the in-flight ingress adds 1 more.
+        // Backfill aggregates 1 for the old message; the in-flight ingress adds 1 more,
+        // and the state follows the merged counts: two spam messages, nothing else.
         assertEquals(2, db.senderStateDao.getByAddress("+98912")!!.spamCount)
+        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
     }
 
     @Test fun `cancel stops between senders and leaves them unclassified`() = runTest {
@@ -147,7 +149,7 @@ class SpamBackfillResumeAndConcurrencyTest {
         advanceUntilIdle()
 
         assertEquals(BackfillStatus.Done, backfill.status.value)
-        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
+        assertEquals(ThreadSpamState.SUSPECTED, db.senderStateDao.getByAddress("+98912")!!.state)
     }
 
     @Test fun `security exception aborts as Failed`() = runTest {

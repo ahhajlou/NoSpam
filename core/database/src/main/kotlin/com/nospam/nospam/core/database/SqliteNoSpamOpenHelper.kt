@@ -5,9 +5,11 @@ package com.nospam.nospam.core.database
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import com.nospam.nospam.core.model.ThreadSpamPolicy
+import com.nospam.nospam.core.model.ThreadSpamState
 
 class SqliteNoSpamOpenHelper(context: Context) :
-    SQLiteOpenHelper(context, "nospam.db", null, 4) {
+    SQLiteOpenHelper(context, "nospam.db", null, 5) {
 
     private companion object {
         /**
@@ -80,7 +82,8 @@ class SqliteNoSpamOpenHelper(context: Context) :
                 spamCount INTEGER NOT NULL,
                 hamCount INTEGER NOT NULL,
                 isUserOverride INTEGER NOT NULL,
-                updatedAt INTEGER NOT NULL
+                updatedAt INTEGER NOT NULL,
+                hasReplied INTEGER NOT NULL DEFAULT 0
             )"""
         )
         db.execSQL("""CREATE TABLE starred_threads (threadId INTEGER PRIMARY KEY)""")
@@ -120,6 +123,59 @@ class SqliteNoSpamOpenHelper(context: Context) :
         }
         if (oldVersion < 4) {
             INDEXES.forEach(db::execSQL)
+        }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE sender_state ADD COLUMN hasReplied INTEGER NOT NULL DEFAULT 0")
+            rederiveSenderStates(db)
+        }
+    }
+
+    /**
+     * Version 5 replaced the spam graduation ratio with the routing model in
+     * `ThreadSpamPolicy` (TODO.md, "Spam routing — agreed model"). Automatic
+     * states written by the old rules are re-derived from their counts, or a
+     * sender the old rules hid (one spam message, or a ratio that later ham
+     * could not undo) would stay hidden. The user's own decisions and blocks
+     * are left alone.
+     *
+     * A MIXED row with no ham got there only through the old protection for
+     * contacts and replied-to senders. It is marked as replied so that it stays
+     * in the inbox: for a contact that is more than true, but it can only hide
+     * less, and the classifier is no longer consulted for contacts anyway.
+     *
+     * The upgrade never hides a conversation that was showing: a row that
+     * would newly become SPAM keeps its old state.
+     */
+    private fun rederiveSenderStates(db: SQLiteDatabase) {
+        val automatic = listOf(ThreadSpamState.CLEAN, ThreadSpamState.MIXED, ThreadSpamState.SPAM).map { it.name }
+        val rows = mutableListOf<Triple<String, ThreadSpamState, Boolean>>()
+        db.query(
+            "sender_state",
+            arrayOf("normalizedAddress", "state", "spamCount", "hamCount"),
+            "isUserOverride = 0 AND state IN (?, ?, ?)",
+            automatic.toTypedArray(),
+            null, null, null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val old = ThreadSpamState.valueOf(c.getString(1))
+                val spam = c.getInt(2)
+                val ham = c.getInt(3)
+                val replied = old == ThreadSpamState.MIXED && ham == 0
+                val derived = ThreadSpamPolicy.deriveState(spam, ham, replied)
+                val state = if (derived == ThreadSpamState.SPAM && old != ThreadSpamState.SPAM) old else derived
+                if (state != old || replied) rows.add(Triple(c.getString(0), state, replied))
+            }
+        }
+        for ((address, state, replied) in rows) {
+            db.update(
+                "sender_state",
+                android.content.ContentValues().apply {
+                    put("state", state.name)
+                    if (replied) put("hasReplied", 1)
+                },
+                "normalizedAddress = ?",
+                arrayOf(address),
+            )
         }
     }
 }

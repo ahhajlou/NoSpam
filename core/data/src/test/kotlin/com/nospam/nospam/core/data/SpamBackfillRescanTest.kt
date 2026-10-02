@@ -82,8 +82,12 @@ class SpamBackfillRescanTest {
         assertTrue(verdict.isSpam)
         assertEquals(2.0, verdict.score, 0.0)
         assertEquals(originalCreatedAt, verdict.createdAt)
-        // Ham history is retained (CLAUDE.md §15): one spam on a CLEAN sender -> MIXED.
-        assertEquals(ThreadSpamState.MIXED, db.senderStateDao.getByAddress("+98912")!!.state)
+        // The message's old ham count is replaced, not kept beside the new spam
+        // one: the sender has one spam message and nothing else, SUSPECTED.
+        val state = db.senderStateDao.getByAddress("+98912")!!
+        assertEquals(ThreadSpamState.SUSPECTED, state.state)
+        assertEquals(1, state.spamCount)
+        assertEquals(0, state.hamCount)
         assertEquals(2, classifier.callCount)
     }
 
@@ -144,11 +148,11 @@ class SpamBackfillRescanTest {
             // E.g. the IELTS payment receipt that the broken preprocessor misfiled as spam.
             allMessages.add(inbox(1, "+98912", "IELTS On Computer payment receipt", recentAgo(200)))
         }
-        // Old model: false positive -> auto SPAM.
+        // Old model: false positive -> SUSPECTED (one spam message, nothing else).
         val backfill = useCase(db, telephony, classifierWhere { true }, scope = this)
         backfill.ensureStarted()
         advanceUntilIdle()
-        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
+        assertEquals(ThreadSpamState.SUSPECTED, db.senderStateDao.getByAddress("+98912")!!.state)
         assertTrue(db.messageVerdictDao.getByMessageId(1)!!.isSpam)
 
         // Preprocessing fixed: the same message now classifies as ham.
@@ -156,9 +160,12 @@ class SpamBackfillRescanTest {
         recheck.rescanAll()
         advanceUntilIdle()
 
-        // Sticky SPAM must not trap an auto-classified sender across a
-        // user-initiated model-fix rescan (user overrides stay frozen elsewhere).
-        assertEquals(ThreadSpamState.CLEAN, db.senderStateDao.getByAddress("+98912")!!.state)
+        // The message's old spam count is replaced, not added to: the sender is
+        // CLEAN, not MIXED from a verdict that no longer holds.
+        val state = db.senderStateDao.getByAddress("+98912")!!
+        assertEquals(ThreadSpamState.CLEAN, state.state)
+        assertEquals(0, state.spamCount)
+        assertEquals(1, state.hamCount)
         assertTrue(!db.messageVerdictDao.getByMessageId(1)!!.isSpam)
     }
 
@@ -185,5 +192,42 @@ class SpamBackfillRescanTest {
         // Fail-open: the aborted pass writes nothing.
         assertNull(db.senderStateDao.getByAddress("+98912"))
         assertNull(db.senderStateDao.getByAddress("+98999"))
+    }
+
+    @Test fun `rescanAll does not count a message twice`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephonyDataSource().apply {
+            allMessages.add(inbox(1, "+98912", "win a prize", recentAgo(200)))
+        }
+        val backfill = useCase(db, telephony, classifierWhere { true }, scope = this)
+        backfill.ensureStarted()
+        advanceUntilIdle()
+
+        // Adding the rescan to the stored counts would make this two spam
+        // messages, which is SPAM: a re-check would hide the conversation.
+        val recheck = useCase(db, telephony, classifierWhere { true }, scope = this)
+        recheck.rescanAll()
+        advanceUntilIdle()
+
+        val state = db.senderStateDao.getByAddress("+98912")!!
+        assertEquals(ThreadSpamState.SUSPECTED, state.state)
+        assertEquals(1, state.spamCount)
+    }
+
+    @Test fun `rescanAll keeps the counts of messages that are gone`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        // A sender that once sent ham, from a conversation since deleted.
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.MIXED, spamCount = 0, hamCount = 1))
+        val telephony = FakeTelephonyDataSource().apply {
+            allMessages.add(inbox(1, "+98912", "win a prize", recentAgo(200)))
+        }
+        val recheck = useCase(db, telephony, classifierWhere { true }, scope = this)
+        recheck.rescanAll()
+        advanceUntilIdle()
+
+        val state = db.senderStateDao.getByAddress("+98912")!!
+        assertEquals(ThreadSpamState.MIXED, state.state)
+        assertEquals(1, state.hamCount)
+        assertEquals(1, state.spamCount)
     }
 }

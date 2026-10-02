@@ -5,6 +5,7 @@ package com.nospam.nospam.core.database
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.nospam.nospam.core.model.ThreadSpamState
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -55,9 +56,9 @@ class SqliteNoSpamOpenHelperTest {
     }
 
     @Test
-    fun database_version_is_4() {
+    fun database_version_is_5() {
         val helper = SqliteNoSpamOpenHelper(context)
-        assertEquals(4, helper.writableDatabase.version)
+        assertEquals(5, helper.writableDatabase.version)
         helper.close()
     }
 
@@ -77,5 +78,52 @@ class SqliteNoSpamOpenHelperTest {
             "blocklist", null, "address = ?", arrayOf("+98912"), null, null, null,
         ).use { c -> assertEquals(1, c.count) }
         second.close()
+    }
+
+    /**
+     * Version 5 re-derives automatic sender states under the new routing model.
+     * Built by hand as a version 4 file, the way an installed app has it.
+     */
+    @Test
+    fun upgrade_to_5_rederives_automatic_states_and_leaves_user_decisions() {
+        val path = context.getDatabasePath("nospam.db")
+        path.parentFile?.mkdirs()
+        android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(path, null).use { db ->
+            db.execSQL(
+                """CREATE TABLE sender_state (
+                    normalizedAddress TEXT PRIMARY KEY,
+                    state TEXT NOT NULL,
+                    spamCount INTEGER NOT NULL,
+                    hamCount INTEGER NOT NULL,
+                    isUserOverride INTEGER NOT NULL,
+                    updatedAt INTEGER NOT NULL
+                )"""
+            )
+            fun row(address: String, state: String, spam: Int, ham: Int, override: Int = 0) =
+                db.execSQL("INSERT INTO sender_state VALUES ('$address', '$state', $spam, $ham, $override, 1)")
+            row("graduated", "SPAM", 3, 1)        // ratio rule hid a sender that sent ham
+            row("first", "SPAM", 1, 0)            // one spam message hid a new sender
+            row("repeat", "SPAM", 4, 0)           // only ever spam: stays hidden
+            row("protected", "MIXED", 2, 0)       // protected as a contact or replied-to
+            row("reported", "SPAM", 1, 0, 1)      // the user's Report spam
+            row("allowed", "TRUSTED", 5, 0, 1)    // the user's Not spam
+            row("blocked", "BLOCKED", 2, 0)
+            db.version = 4
+        }
+
+        val helper = SqliteNoSpamOpenHelper(context)
+        val states = mutableMapOf<String, Pair<String, Int>>()
+        helper.readableDatabase.rawQuery("SELECT normalizedAddress, state, hasReplied FROM sender_state", null).use { c ->
+            while (c.moveToNext()) states[c.getString(0)] = c.getString(1) to c.getInt(2)
+        }
+        helper.close()
+
+        assertEquals(ThreadSpamState.MIXED.name to 0, states["graduated"])
+        assertEquals(ThreadSpamState.SUSPECTED.name to 0, states["first"])
+        assertEquals(ThreadSpamState.SPAM.name to 0, states["repeat"])
+        assertEquals(ThreadSpamState.MIXED.name to 1, states["protected"])
+        assertEquals(ThreadSpamState.SPAM.name to 0, states["reported"])
+        assertEquals(ThreadSpamState.TRUSTED.name to 0, states["allowed"])
+        assertEquals(ThreadSpamState.BLOCKED.name to 0, states["blocked"])
     }
 }

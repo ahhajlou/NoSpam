@@ -16,9 +16,9 @@ import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.TelephonyDataSource
 
 /**
- * Orchestrates one incoming SMS: classify → resolve thread → insert into the
- * system inbox (READ=1 for spam to suppress heads-up) → store verdict →
- * opportunistic 30-day retention prune.
+ * Orchestrates one incoming SMS: insert into the system inbox unread → classify
+ * (skipped for saved contacts) → route through [ThreadSpamPolicy] → mark read
+ * only what goes to Spam → store verdict → opportunistic retention prune.
  *
  * Lives in core:data because it is the only layer allowed to see
  * core:telephony + core:ml + core:database together. Pure logic, no Android
@@ -84,8 +84,13 @@ class SmsIngressUseCase(
             return Result(threadId, isSpam = true, score = 1.0, sender = sender, body = message.body, messageId = messageId, notificationDecision = NotificationDecision.NONE, senderState = ThreadSpamState.BLOCKED)
         }
 
-        // 2) Classify with timeout — failure degrades to "no verdict, leave unread".
-        val verdict = runCatching {
+        // 2) Saved contacts bypass the classifier entirely: no verdict, no label,
+        // no change to the sender's state, a normal notification (TODO.md, "Spam
+        // routing — agreed model").
+        val isContact = runCatching { telephony.lookupContact(sender)?.displayName != null }.getOrDefault(false)
+
+        // 3) Classify with timeout — failure degrades to "no verdict, leave unread".
+        val verdict = if (isContact) null else runCatching {
             kotlinx.coroutines.withTimeout(8000L) { classifier.classify(message) }
         }.getOrNull()
 
@@ -95,7 +100,6 @@ class SmsIngressUseCase(
 
         if (verdict != null) {
             // Gather signals for policy
-            val isContact = runCatching { telephony.lookupContact(sender)?.displayName != null }.getOrDefault(false)
             val hasOutbound = runCatching { telephony.hasOutboundMessages(threadId) }.getOrDefault(false)
             // Read before taking the lock: a DataStore read should not be held
             // across it, and the answer does not depend on sender state.
@@ -104,17 +108,16 @@ class SmsIngressUseCase(
             // Read → decide → write runs as one critical section. Reading the
             // previous state outside the lock let two messages from the same
             // sender both start from the same counters and lose one increment,
-            // which skews the ≥3/≥80% graduation rule (CLAUDE.md §15).
+            // which would put the sender in the wrong state.
             val policyOut = spamStateWriter.withSpamStateLock {
                 val current = db.senderStateDao.getByAddress(normalized)
                 val prevSenderState = current?.let {
-                    com.nospam.nospam.core.model.SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt)
+                    com.nospam.nospam.core.model.SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt, it.hasReplied)
                 }
 
                 val policyInput = PolicyInput(
                     prevState = prevSenderState,
                     isSpam = verdict.isSpam,
-                    isContact = isContact,
                     hasOutbound = hasOutbound,
                     isBlocked = false,
                 )
@@ -141,6 +144,7 @@ class SmsIngressUseCase(
                             hamCount = out.newState.hamCount,
                             isUserOverride = out.newState.isUserOverride,
                             updatedAt = System.currentTimeMillis(),
+                            hasReplied = out.newState.hasReplied,
                         )
                     )
                 }
@@ -181,12 +185,14 @@ class SmsIngressUseCase(
                 }
             }
 
-            // Apply READ / notification per decision — muted keeps unread but silent
+            // A message routed to Spam is marked read; one that stays in the inbox,
+            // labelled or not, stays unread so it can still be found. Muted keeps
+            // unread but silent.
             when (notificationDecision) {
-                NotificationDecision.NONE, NotificationDecision.SILENT -> {
+                NotificationDecision.NONE -> {
                     if (!isMuted && messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
                 }
-                NotificationDecision.NORMAL -> { /* leave unread */ }
+                NotificationDecision.SILENT, NotificationDecision.NORMAL -> { /* leave unread */ }
             }
         }
         // If muted and classifier failed (no verdict), still suppress

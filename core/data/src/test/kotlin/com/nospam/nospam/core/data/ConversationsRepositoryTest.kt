@@ -130,6 +130,7 @@ class ConversationsRepositoryTest {
             Triple(3L, "09333333333", ThreadSpamState.TRUSTED),
             Triple(4L, "09444444444", ThreadSpamState.SPAM),
             Triple(5L, "09555555555", ThreadSpamState.BLOCKED),
+            Triple(6L, "09666666666", ThreadSpamState.SUSPECTED),
         )
         val convs = states.map { (id, addr, _) -> conv(id, addr) }
         val tele = FakeTelephonyDataSource(convs)
@@ -143,10 +144,35 @@ class ConversationsRepositoryTest {
         }
         val inbox = repo.observeConversations().first()
         val spam = repo.observeSpam().first()
-        assertEquals(setOf(1L, 2L, 3L), inbox.map { it.threadId.value }.toSet())
+        assertEquals(setOf(1L, 2L, 3L, 6L), inbox.map { it.threadId.value }.toSet())
         assertEquals(setOf(4L, 5L), spam.map { it.threadId.value }.toSet())
         // The split bug: same conversation must never appear in both lists.
         assertTrue(inbox.map { it.threadId.value }.toSet().intersect(spam.map { it.threadId.value }.toSet()).isEmpty())
+    }
+
+    /**
+     * Saved contacts bypass the classifier, so an automatic state recorded
+     * before the sender was saved no longer routes or labels the conversation.
+     * The user's own Report spam and blocks still do.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `a saved contact's automatic spam state no longer applies, a user decision still does`() = runTest {
+        fun contact(id: Long, address: String) =
+            Conversation(ThreadId(id), listOf(Participant(address, displayName = "Saved $id")), "hi", id, 1, true)
+        val tele = FakeTelephonyDataSource(listOf(contact(1, "+98911"), contact(2, "+98922"), contact(3, "+98933")))
+        val db = NoSpamDatabase.inMemory()
+        val testScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val repo = ConversationsRepository(tele, db, testScope)
+        db.senderStateDao.upsert(SenderStateEntity("+98911", ThreadSpamState.SPAM, spamCount = 3))
+        db.senderStateDao.upsert(SenderStateEntity("+98922", ThreadSpamState.MIXED, spamCount = 1, hamCount = 1))
+        db.senderStateDao.upsert(SenderStateEntity("+98933", ThreadSpamState.SPAM, spamCount = 1, isUserOverride = true))
+
+        val inbox = repo.observeConversations().first()
+        val spam = repo.observeSpam().first()
+
+        assertEquals(setOf(1L, 2L), inbox.map { it.threadId.value }.toSet())
+        assertTrue(inbox.all { it.spamState == ThreadSpamState.CLEAN })
+        assertEquals(setOf(3L), spam.map { it.threadId.value }.toSet())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

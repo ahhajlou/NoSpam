@@ -101,10 +101,19 @@ class ConversationsRepository(
     private fun normalizeAddr(raw: String) = raw.trim().uppercase()
 
     private fun senderStateFor(conv: Conversation, states: Map<String, com.nospam.nospam.core.database.entity.SenderStateEntity>): com.nospam.nospam.core.database.entity.SenderStateEntity? {
-        val addr = conv.participants.firstOrNull()?.address ?: return null
+        val sender = conv.participants.firstOrNull() ?: return null
+        val addr = sender.address
         // Look up under the normalized form (matches how ingress stored the key),
         // falling back to the exact raw address.
-        return states[normalizeAddr(normalizer(addr))] ?: states[addr]
+        val st = states[normalizeAddr(normalizer(addr))] ?: states[addr] ?: return null
+        // Saved contacts bypass the classifier, so an automatic state recorded
+        // before the sender was saved (or before contacts bypassed it) no longer
+        // applies: saving a sender clears it. The user's own decisions and blocks
+        // still do.
+        if (sender.displayName != null && !st.isUserOverride && st.state in SpamStateWriter.AUTOMATIC_STATES) {
+            return st.copy(state = com.nospam.nospam.core.model.ThreadSpamState.CLEAN)
+        }
+        return st
     }
 
     private fun isBlockedAddress(conv: Conversation, blockedRaw: Set<String>): Boolean {

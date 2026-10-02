@@ -76,6 +76,8 @@ class ThreadViewModel(
     private var messagesJob: Job? = null
     private var contactJob: Job? = null
     private var verdictsJob: Job? = null
+    /** Message ids the verdict store flags in this thread, before the contact check. */
+    private var threadSpamIds: Set<Long> = emptySet()
     private var lastRemote: List<Message> = emptyList()
     // Optimistic rows (negative ids) not yet confirmed by the provider.
     private var optimistic: List<Message> = emptyList()
@@ -164,7 +166,8 @@ class ThreadViewModel(
                 syncSelectedSim()
             }
         }
-        // Per-message "Not spam"/"Report spam" inside a MIXED thread (no sender override).
+        // Per-message "Not spam"/"Report spam" on messages labelled suspected spam.
+        threadSpamIds = emptySet()
         spamRepository?.let { repo ->
             _uiState.value = _uiState.value.copy(
                 onMarkNotSpam = { msgId -> viewModelScope.launch { repo.markMessageNotSpam(msgId) } },
@@ -173,7 +176,8 @@ class ThreadViewModel(
             verdictsJob?.cancel()
             verdictsJob = viewModelScope.launch {
                 repo.observeThreadSpamMessageIds(id).collect { ids ->
-                    _uiState.value = _uiState.value.copy(spamMessageIds = ids)
+                    threadSpamIds = ids
+                    publishSpamIds()
                 }
             }
         }
@@ -194,8 +198,19 @@ class ThreadViewModel(
                     contactName = contact.displayName,
                     contactPhotoUri = contact.photoUri,
                 )
+                publishSpamIds()
             }
         }
+    }
+
+    /**
+     * Saved contacts bypass the classifier, so their messages carry no
+     * "Suspected spam" label, including verdicts stored before the sender was
+     * saved or before contacts bypassed it.
+     */
+    private fun publishSpamIds() {
+        val ids = if (_uiState.value.contactName != null) emptySet() else threadSpamIds
+        _uiState.value = _uiState.value.copy(spamMessageIds = ids)
     }
 
     /**
@@ -364,6 +379,9 @@ class ThreadViewModel(
             if (rowId == null) restoreUnsent(address, body)
         } else {
             runCatching { onMessageQueued() }
+            // A reply clears the sender's automatic spam state (never a block or
+            // the user's own Report spam), and is remembered past a deletion.
+            runCatching { spamRepository?.recordReply(address) }
         }
         // No manual reload: the provider observer re-emits and reconciles.
     }

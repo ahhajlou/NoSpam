@@ -4,10 +4,12 @@ package com.nospam.nospam.core.data
 
 import android.content.Context
 import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.model.ThreadSpamPolicy
 import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import kotlinx.coroutines.flow.Flow
@@ -55,10 +57,22 @@ class SpamRepository(
             if (existing != null) db.spamVerdictDao.upsert(existing.copy(isSpam = false, isUserOverride = true))
             else db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = false, score = 0.0, isUserOverride = true))
         }
-        val states = conversations.map { normalizedAddress(it.second) }.distinct().map { addr ->
-            com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.TRUSTED, isUserOverride = true)
+        val addresses = conversations.map { normalizedAddress(it.second) }.distinct()
+        spamStateWriter.withSpamStateLock {
+            db.senderStateDao.upsertAll(addresses.map { overridden(it, ThreadSpamState.TRUSTED) })
         }
-        spamStateWriter.withSpamStateLock { db.senderStateDao.upsertAll(states) }
+    }
+
+    /**
+     * The user's decision for [address], keeping the sender's counts and reply
+     * flag. They are the evidence an automatic state is rebuilt from if the
+     * decision is ever undone; overwriting them left an undone "Not spam" only
+     * able to return the sender to CLEAN. Caller holds the spam-state lock.
+     */
+    private suspend fun overridden(address: String, state: ThreadSpamState): SenderStateEntity {
+        val current = db.senderStateDao.getByAddress(address)
+        return current?.copy(state = state, isUserOverride = true, updatedAt = System.currentTimeMillis())
+            ?: SenderStateEntity(address, state, isUserOverride = true)
     }
 
     /** Senders the user marked "Not spam", most recent first, as normalised addresses. */
@@ -71,9 +85,8 @@ class SpamRepository(
 
     /**
      * Undoes "Not spam" for [address], so the sender is filtered automatically
-     * again. The state before the override is not kept, so it is rebuilt from
-     * the stored counts the same way unblocking does: MIXED when the sender has
-     * spam history, CLEAN otherwise; the counts themselves are kept. Only a
+     * again. The state is rebuilt from the stored counts by
+     * [ThreadSpamPolicy.deriveState], the same way unblocking does. Only a
      * user's TRUSTED override is changed, and no conversation is touched.
      */
     suspend fun removeAllow(address: String) {
@@ -83,7 +96,7 @@ class SpamRepository(
             if (current.state != ThreadSpamState.TRUSTED || !current.isUserOverride) return@withSpamStateLock
             db.senderStateDao.upsert(
                 current.copy(
-                    state = if (current.spamCount > 0) ThreadSpamState.MIXED else ThreadSpamState.CLEAN,
+                    state = ThreadSpamPolicy.deriveState(current.spamCount, current.hamCount, current.hasReplied),
                     isUserOverride = false,
                     updatedAt = System.currentTimeMillis(),
                 )
@@ -103,32 +116,71 @@ class SpamRepository(
         for ((threadId, _) in conversations) {
             db.spamVerdictDao.upsert(SpamVerdictEntity(threadId = threadId.value, isSpam = true, score = 1.0, isUserOverride = true))
         }
-        val states = conversations.map { normalizedAddress(it.second) }.distinct().map { addr ->
-            com.nospam.nospam.core.database.entity.SenderStateEntity(addr, com.nospam.nospam.core.model.ThreadSpamState.SPAM, isUserOverride = true, spamCount = 1)
-        }
-        spamStateWriter.withSpamStateLock { db.senderStateDao.upsertAll(states) }
-    }
-
-    // Per-message actions inside MIXED — do not touch sender override
-    suspend fun markMessageNotSpam(messageId: Long) {
+        val addresses = conversations.map { normalizedAddress(it.second) }.distinct()
         spamStateWriter.withSpamStateLock {
-            db.messageVerdictDao.updateUserLabel(messageId, false)
-            // Recompute counts for that sender (simple: increment ham, recompute state if not override)
-            val v = db.messageVerdictDao.getByMessageId(messageId) ?: return@withSpamStateLock
-            val state = db.senderStateDao.getByAddress(v.normalizedAddress) ?: return@withSpamStateLock
-            if (state.isUserOverride) return@withSpamStateLock
-            // increment hamCount, keep state as is unless graduation logic says otherwise (keep MIXED)
-            db.senderStateDao.upsert(state.copy(hamCount = state.hamCount + 1, updatedAt = System.currentTimeMillis()))
+            db.senderStateDao.upsertAll(addresses.map { overridden(it, ThreadSpamState.SPAM) })
         }
     }
 
-    suspend fun markMessageSpam(messageId: Long) {
+    /**
+     * The user's "Not spam" on one message. A message that counted as spam now
+     * counts as ham, so a sender whose only spam this was returns to CLEAN, and
+     * one that was SUSPECTED or SPAM returns to the inbox. A sender the user has
+     * decided about (an override) keeps that decision; only the label changes.
+     */
+    suspend fun markMessageNotSpam(messageId: Long) = relabel(messageId, isSpam = false)
+
+    /**
+     * The user's "Report spam" on one message. It adds spam evidence but takes
+     * no ham away: the conversation the user is reading is never hidden by a
+     * per-message action, only by "Report spam" on the whole conversation.
+     */
+    suspend fun markMessageSpam(messageId: Long) = relabel(messageId, isSpam = true)
+
+    private suspend fun relabel(messageId: Long, isSpam: Boolean) {
         spamStateWriter.withSpamStateLock {
-            db.messageVerdictDao.updateUserLabel(messageId, true)
             val v = db.messageVerdictDao.getByMessageId(messageId) ?: return@withSpamStateLock
+            val wasSpam = v.userLabel ?: v.isSpam
+            db.messageVerdictDao.updateUserLabel(messageId, isSpam)
+            if (wasSpam == isSpam) return@withSpamStateLock
             val state = db.senderStateDao.getByAddress(v.normalizedAddress) ?: return@withSpamStateLock
-            if (state.isUserOverride) return@withSpamStateLock
-            db.senderStateDao.upsert(state.copy(spamCount = state.spamCount + 1, updatedAt = System.currentTimeMillis()))
+            if (state.isUserOverride || state.state !in SpamStateWriter.AUTOMATIC_STATES) return@withSpamStateLock
+            val spam = if (isSpam) state.spamCount + 1 else maxOf(0, state.spamCount - 1)
+            val ham = if (isSpam) state.hamCount else state.hamCount + 1
+            db.senderStateDao.upsert(
+                state.copy(
+                    spamCount = spam,
+                    hamCount = ham,
+                    state = ThreadSpamPolicy.deriveState(spam, ham, state.hasReplied),
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+        }
+    }
+
+    /**
+     * The user sent a message to [address]. A reply clears an automatic spam
+     * state (the sender is MIXED at most from now on), and is remembered on the
+     * sender so deleting the conversation does not undo it. It never changes the
+     * user's own decision: replying "STOP" to a sender they reported or blocked
+     * leaves it reported or blocked.
+     */
+    suspend fun recordReply(address: String) {
+        val addr = normalizedAddress(address)
+        spamStateWriter.withSpamStateLock {
+            val current = db.senderStateDao.getByAddress(addr)
+            if (current?.hasReplied == true) return@withSpamStateLock
+            val updated = when {
+                current == null -> SenderStateEntity(addr, ThreadSpamState.CLEAN, hasReplied = true)
+                current.isUserOverride || current.state !in SpamStateWriter.AUTOMATIC_STATES ->
+                    current.copy(hasReplied = true)
+                else -> current.copy(
+                    hasReplied = true,
+                    state = ThreadSpamPolicy.deriveState(current.spamCount, current.hamCount, hasReplied = true),
+                    updatedAt = System.currentTimeMillis(),
+                )
+            }
+            db.senderStateDao.upsert(updated)
         }
     }
 
