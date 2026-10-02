@@ -445,7 +445,7 @@ Agreed for a later phase:
   Messages does not bother with; weigh that against a second source of truth,
   which CLAUDE.md §4 warns about.
 
-## Cold start: ~400ms main-thread stall before the inbox (measured 2026-09-25)
+## Cold start: ~400ms main-thread stall before the inbox (measured 2026-09-25) — **fixed in `0806511`**
 
 Tap to inbox is ~590ms on a Galaxy A26 (Android 16), and the inbox query is not
 where it goes. Release build, 111 conversations in the inbox (1,924 SMS, 295
@@ -473,7 +473,7 @@ Ruled out by measurement:
 
 Candidates, none measured. Take a system trace of one cold start before
 changing anything:
-- [] Trace a cold start (release, profile compiled) and attribute the ~400ms
+- [x] **Done in `0806511` (PR #25, v0.3.2).** The trace showed the inbox's first composition blocked 427ms on the spam-model lazy lock (a 1.2 MB JSON model, ~540ms to parse); `DeferredSpamClassifier` removed the wait. Tap to inbox ~590ms → ~288ms median, skipped frames ~50 → 0 (release, profile compiled, 5 cold launches, Galaxy A26). The candidates listed below were not the cause. Original item: Trace a cold start (release, profile compiled) and attribute the ~400ms
   between the first frame and the inbox.
 - Building the navigation graph: type-safe `@Serializable` routes create their
   serializers on first use, and `NoSpamNavHost` declares every destination.
