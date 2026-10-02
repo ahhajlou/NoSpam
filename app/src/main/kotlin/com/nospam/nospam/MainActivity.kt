@@ -38,8 +38,10 @@ class MainActivity : AppCompatActivity() {
         setContent {
             val target by launchTarget.collectAsState()
             val dynamicColor by app.dynamicColor.collectAsState()
+            val newSpamCount by app.container.newSpamCount.collectAsState(initial = 0)
             NoSpamAppShell(
                 dynamicColor = dynamicColor,
+                newSpamCount = newSpamCount,
                 photoLoader = app.container.contactPhotos,
                 launchTarget = target,
                 onLaunchTargetHandled = { launchTarget.value = null },

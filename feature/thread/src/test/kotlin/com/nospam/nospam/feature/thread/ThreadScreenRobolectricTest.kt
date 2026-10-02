@@ -84,6 +84,40 @@ class ThreadScreenRobolectricTest {
         rule.onNodeWithText("sent from far up").assertIsDisplayed()
     }
 
+    @Test fun `a conversation the filter moved to Spam explains why and Not spam trusts the sender`() {
+        val db = com.nospam.nospam.core.database.NoSpamDatabase.inMemory()
+        kotlinx.coroutines.runBlocking {
+            db.senderStateDao.upsert(
+                com.nospam.nospam.core.database.entity.SenderStateEntity(
+                    "+15550009", com.nospam.nospam.core.model.ThreadSpamState.SPAM, spamCount = 2,
+                )
+            )
+        }
+        val repo = com.nospam.nospam.core.data.SpamRepository(db, com.nospam.nospam.core.testing.FakeSpamClassifier.alwaysHam())
+        val fake = com.nospam.nospam.core.testing.FakeTelephonyDataSource()
+        fake.emitMessages(
+            com.nospam.nospam.core.model.ThreadId(9),
+            listOf(
+                com.nospam.nospam.core.model.Message(
+                    com.nospam.nospam.core.model.MessageId(7), com.nospam.nospam.core.model.ThreadId(9),
+                    "+15550009", "win a prize", 1L, com.nospam.nospam.core.model.MessageType.INBOX, true,
+                ),
+            ),
+        )
+        rule.setContent { ThreadScreen(threadId = 9L, viewModel = ThreadViewModel(fake, spamRepository = repo)) }
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithText("The on-device filter moved this conversation to Spam.").fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithText("Not spam").performClick()
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithText("The on-device filter moved this conversation to Spam.").fetchSemanticsNodes().isEmpty()
+        }
+        assertEquals(
+            com.nospam.nospam.core.model.ThreadSpamState.TRUSTED,
+            kotlinx.coroutines.runBlocking { db.senderStateDao.getByAddress("+15550009") }!!.state,
+        )
+    }
+
     @Test fun `a message that is still sending says so`() {
         val fake = com.nospam.nospam.core.testing.FakeTelephonyDataSource()
         fake.emitMessages(

@@ -182,6 +182,64 @@ class ThreadViewModelTest {
         assertEquals(ThreadSpamState.MIXED, state.state)
     }
 
+    @Test fun `a conversation with flagged messages shows the suspected banner`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val db = NoSpamDatabase.inMemory()
+        val repo = SpamRepository(db, FakeSpamClassifier.alwaysHam())
+        db.senderStateDao.upsert(SenderStateEntity("+1555", ThreadSpamState.SUSPECTED, spamCount = 1))
+        db.messageVerdictDao.insert(MessageVerdictEntity(1L, 9L, "+1555", isSpam = true, score = 0.9, createdAt = 1L))
+        val vm = ThreadViewModel(telephonyWithThread9(), spamRepository = repo)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        assertEquals(SpamBanner.SUSPECTED_MESSAGES, vm.uiState.value.spamBanner)
+    }
+
+    @Test fun `a conversation the filter moved to Spam says so, one the user reported does not`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        for ((override, expected) in listOf(false to SpamBanner.IN_SPAM, true to null)) {
+            val db = NoSpamDatabase.inMemory()
+            val repo = SpamRepository(db, FakeSpamClassifier.alwaysHam())
+            db.senderStateDao.upsert(SenderStateEntity("+1555", ThreadSpamState.SPAM, spamCount = 2, isUserOverride = override))
+            val vm = ThreadViewModel(telephonyWithThread9(), spamRepository = repo)
+            vm.loadThread(9L)
+            advanceUntilIdle()
+            assertEquals("override=$override", expected, vm.uiState.value.spamBanner)
+        }
+    }
+
+    @Test fun `the banner's Not spam trusts the sender and clears the banner and labels`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val db = NoSpamDatabase.inMemory()
+        val repo = SpamRepository(db, FakeSpamClassifier.alwaysHam())
+        db.senderStateDao.upsert(SenderStateEntity("+1555", ThreadSpamState.SPAM, spamCount = 2))
+        db.messageVerdictDao.insert(MessageVerdictEntity(1L, 9L, "+1555", isSpam = true, score = 0.9, createdAt = 1L))
+        val vm = ThreadViewModel(telephonyWithThread9(), spamRepository = repo)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+
+        vm.onBannerNotSpam()
+        advanceUntilIdle()
+
+        assertEquals(ThreadSpamState.TRUSTED, db.senderStateDao.getByAddress("+1555")!!.state)
+        assertEquals(null, vm.uiState.value.spamBanner)
+        assertTrue(vm.uiState.value.spamMessageIds.isEmpty())
+    }
+
+    @Test fun `deleting a message drops its verdict`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val db = NoSpamDatabase.inMemory()
+        val repo = SpamRepository(db, FakeSpamClassifier.alwaysHam())
+        db.messageVerdictDao.insert(MessageVerdictEntity(1L, 9L, "+1555", isSpam = true, score = 0.9, createdAt = 1L))
+        val vm = ThreadViewModel(telephonyWithThread9(), spamRepository = repo)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+
+        vm.onDeleteMessage(1L)
+        advanceUntilIdle()
+
+        assertNull(db.messageVerdictDao.getByMessageId(1L))
+    }
+
     @Test fun `loadThread sets thread id`() {
         val vm = ThreadViewModel()
         vm.loadThread(42L)

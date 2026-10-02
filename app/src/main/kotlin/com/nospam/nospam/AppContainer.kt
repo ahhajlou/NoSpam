@@ -5,6 +5,7 @@ package com.nospam.nospam
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import com.nospam.nospam.core.notifications.SystemMessageSoundPlayer
@@ -49,6 +50,16 @@ class AppContainer(private val context: Context) {
 
     /** In-app message sounds (sent, and received in the conversation on screen). */
     val messageSounds: MessageSoundPlayer by lazy { SystemMessageSoundPlayer(appContext) }
+
+    /** Conversations filtered into Spam & blocked since the user last opened it. */
+    val newSpamCount: Flow<Int> by lazy {
+        conversationsRepository.observeNewSpamCount(settingsRepository.spamSeenAt)
+    }
+
+    /** The user is looking at Spam & blocked: what is there now is no longer new. */
+    fun markSpamSeen() {
+        scope.launch { settingsRepository.setSpamSeenAt(System.currentTimeMillis()) }
+    }
 
     /** The conversation on screen, if any; set by the thread screen while resumed. */
     val visibleThread = MutableStateFlow<Long?>(null)
