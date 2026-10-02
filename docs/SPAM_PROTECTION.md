@@ -48,6 +48,15 @@ comes back to the inbox. The outcome depends only on what the sender has sent,
 not on the order it arrived in. Deleting a conversation does not reset what the
 app knows about the sender, so it does not remove the protection either.
 
+**Seeing what was filtered.** The drawer's **Spam & blocked** entry shows how
+many conversations were filtered since you last opened it. In the inbox, a
+conversation that holds a message flagged as spam right now carries a
+`Suspected spam` label; it goes away when that message is deleted or marked
+`Not spam`. Opening a flagged conversation shows a banner at the top saying
+why (the on-device filter flagged messages here, or moved it to Spam) with a
+`Not spam` button for the whole sender. A conversation you reported or blocked
+yourself has no banner.
+
 Inside a conversation, `Not spam` / `Report spam` on a single message corrects
 that message. `Not spam` can bring a conversation back to the inbox; `Report
 spam` on one message never hides the conversation you are reading.
@@ -77,4 +86,4 @@ In short: **ON = quiet but never lose a real message.**
 
 **Does OFF make the phone vibrate for spam?** Yes — that’s the point. Every spam that would have been silent will notify until you turn it back on or manually `Report spam`.
 
-**Where do I see what was filtered?** With spam protection ON, check **Spam & Blocked** (conversations), and in the inbox look for the `Suspected spam` and `Mixed` labels. With it OFF, Spam & Blocked will be empty unless you block/report manually.
+**Where do I see what was filtered?** With spam protection ON, check **Spam & Blocked** (conversations), and in the inbox look for the `Suspected spam` label: it marks a conversation that holds a message flagged as spam right now, and goes away when that message is deleted or marked `Not spam`. With it OFF, Spam & Blocked will be empty unless you block/report manually.
