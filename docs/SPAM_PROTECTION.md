@@ -17,14 +17,40 @@ The **Spam protection** switch controls the gatekeeper, not the detector.
 
 ### When Spam protection is ON (default)
 
-- **Unknown sender, first message is spam** → goes straight to **Spam & Blocked**, no notification, marked read. You never get interrupted.
-- **Unknown sender, first message is normal** → stays in **Inbox**.
-- **Known contact or someone you’ve replied to** → even if the message looks like spam, it **never** goes to Spam automatically. At most it gets a quiet label:
-  - In the inbox list you’ll see a small **“Mixed”** pill.
-  - Opening the thread shows `Suspected spam` on that bubble with `Not spam` / `Report spam` buttons.
-  - The message is marked read so it doesn’t buzz, but it is **not hidden** — an OTP from your bank won’t bury an important code.
-- **A sender you’ve already marked** `Not spam` (TRUSTED) or `Report spam`/`Block` (SPAM/BLOCKED) → your choice is **sticky**. New messages from the same sender will not flip the conversation back and forth. Only you can change it.
-- **A sender that mixes good and bad** (e.g., a bank that sends OTPs *and* promos) → first promo makes the conversation `MIXED` (stays in Inbox, promo silenced). It only graduates to real Spam after **3+ messages and ≥80% spam** — spammers can’t rescue themselves with one innocent opener.
+Checked top to bottom, the first rule that fits wins (`ThreadSpamPolicy`; the
+reasoning is in `TODO.md`, "Spam routing — agreed model"):
+
+1. **You blocked the sender** → **Spam & Blocked**, no notification.
+2. **You marked the sender `Not spam` or `Report spam`** → stays where you put it.
+   New messages never change your decision; only you can.
+3. **A saved contact** → never checked for spam at all. No label, no routing,
+   a normal notification. A conversation the filter moved before you saved the
+   contact comes back to the inbox.
+4. **Someone who has sent you a normal message, or whom you have replied to** →
+   always stays in the **Inbox**. A message that looks like spam is labelled
+   `Suspected spam` and does not notify. Replying "STOP" to a sender you
+   reported or blocked does not undo that.
+5. **A new sender whose first message looks like spam** → stays in the
+   **Inbox**, labelled **"Suspected spam"**, unread, no notification. One wrong
+   guess never hides a code you are waiting for.
+6. **A sender that has only ever sent spam, two or more messages** → **Spam &
+   Blocked**, no notification, marked read.
+7. **Everything else** → Inbox, normal notification.
+
+**"Notify for suspected spam"** (same page, off by default) gives the messages
+in rules 4 and 5 that look like spam a quiet notification: no sound, labelled
+"Suspected spam", on its own notification channel. It never changes which
+folder a message goes to. The default lives in one place,
+`SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM`.
+
+A sender in Spam that then sends one normal message (or that you reply to)
+comes back to the inbox. The outcome depends only on what the sender has sent,
+not on the order it arrived in. Deleting a conversation does not reset what the
+app knows about the sender, so it does not remove the protection either.
+
+Inside a conversation, `Not spam` / `Report spam` on a single message corrects
+that message. `Not spam` can bring a conversation back to the inbox; `Report
+spam` on one message never hides the conversation you are reading.
 
 In short: **ON = quiet but never lose a real message.**
 
@@ -33,7 +59,7 @@ In short: **ON = quiet but never lose a real message.**
 - Every incoming SMS — even if the detector says “spam” — stays in the **Inbox**, stays **unread**, and **notifies** normally (`NotificationDecision.NORMAL` in `core/data/SmsIngressUseCase.kt`).
 - The conversation never moves to Spam on its own.
 - **But** the app still saves its guess (`MessageVerdict` per message) and the per-sender counters (`SenderState`). Nothing is thrown away.
-- Turning the switch back ON immediately applies the correct `CLEAN / MIXED / SPAM / TRUSTED / BLOCKED` state without rescanning your history.
+- Turning the switch back ON applies to each sender from their next message on, using the counts kept meanwhile. To re-sort everything at once, use **Re-check all messages**.
 
 **Use OFF when:** you’re getting false positives (e.g., Persian OTPs flagged), you want to audit what would have been filtered, or you’re on a work phone where missing a message is worse than seeing spam.
 
@@ -41,7 +67,7 @@ In short: **ON = quiet but never lose a real message.**
 
 ## Technical notes (for contributors)
 
-- **Storage:** `MessageVerdict` (per-message, immutable) + `SenderState` (per-normalized-address, `E.164` via `PhoneNumberUtils` or raw alphanumeric) in `core/database` (`SqliteNoSpamOpenHelper` v2). 30-day pruning affects only auto `MessageVerdict` rows; user overrides and `SenderState` are kept forever.
+- **Storage:** `MessageVerdict` (per-message, immutable) + `SenderState` (per-normalized-address, `E.164` via `PhoneNumberUtils` or raw alphanumeric) in `core/database` (`SqliteNoSpamOpenHelper`; the routing model arrived in v5, which re-derived existing senders' states without hiding anything that was showing). 30-day pruning affects only auto `MessageVerdict` rows; user overrides and `SenderState` are kept forever.
 - **Address key:** normalized address, not `threadId` (threads are recycled after deletion). See `CLAUDE.md §15`.
 - **Persistence:** `SettingsRepository` in `core:data` over `core:preferences` (DataStore file `settings`, key `spam_protection_enabled`, default on; a failed read also means on). `SpamSettingsViewModel` drives the switch; `SmsIngressUseCase.kt` reads it before `ThreadSpamPolicy.decideWithAddress` and short-circuits to `CLEAN/NORMAL` when disabled.
 
@@ -51,4 +77,4 @@ In short: **ON = quiet but never lose a real message.**
 
 **Does OFF make the phone vibrate for spam?** Yes — that’s the point. Every spam that would have been silent will notify until you turn it back on or manually `Report spam`.
 
-**Where do I see what was filtered?** With spam protection ON, check **Spam & Blocked** (conversations) and inside a `MIXED` thread look for the muted chip. With it OFF, Spam & Blocked will be empty unless you block/report manually.
+**Where do I see what was filtered?** With spam protection ON, check **Spam & Blocked** (conversations), and in the inbox look for the `Suspected spam` and `Mixed` labels. With it OFF, Spam & Blocked will be empty unless you block/report manually.

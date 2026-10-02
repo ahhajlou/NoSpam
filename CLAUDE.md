@@ -140,7 +140,12 @@ is covered by a device test that builds a real status-report PDU.
 
 **How an incoming message announces itself** is `incomingAlert`
 (`core:notifications`): only a message the spam policy lets notify does
-anything; if its conversation is the one on screen (`AppContainer.visibleThread`,
+anything, except that spam which stays in the inbox (a SILENT decision, §5)
+posts a quiet notification on the low-importance "Suspected spam" channel when
+the user turned on "Notify for suspected spam". That setting is off by default;
+the default is the one constant `SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM`,
+which the switch, the receiver and the tests all read, so changing it is a
+one-line change. If its conversation is the one on screen (`AppContainer.visibleThread`,
 set by the thread screen while resumed) there is no notification, only the
 in-app received sound when message sounds are on (the default), as Google
 Messages does. Sounds are Android's own (`SystemMessageSoundPlayer`: default
@@ -169,23 +174,42 @@ alphanumeric sender IDs, which are common on Iranian networks. Comparing raw
 holds the default-SMS role, so blocks apply system-wide including to calls and
 survive uninstall. The app's own table is the mirror and the fallback.
 
-## 5. Spam routing — changing
+## 5. Spam routing
 
-The shipped model grades a sender to SPAM on a ratio threshold
-(`GRADUATION_MIN_SPAM`, `GRADUATION_MIN_SPAM_RATIO` in `ThreadSpamPolicy`).
-**That rule has been decided against and is being replaced.** It fires only on
-senders that have demonstrably sent legitimate messages, and it makes the
-outcome depend on arrival order.
+`ThreadSpamPolicy` implements the model agreed on 2026-09-15 and shipped on
+2026-10-02; the routing table, the reasoning and the contact-bypass decision are
+in `TODO.md` under "Spam routing — agreed model". Read that before touching it.
 
-The agreed replacement, the reasoning behind it, and the contact-bypass decision
-live in `TODO.md` under "Spam routing — agreed model". Read that before touching
-`ThreadSpamPolicy`. Do not treat the current constants as settled design.
+- **The automatic state is a function of the counts**,
+  `ThreadSpamPolicy.deriveState(spamCount, hamCount, hasReplied)`: no spam is
+  CLEAN; spam from a sender that has sent ham or been replied to is MIXED; one
+  spam message and nothing else is SUSPECTED (probation, in the inbox,
+  labelled, unread); two or more and nothing else is SPAM. Every path that
+  rebuilds a state (ingress, history scan, a per-message correction, undoing
+  "Not spam", a reply) goes through it, so the outcome does not depend on
+  arrival order and ham always brings a sender back. The old ratio rule
+  (`GRADUATION_MIN_SPAM`/`_RATIO`) is gone.
+- **Saved contacts bypass the classifier**: ingress and the history scan do not
+  classify them, and `ConversationsRepository` and the thread screen ignore an
+  automatic state or verdict recorded before the sender was saved.
+- **`hasReplied` lives on `sender_state`**, set by a send
+  (`SpamRepository.recordReply`), by ingress and by the history scan, so
+  deleting a conversation cannot take that protection away. Likewise the
+  "has sent ham" test reads `hamCount`, never `message_verdict` rows.
+- **The user's decisions outrank everything automatic**: a block, "Not spam"
+  (TRUSTED) and "Report spam" (a SPAM override) are changed only by the user.
+  A reply or saving a contact never undoes one. Sender-wide decisions keep the
+  counts, which is what an undo is rebuilt from.
+- **A forced rescan never counts a message twice**: it subtracts what the
+  re-checked messages contributed before (from their verdict rows) and adds the
+  fresh counts (`SpamBackfillUseCase.mergeRescan`). Adding them would turn one
+  suspected message into two, which is SPAM.
+- `nospam.db` v5 re-derived existing rows on upgrade, never hiding a
+  conversation that was showing.
 
-What is stable and should survive the change: two levels, immutable per-message
-`MessageVerdict` evidence plus a derived per-sender `SenderState`; keying on
-normalised address rather than `threadId`, because provider thread ids are
-recycled; user overrides outranking the classifier; and spam inside a legitimate
-conversation being silenced and labelled rather than hidden.
+What survives from before: two levels, immutable per-message `MessageVerdict`
+evidence plus a derived per-sender `SenderState`; keying on normalised address
+rather than `threadId`, because provider thread ids are recycled.
 
 ## 6. Default-SMS-app plumbing
 
@@ -499,7 +523,7 @@ reader could not tell which were safe to change.
 | No `build-logic` convention plugins | **Accidental drift** | 16 near-identical build files repeat the same `compileSdk`/`minSdk`/`jvmTarget` block. The threshold for doing this was passed long ago. |
 | R8 disabled in release | **Accidental drift** | `isMinifyEnabled = false` and an empty keep-rules file. The largest available size win, and it needs a keep-rule pass for the `@Serializable` routes. |
 | `allowBackup="false"` and no device transfer | **Deliberate** (2026-09-23) | Was accidental "back up everything" through untouched template rules. See §4. |
-| Spam graduation ratio | **Accidental, decided against** | See §5 and `TODO.md`. |
+| Spam graduation ratio | **Removed 2026-10-02** | Replaced by the routing model in §5. |
 
 ## 12. Intent and PendingIntent rules
 

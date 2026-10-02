@@ -143,14 +143,41 @@ it can only add a warning and never hide anything.
 graduation must be re-derived on upgrade, or those users keep a hidden
 conversation the new rules would never have hidden.
 
-- [] Remove the graduation constants and the ratio branch from `ThreadSpamPolicy`.
-- [] Add the probation state (row 5) — a first-ever message that classifies as
-  spam stays in the inbox, silent and labelled, instead of being hidden.
-- [] Make SPAM non-sticky against ham: a ham message from a SPAM sender moves it
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Remove the graduation constants and the ratio branch from `ThreadSpamPolicy`. The automatic state is now `ThreadSpamPolicy.deriveState(spamCount, hamCount, hasReplied)`, used by every path that rebuilds one.
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Add the probation state (row 5) — a first-ever message that classifies as
+  spam stays in the inbox, labelled, instead of being hidden. New state
+  `SUSPECTED`, with its own inbox badge; ingress no longer marks it read. The
+  notification setting below covers it. **Amended
+  2026-10-02:** keep it unread (today SILENT also marks read,
+  `SmsIngressUseCase`), and whether it notifies is the user's choice — see
+  "Notify for suspected spam" under Settings below.
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Make SPAM non-sticky against ham: a ham message from a SPAM sender moves it
   back to the inbox as MIXED.
-- [] Add the "reply clears automatic spam state, never an explicit block" rule.
-- [] "Not spam" and "Report spam" overwrite the sender's counts. `markSendersNotSpam` writes a fresh `sender_state` (spamCount and hamCount 0) and `markSendersSpam` writes spamCount 1, hamCount 0, so the sender's history is lost. Seen 2026-09-23 through the new senders page: removing an allow can then only return the sender to CLEAN, never MIXED. Safe (it can only hide less) but it throws evidence away; keep the counts and change only state and override
-- [] Re-derive graduated SPAM rows on upgrade.
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Add the "reply clears automatic spam state, never an explicit block" rule. `sender_state.hasReplied` (db v5), set by `SpamRepository.recordReply` on a successful send from the thread screen, by ingress and by the history scan. Not set by a reply sent from a notification (`HeadlessSmsSendService`, `core:telephony`, which cannot reach `core:data`); ingress picks that one up from the provider on the sender's next message.
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`).** "Not spam" and "Report spam" keep the counts now; the per-message actions move one count from spam to ham (or add spam) and re-derive. Original entry: "Not spam" and "Report spam" overwrite the sender's counts. `markSendersNotSpam` writes a fresh `sender_state` (spamCount and hamCount 0) and `markSendersSpam` writes spamCount 1, hamCount 0, so the sender's history is lost. Seen 2026-09-23 through the new senders page: removing an allow can then only return the sender to CLEAN, never MIXED. Safe (it can only hide less) but it throws evidence away; keep the counts and change only state and override
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Re-derive graduated SPAM rows on upgrade. `SqliteNoSpamOpenHelper` v5 re-derives every automatic row and never hides one that was showing; a MIXED row with no ham (protected as a contact or replied-to) is marked replied. Covered by a device test, `upgrade_to_5_rederives_automatic_states_and_leaves_user_decisions`.
+- [] **The inbox "Mixed" badge shows the sender's history, not the
+  conversation's content** (found 2026-10-02). The badge reads `sender_state`
+  (`ConversationsRepository` sets `spamState`, `ConversationList` shows
+  `badge_mixed` for MIXED), so deleting the spam message from the thread, or
+  marking it "Not spam", leaves the badge on a conversation with no spam left
+  in it. Two causes: message delete (`ThreadViewModel` →
+  `dataSource.deleteMessage`) touches neither `sender_state` nor the message's
+  `message_verdict` row; and `SpamRepository.markMessageNotSpam` adds to
+  hamCount without taking one off spamCount, and leaves the state MIXED.
+  Fix, agreed in discussion 2026-10-02, not started:
+  - Drive the badge from the conversation's current messages: shown only while
+    the thread holds a message flagged spam (`userLabel ?: isSpam`, the same
+    test `observeThreadSpamMessageIds` uses for the in-thread labels).
+  - Keep `sender_state` as routing evidence only, unchanged by deletion (see
+    the codebase-specific notes above: deleting must not disarm protection).
+  - Delete the message's `message_verdict` row when the message is deleted, so
+    an orphaned verdict cannot keep the badge alive.
+  - Rename the badge from "Mixed" (an internal state name) to "Suspected spam",
+    matching the in-thread label; English and Persian strings.
+  - [x] Fix the per-message "Not spam" counting together with the counts item
+    above. Done 2026-10-02: it now moves the count from spam to ham, so the
+    sender's state follows; the badge itself still reads sender history.
 
 ### Settings: what to expose, and the rule for deciding
 
@@ -174,6 +201,24 @@ Worth having:
   **Decided 2026-09-22:** the disabled placeholder row phase 1 added is removed
   in phase 2 step 3. It comes back, if ever, with the routing rework above,
   because until contacts actually bypass the classifier it has nothing to turn on.
+- [x] **Done 2026-10-02 (`feat/spam-routing-model`):** Settings → Spam protection → "Notify for suspected spam", off by default (`SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM`), disabled while spam protection is off. `incomingAlert` returns `NOTIFY_QUIET` for a SILENT decision when it is on, and `AppSmsReceiver` posts on the existing low-importance spam channel (renamed "Suspected spam") with a "Suspected spam" subtitle. Not checked on a device yet. Original entry: **"Notify for suspected spam"** (requested 2026-10-02).
+  Applies to row 5 (probation): a message that classifies as spam but stays in
+  the inbox. On: a quiet notification (low-importance channel, no sound,
+  titled "Suspected spam"), so a misjudged OTP is still seen while the user is
+  waiting for it. Off: no notification, the message stays unread and labelled.
+  **Default OFF (decided 2026-10-02).** The default is a named constant,
+  `SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM = false`, documented where
+  it is defined, so it can be flipped in one place; tests assert against the
+  constant rather than a literal, so they follow it. An install where the user
+  already set the toggle keeps its own value. Allowed under the rule above: it
+  changes only whether a notification is posted, never which folder a message
+  lands in. Lives in `SettingsRepository` (`core:data`) with the other spam
+  settings; needs English and Persian strings and its own notification channel
+  in `core:notifications` so the user can also tune it from Android's settings.
+  Scope, **decided 2026-10-02:** one toggle, named "Notify for suspected spam",
+  covering rows 3–5 — probation, and spam-looking messages from senders that
+  stay in the inbox anyway (has sent ham, or the user replied). Contacts never,
+  since they bypass the classifier.
 - Master spam protection on/off — already exists (`SettingsRepository.spamProtection`).
 
 Deliberately not offering: sensitivity sliders or aggressive/balanced/relaxed
