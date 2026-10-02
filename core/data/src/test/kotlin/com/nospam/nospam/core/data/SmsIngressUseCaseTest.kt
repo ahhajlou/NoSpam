@@ -8,9 +8,11 @@ import com.nospam.nospam.core.database.dao.SenderStateDao
 import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
+import com.nospam.nospam.core.model.NotificationDecision
 import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.ThreadId
+import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.testing.FakeSpamClassifier
 import com.nospam.nospam.core.testing.FakeTelephonyDataSource
 import kotlinx.coroutines.joinAll
@@ -43,11 +45,9 @@ class SmsIngressUseCaseTest {
 
     @Test fun `two messages from one sender arriving together both count`() = runTest {
         val db = NoSpamDatabase(senderStateDao = SlowReadSenderStateDao(InMemorySenderStateDao()))
-        // A known contact, so the policy lands on MIXED and keeps counting.
-        // A stranger would go straight to SPAM, which is sticky by design and
-        // stops incrementing, hiding the race.
+        // Every state keeps counting, so a lost increment shows in the count.
         val useCase = SmsIngressUseCase(
-            telephony(contactName = "Bank Mellat"),
+            telephony(),
             FakeSpamClassifier.alwaysSpam(2.0),
             db,
         )
@@ -63,7 +63,7 @@ class SmsIngressUseCaseTest {
         assertEquals(2, state.spamCount)
     }
 
-    @Test fun `spam is inserted as read and verdict stored`() = runTest {
+    @Test fun `a new sender's first spam stays unread in the inbox as SUSPECTED`() = runTest {
         val fake = telephony()
         val db = NoSpamDatabase.inMemory()
         val useCase = SmsIngressUseCase(fake, FakeSpamClassifier.alwaysSpam(2.0), db)
@@ -73,12 +73,45 @@ class SmsIngressUseCaseTest {
         assertTrue(result.isSpam)
         assertEquals(ThreadId(7L), result.threadId)
         assertEquals(1L, result.messageId)
-        // Inserted unread first, then marked read for spam.
+        assertEquals(ThreadSpamState.SUSPECTED, result.senderState)
+        assertEquals(NotificationDecision.SILENT, result.notificationDecision)
+        // Inserted unread, and left unread so it can still be found.
         assertEquals(listOf(Triple("+98912", "win prize now", false)), fake.insertedInbox)
-        assertEquals(listOf(1L to true), fake.updatedMessageReads)
+        assertEquals(emptyList<Pair<Long, Boolean>>(), fake.updatedMessageReads)
+        assertNotNull(db.messageVerdictDao.getByMessageId(1L))
+    }
+
+    @Test fun `spam routed to Spam is marked read and verdict stored`() = runTest {
+        val fake = telephony()
+        val db = NoSpamDatabase.inMemory()
+        val useCase = SmsIngressUseCase(fake, FakeSpamClassifier.alwaysSpam(2.0), db)
+
+        useCase.handle(RawMessage("+98912", "win prize now", 12345L))
+        val result = useCase.handle(RawMessage("+98912", "claim your prize", 12346L))
+
+        assertEquals(ThreadSpamState.SPAM, result.senderState)
+        assertEquals(NotificationDecision.NONE, result.notificationDecision)
+        // Inserted unread first, then marked read once it goes to Spam.
+        assertEquals(listOf(result.messageId!! to true), fake.updatedMessageReads)
         val verdict = db.spamVerdictDao.getByThread(7L)!!
         assertTrue(verdict.isSpam)
         assertFalse(verdict.isUserOverride)
+    }
+
+    @Test fun `a saved contact's message is not classified and notifies normally`() = runTest {
+        val fake = telephony(contactName = "Bank Mellat")
+        val db = NoSpamDatabase.inMemory()
+        val classifier = FakeSpamClassifier.alwaysSpam(2.0)
+        val useCase = SmsIngressUseCase(fake, classifier, db)
+
+        val result = useCase.handle(RawMessage("+98912", "win prize now", 12345L))
+
+        assertEquals(0, classifier.callCount)
+        assertFalse(result.isSpam)
+        assertEquals(NotificationDecision.NORMAL, result.notificationDecision)
+        assertEquals(emptyList<Pair<Long, Boolean>>(), fake.updatedMessageReads)
+        assertNull(db.senderStateDao.getByAddress("+98912"))
+        assertNull(db.messageVerdictDao.getByMessageId(1L))
     }
 
     @Test fun `classifier failure still persists message`() = runTest {

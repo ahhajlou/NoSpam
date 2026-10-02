@@ -11,4 +11,6 @@ data class SenderStateEntity(
     val hamCount: Int = 0,
     val isUserOverride: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis(),
+    /** The user has written to this sender; see `SenderState.hasReplied`. */
+    val hasReplied: Boolean = false,
 )

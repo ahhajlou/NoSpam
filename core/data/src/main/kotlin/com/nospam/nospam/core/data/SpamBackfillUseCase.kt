@@ -163,8 +163,14 @@ class SpamBackfillUseCase(
                 continue
             }
 
+            // Saved contacts bypass the classifier, here as at ingress.
+            if (key in contactIds) {
+                processed += messages.size
+                statusProgress(processed, total)
+                continue
+            }
+
             val isBlocked = key in blocklistNormalized
-            val isContact = key in contactIds
             val hasOutbound = key in outboundNormalized
             val allClassified = messages.all { it.id.value in classifiedIds }
             if (!forceReclassify && allClassified) {
@@ -172,22 +178,23 @@ class SpamBackfillUseCase(
                 continue
             }
 
-            // Running per-sender state, seeded from today's DB so counts stay consistent.
-            // On a force rescan the sticky terminal state (SPAM) is unfrozen to CLEAN:
-            // the whole point is to re-derive state from the *corrected* history, and
-            // ThreadSpamPolicy's stickiness would otherwise trap a sender a fixed model
-            // now calls ham in the Spam section forever. Counts still seed the graduation
-            // math, so genuinely-spam senders re-promote via the ≥3/≥80% threshold.
+            // Running per-sender state. Gap-fill continues from today's row, so the
+            // messages it adds are counted once. A forced rescan starts from zero,
+            // because it re-counts messages the row already counted, and is merged
+            // with the row afterwards (see mergeRescan).
             val seedEntity = existingStates[key]
-            var running: SenderState? = if (forceReclassify) {
-                seedEntity?.let {
-                    SenderState(it.normalizedAddress, ThreadSpamState.CLEAN, it.spamCount, it.hamCount, isUserOverride = false, it.updatedAt)
-                }
-            } else {
-                seedEntity?.let {
-                    SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt)
-                }
+            val seed = seedEntity?.let {
+                SenderState(it.normalizedAddress, it.state, it.spamCount, it.hamCount, it.isUserOverride, it.updatedAt, it.hasReplied)
             }
+            var running: SenderState? = if (forceReclassify) {
+                seed?.let { SenderState(it.normalizedAddress, ThreadSpamState.CLEAN, hasReplied = it.hasReplied) }
+            } else {
+                seed
+            }
+            // What the messages this rescan re-counts contributed to the row before,
+            // read from their verdict rows; see mergeRescan.
+            var previousSpam = 0
+            var previousHam = 0
 
             for (m in messages) {
                 if (cancelled) {
@@ -216,13 +223,15 @@ class SpamBackfillUseCase(
                     statusProgress(processed, total)
                     continue
                 }
+                if (forceReclassify) {
+                    existingVerdicts[m.id.value]?.let { if (it.isSpam) previousSpam++ else previousHam++ }
+                }
 
                 var policyOut = ThreadSpamPolicy.decideWithAddress(
                     key,
                     PolicyInput(
                         prevState = running,
                         isSpam = verdict.isSpam,
-                        isContact = isContact,
                         hasOutbound = hasOutbound,
                         isBlocked = isBlocked,
                     ),
@@ -256,6 +265,7 @@ class SpamBackfillUseCase(
                 statusProgress(processed, total)
             }
 
+            if (forceReclassify && seed != null) running = running?.let { mergeRescan(it, seed, previousSpam, previousHam) }
             running?.let {
             pendingStates.add(
                 PendingStateWrite(
@@ -292,6 +302,34 @@ class SpamBackfillUseCase(
         verdicts.clear()
     }
 
+    /**
+     * Combines a forced rescan's fresh counts with the stored row. The row also
+     * counts messages that are gone from the provider (deleted conversations, so
+     * that deleting cannot take protection away) and messages the user labelled,
+     * which the rescan skips, so it cannot simply replace the row. Adding the two
+     * would count every re-checked message twice, and a sender with one suspected
+     * message would reach two and be hidden.
+     *
+     * So the re-checked messages' previous contribution ([previousSpam],
+     * [previousHam], read from their verdict rows) is taken out of the row and
+     * the fresh counts are added. A re-checked message with no verdict row (old
+     * ham, pruned) cannot be taken out and is counted again as whatever it is
+     * now; that can only add ham-side or new evidence, never hide more than the
+     * fresh verdicts say.
+     */
+    private fun mergeRescan(rescanned: SenderState, stored: SenderState, previousSpam: Int, previousHam: Int): SenderState {
+        if (rescanned.state !in SpamStateWriter.AUTOMATIC_STATES) return rescanned
+        val spam = maxOf(0, stored.spamCount - previousSpam) + rescanned.spamCount
+        val ham = maxOf(0, stored.hamCount - previousHam) + rescanned.hamCount
+        val replied = rescanned.hasReplied || stored.hasReplied
+        return rescanned.copy(
+            spamCount = spam,
+            hamCount = ham,
+            hasReplied = replied,
+            state = ThreadSpamPolicy.deriveState(spam, ham, replied),
+        )
+    }
+
     private fun SenderState.toEntity(now: Long): SenderStateEntity =
         SenderStateEntity(
             normalizedAddress = normalizedAddress,
@@ -300,6 +338,7 @@ class SpamBackfillUseCase(
             hamCount = hamCount,
             isUserOverride = isUserOverride,
             updatedAt = now,
+            hasReplied = hasReplied,
         )
 
     private fun normalize(address: String): String =

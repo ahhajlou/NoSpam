@@ -57,7 +57,8 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
                         spamCount = c.getInt(c.getColumnIndexOrThrow("spamCount")),
                         hamCount = c.getInt(c.getColumnIndexOrThrow("hamCount")),
                         isUserOverride = c.getInt(c.getColumnIndexOrThrow("isUserOverride")) == 1,
-                        updatedAt = c.getLong(c.getColumnIndexOrThrow("updatedAt"))
+                        updatedAt = c.getLong(c.getColumnIndexOrThrow("updatedAt")),
+                        hasReplied = c.getInt(c.getColumnIndexOrThrow("hasReplied")) == 1,
                     )
                 )
             }
@@ -79,7 +80,8 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
                 spamCount = c.getInt(c.getColumnIndexOrThrow("spamCount")),
                 hamCount = c.getInt(c.getColumnIndexOrThrow("hamCount")),
                 isUserOverride = c.getInt(c.getColumnIndexOrThrow("isUserOverride")) == 1,
-                updatedAt = c.getLong(c.getColumnIndexOrThrow("updatedAt"))
+                updatedAt = c.getLong(c.getColumnIndexOrThrow("updatedAt")),
+                hasReplied = c.getInt(c.getColumnIndexOrThrow("hasReplied")) == 1,
             ) else null
         }
     }
@@ -112,6 +114,7 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
         put("hamCount", entity.hamCount)
         put("isUserOverride", if(entity.isUserOverride)1 else 0)
         put("updatedAt", entity.updatedAt)
+        put("hasReplied", if (entity.hasReplied) 1 else 0)
     }
     override suspend fun deleteByAddress(normalizedAddress: String) { withContext(Dispatchers.IO){ writeLock.withLock { helper.writableDatabase.delete("sender_state","normalizedAddress = ?", arrayOf(normalizedAddress)); publish { it.withoutAddress(normalizedAddress) } } } }
 }

@@ -74,6 +74,13 @@ enum class IncomingAlert {
     /** Post the usual notification. */
     NOTIFY,
 
+    /**
+     * Post a quiet notification on the low-importance spam channel, labelled
+     * as suspected spam: a message that looks like spam but stays in the inbox,
+     * when the user asked to be told about those.
+     */
+    NOTIFY_QUIET,
+
     /** The user is looking at this conversation: no notification, the in-app sound. */
     IN_APP_SOUND,
 
@@ -82,18 +89,27 @@ enum class IncomingAlert {
 }
 
 /**
- * How an incoming message announces itself. Only a message the spam policy
- * lets notify ([NotificationDecision.NORMAL]) does anything. When its
- * conversation is the one on screen ([visibleThreadId]) the user is already
- * reading it, so there is no notification, only the in-app sound if
- * [soundsEnabled], as Google Messages does.
+ * How an incoming message announces itself. A message the spam policy lets
+ * notify ([NotificationDecision.NORMAL]) posts the usual notification. One it
+ * silences while leaving it in the inbox ([NotificationDecision.SILENT], spam
+ * that looks suspicious but is not hidden) posts a quiet one only when the user
+ * turned on [notifySuspectedSpam]. A message routed to Spam
+ * ([NotificationDecision.NONE]) never announces itself.
+ *
+ * When the conversation is the one on screen ([visibleThreadId]) the user is
+ * already reading it, so there is no notification; a normal message plays the
+ * in-app sound if [soundsEnabled], as Google Messages does, and a suspected one
+ * plays nothing.
  */
 fun incomingAlert(
     decision: NotificationDecision,
     threadId: Long,
     visibleThreadId: Long?,
     soundsEnabled: Boolean,
+    notifySuspectedSpam: Boolean = false,
 ): IncomingAlert = when {
+    decision == NotificationDecision.SILENT ->
+        if (notifySuspectedSpam && visibleThreadId != threadId) IncomingAlert.NOTIFY_QUIET else IncomingAlert.NONE
     decision != NotificationDecision.NORMAL -> IncomingAlert.NONE
     visibleThreadId != threadId -> IncomingAlert.NOTIFY
     soundsEnabled -> IncomingAlert.IN_APP_SOUND

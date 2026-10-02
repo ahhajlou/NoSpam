@@ -202,6 +202,7 @@ class SendersViewModelTest {
         settle(vm) { it.allowed?.size == 1 }
 
         assertEquals(listOf("+15550002"), vm.uiState.value.allowed!!.map { it.address })
-        assertEquals(ThreadSpamState.MIXED, env.db.senderStateDao.getByAddress("+15550001")?.state)
+        // Rebuilt from its counts: two spam messages and nothing else is SPAM.
+        assertEquals(ThreadSpamState.SPAM, env.db.senderStateDao.getByAddress("+15550001")?.state)
     }
 }

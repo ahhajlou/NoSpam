@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 data class SpamSettingsUiState(
     /** Whether incoming messages are classified. On until storage says otherwise. */
     val spamProtection: Boolean = true,
+    /** Quiet notification for suspected spam that stays in the inbox. */
+    val notifySuspectedSpam: Boolean = SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM,
 )
 
 /**
@@ -30,6 +32,9 @@ class SpamSettingsViewModel(
             viewModelScope.launch {
                 repo.spamProtection.collect { _uiState.value = _uiState.value.copy(spamProtection = it) }
             }
+            viewModelScope.launch {
+                repo.notifySuspectedSpam.collect { _uiState.value = _uiState.value.copy(notifySuspectedSpam = it) }
+            }
         }
     }
 
@@ -40,6 +45,15 @@ class SpamSettingsViewModel(
         } else {
             // The switch follows the stored value, so a failed write snaps it back.
             viewModelScope.launch { repo.setSpamProtection(enabled) }
+        }
+    }
+
+    fun setNotifySuspectedSpam(enabled: Boolean) {
+        val repo = settings
+        if (repo == null) {
+            _uiState.value = _uiState.value.copy(notifySuspectedSpam = enabled)
+        } else {
+            viewModelScope.launch { repo.setNotifySuspectedSpam(enabled) }
         }
     }
 }

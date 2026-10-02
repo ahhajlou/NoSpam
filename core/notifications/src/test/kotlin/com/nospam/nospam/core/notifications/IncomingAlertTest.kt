@@ -109,4 +109,40 @@ class IncomingAlertTest {
             incomingAlert(NotificationDecision.NORMAL, threadId = 1L, visibleThreadId = 1L, soundsEnabled = false),
         )
     }
+
+    // Suspected spam that stays in the inbox, with the user's setting.
+
+    @Test fun `SILENT with the suspected spam setting on posts a quiet notification`() {
+        assertEquals(
+            IncomingAlert.NOTIFY_QUIET,
+            incomingAlert(NotificationDecision.SILENT, threadId = 1L, visibleThreadId = null, soundsEnabled = true, notifySuspectedSpam = true),
+        )
+        assertEquals(
+            IncomingAlert.NOTIFY_QUIET,
+            incomingAlert(NotificationDecision.SILENT, threadId = 1L, visibleThreadId = 2L, soundsEnabled = false, notifySuspectedSpam = true),
+        )
+    }
+
+    @Test fun `SILENT with the setting on does nothing for the conversation on screen`() {
+        assertEquals(
+            IncomingAlert.NONE,
+            incomingAlert(NotificationDecision.SILENT, threadId = 1L, visibleThreadId = 1L, soundsEnabled = true, notifySuspectedSpam = true),
+        )
+    }
+
+    @Test fun `the setting never makes a message routed to Spam announce itself`() {
+        assertEquals(
+            IncomingAlert.NONE,
+            incomingAlert(NotificationDecision.NONE, threadId = 1L, visibleThreadId = null, soundsEnabled = true, notifySuspectedSpam = true),
+        )
+    }
+
+    @Test fun `the setting does not change how a normal message announces itself`() {
+        for (visible in listOf(null, 1L, 2L)) for (sounds in listOf(true, false)) {
+            assertEquals(
+                incomingAlert(NotificationDecision.NORMAL, 1L, visible, sounds, notifySuspectedSpam = false),
+                incomingAlert(NotificationDecision.NORMAL, 1L, visible, sounds, notifySuspectedSpam = true),
+            )
+        }
+    }
 }

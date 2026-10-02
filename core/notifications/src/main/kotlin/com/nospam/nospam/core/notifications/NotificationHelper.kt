@@ -89,6 +89,8 @@ object NotificationHelper {
         /** When the message was sent. Defaults to now for callers without one. */
         timestamp: Long = System.currentTimeMillis(),
     ): android.app.Notification {
+        // isSpam: a message that looks like spam but stays in the inbox, posted
+        // on the low-importance channel and labelled so it reads as a warning.
         val channelId = if (isSpam) CHANNEL_ID_SPAM else CHANNEL_ID_MESSAGES
         val person = Person.Builder().setName(sender).setKey(sender).build()
         val style = NotificationCompat.MessagingStyle(person)
@@ -144,6 +146,7 @@ object NotificationHelper {
             .setShortcutId("thread-$threadId")
             .addAction(replyAction)
             .setAutoCancel(true)
+            .apply { if (isSpam) setSubText(context.getString(R.string.notification_suspected_spam)) }
             .build()
     }
 }

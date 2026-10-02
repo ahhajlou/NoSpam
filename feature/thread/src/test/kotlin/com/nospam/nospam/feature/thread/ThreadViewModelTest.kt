@@ -9,6 +9,7 @@ import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.telephony.TelephonyDataSource
@@ -143,6 +144,42 @@ class ThreadViewModelTest {
         advanceUntilIdle()
         assertEquals(false, db.messageVerdictDao.getByMessageId(1L)?.userLabel)
         assertTrue(1L !in vm.uiState.value.spamMessageIds)
+    }
+
+    @Test fun `a saved contact's messages carry no suspected spam label`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val db = NoSpamDatabase.inMemory()
+        val repo = SpamRepository(db, FakeSpamClassifier.alwaysHam())
+        // A verdict stored before the sender was saved to contacts.
+        db.messageVerdictDao.insert(
+            MessageVerdictEntity(messageId = 1L, threadId = 9L, normalizedAddress = "+1555", isSpam = true, score = 0.9, createdAt = 1L)
+        )
+        val fake = telephonyWithThread9().apply { contacts["+1555"] = Participant("+1555", displayName = "Saved") }
+
+        val vm = ThreadViewModel(fake, spamRepository = repo)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+
+        assertEquals("Saved", vm.uiState.value.contactName)
+        assertTrue(vm.uiState.value.spamMessageIds.isEmpty())
+    }
+
+    @Test fun `sending records a reply, which brings an automatic spam sender back`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val db = NoSpamDatabase.inMemory()
+        val repo = SpamRepository(db, FakeSpamClassifier.alwaysHam())
+        db.senderStateDao.upsert(SenderStateEntity("+1555", ThreadSpamState.SPAM, spamCount = 2))
+
+        val vm = ThreadViewModel(telephonyWithThread9(), spamRepository = repo)
+        vm.loadThread(9L)
+        advanceUntilIdle()
+        vm.onDraftChanged("STOP")
+        vm.onSend()
+        advanceUntilIdle()
+
+        val state = db.senderStateDao.getByAddress("+1555")!!
+        assertTrue(state.hasReplied)
+        assertEquals(ThreadSpamState.MIXED, state.state)
     }
 
     @Test fun `loadThread sets thread id`() {

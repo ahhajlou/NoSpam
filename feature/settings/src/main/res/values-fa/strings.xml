@@ -23,6 +23,8 @@
     <string name="default_sms_off">برای پیش‌فرض کردن ضربه بزنید</string>
     <string name="spam_title">محافظت در برابر هرزنامه</string>
     <string name="spam_sub">هرزنامه‌ها، کلاهبرداری و فیشینگ را در همین دستگاه پالایش می‌کند</string>
+    <string name="notify_suspected_title">اعلان برای هرزنامه‌ی مشکوک</string>
+    <string name="notify_suspected_sub">اعلانی بی‌صدا برای پیامی که شبیه هرزنامه است ولی در صندوق ورودی می‌ماند، مثل نخستین پیام یک فرستنده‌ی تازه</string>
     <string name="data_title">داده‌های شما در پیام‌ها</string>
     <string name="data_sub">فقط در همین دستگاه نگه‌داری می‌شود</string>
     <string name="data_text">پیام‌ها در مخزن پیامک سیستم باقی می‌مانند. نواسپم فقط فهرست مسدودشده‌ها و اصلاحات هرزنامه را در همین دستگاه نگه می‌دارد. چیزی بارگذاری نمی‌شود.</string>

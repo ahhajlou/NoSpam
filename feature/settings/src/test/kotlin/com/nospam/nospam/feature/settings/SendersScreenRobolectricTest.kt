@@ -132,7 +132,8 @@ class SendersScreenRobolectricTest {
 
         waitForTextGone("NSTEST_B")
         waitForText("No senders marked as not spam")
-        assertEquals(ThreadSpamState.MIXED, runBlocking { db.senderStateDao.getByAddress("NSTEST_B") }?.state)
+        // Rebuilt from its counts: one spam message and nothing else is SUSPECTED.
+        assertEquals(ThreadSpamState.SUSPECTED, runBlocking { db.senderStateDao.getByAddress("NSTEST_B") }?.state)
     }
 
     @Test fun `unblocking one of two senders removes only that row`() {

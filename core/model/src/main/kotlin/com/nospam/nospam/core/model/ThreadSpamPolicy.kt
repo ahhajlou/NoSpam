@@ -2,7 +2,13 @@
 
 package com.nospam.nospam.core.model
 
-enum class ThreadSpamState { CLEAN, MIXED, SPAM, TRUSTED, BLOCKED }
+/**
+ * Where a sender's conversations go. CLEAN, MIXED and SUSPECTED stay in the
+ * inbox; SPAM and BLOCKED are in Spam & blocked. TRUSTED is the user's
+ * "Not spam". See [ThreadSpamPolicy.deriveState] for how the automatic states
+ * follow from a sender's counts.
+ */
+enum class ThreadSpamState { CLEAN, MIXED, SPAM, TRUSTED, BLOCKED, SUSPECTED }
 enum class NotificationDecision { NORMAL, SILENT, NONE }
 
 data class MessageVerdict(
@@ -22,6 +28,12 @@ data class SenderState(
     val hamCount: Int = 0,
     val isUserOverride: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis(),
+    /**
+     * The user has written to this sender at some point. Kept on the sender
+     * rather than read from the conversation, so deleting the conversation does
+     * not take the protection away.
+     */
+    val hasReplied: Boolean = false,
 )
 
 data class PolicyInput(
@@ -37,122 +49,84 @@ data class PolicyOutput(
     val notification: NotificationDecision,
 )
 
+/**
+ * The spam routing model agreed on 2026-09-15 (TODO.md, "Spam routing — agreed
+ * model"). Evaluated top to bottom, first match wins:
+ *
+ * 1. Blocked by the user: Spam, no notification.
+ * 2. Marked "Not spam" (TRUSTED) or "Report spam" (a SPAM override) by the user:
+ *    left as the user set it.
+ * 3. A saved contact: not classified at all. The caller does not run the
+ *    classifier, and nothing about the sender changes.
+ * 4. Everything else follows from the sender's counts, through [deriveState].
+ *
+ * The automatic state is a function of the counts alone, so the outcome does not
+ * depend on the order messages arrived in, and one ham message from a sender in
+ * Spam brings it back to the inbox.
+ */
 object ThreadSpamPolicy {
     /**
-     * Spam messages a MIXED sender must accumulate before it can graduate to
-     * SPAM. Below this, one bad message from an otherwise fine sender is never
-     * enough to hide the conversation.
+     * The automatic state for a sender with these counts:
+     * - no spam: CLEAN;
+     * - spam, but the sender has also sent ham or the user has replied: MIXED,
+     *   in the inbox with the spam labelled. Nothing that has ever produced a
+     *   legitimate message is hidden;
+     * - exactly one spam message and nothing else: SUSPECTED (probation), in the
+     *   inbox, labelled;
+     * - two or more spam messages and nothing else: SPAM.
      */
-    const val GRADUATION_MIN_SPAM = 3
+    fun deriveState(spamCount: Int, hamCount: Int, hasReplied: Boolean): ThreadSpamState = when {
+        spamCount <= 0 -> ThreadSpamState.CLEAN
+        hamCount > 0 || hasReplied -> ThreadSpamState.MIXED
+        spamCount == 1 -> ThreadSpamState.SUSPECTED
+        else -> ThreadSpamState.SPAM
+    }
 
-    /**
-     * Share of a MIXED sender's messages that must be spam before it graduates.
-     * Guards the sender that mixes both — a bank sending OTPs and promos from
-     * one short code should stay in the inbox.
-     */
-    const val GRADUATION_MIN_SPAM_RATIO = 0.8
+    /** [deriveState] for an existing sender's own counts. */
+    fun derivedState(state: SenderState): ThreadSpamState =
+        deriveState(state.spamCount, state.hamCount, state.hasReplied)
 
     fun decide(input: PolicyInput): PolicyOutput {
         val prev = input.prevState
 
-        // BLOCKED wins over everything
         if (input.isBlocked) {
-            val s = (prev?.copy(state = ThreadSpamState.BLOCKED, isUserOverride = prev.isUserOverride, updatedAt = System.currentTimeMillis()))
-                ?: SenderState(prev?.normalizedAddress ?: "", ThreadSpamState.BLOCKED)
-            // Ensure normalizedAddress preserved
-            val normalized = prev?.normalizedAddress ?: ""
-            return PolicyOutput(s.copy(normalizedAddress = normalized, state = ThreadSpamState.BLOCKED), NotificationDecision.NONE)
+            val s = prev?.copy(state = ThreadSpamState.BLOCKED, updatedAt = System.currentTimeMillis())
+                ?: SenderState("", ThreadSpamState.BLOCKED)
+            return PolicyOutput(s, NotificationDecision.NONE)
         }
 
-        // TRUSTED never leaves. The check is on the state alone, not on
-        // isUserOverride: a TRUSTED sender whose override flag was false used to
-        // fall through every guard into the `else` arm of the ham and spam
-        // branches, returning unchanged but by accident rather than by rule.
-        // Nothing constructs that combination today, and if a system-derived
-        // allowlist is ever added (contacts, or a long clean history) it should
-        // be honoured here exactly like a user's own decision.
-        if (prev?.state == ThreadSpamState.TRUSTED) {
-            return PolicyOutput(prev, NotificationDecision.NORMAL)
+        // The user's own decisions are never changed by a message. TRUSTED is
+        // honoured on the state alone, whatever the override flag says.
+        if (prev?.state == ThreadSpamState.TRUSTED) return PolicyOutput(prev, NotificationDecision.NORMAL)
+        if (prev?.isUserOverride == true) {
+            return PolicyOutput(prev, if (prev.state == ThreadSpamState.SPAM) NotificationDecision.NONE else NotificationDecision.NORMAL)
         }
-        // SPAM sticky — never leaves automatically (only user action changes it, which would have flipped to TRUSTED)
-        if (prev?.state == ThreadSpamState.SPAM) {
-            // If it's a user override SPAM, also sticky; if auto SPAM, sticky per spec.
-            return PolicyOutput(prev, NotificationDecision.NONE)
-        }
-        if (prev?.state == ThreadSpamState.BLOCKED) {
-            return PolicyOutput(prev, NotificationDecision.NONE)
+        if (prev?.state == ThreadSpamState.BLOCKED) return PolicyOutput(prev, NotificationDecision.NONE)
+
+        // Saved contacts bypass the classifier: no count, no label, no routing.
+        if (input.isContact) {
+            return PolicyOutput(prev ?: SenderState("", ThreadSpamState.CLEAN), NotificationDecision.NORMAL)
         }
 
-        // Contacts, and any sender the user has already replied to, are never
-        // auto-promoted to SPAM — at most MIXED. This is the strongest
-        // anti-false-positive signal available, so it is checked before the
-        // classifier's verdict is allowed to move a conversation to Spam.
-        val protectFromSpam = input.isContact || input.hasOutbound
-
-        // New sender
-        if (prev == null) {
-            return if (!input.isSpam) {
-                val s = SenderState("", ThreadSpamState.CLEAN, spamCount = 0, hamCount = 1)
-                PolicyOutput(s, NotificationDecision.NORMAL)
-            } else {
-                // Spam from a contact or a sender we have written to -> MIXED, not SPAM.
-                // `hasOutbound` matters here even with no prior SenderState row: texting a
-                // business first and getting a promotional reply is exactly this case.
-                if (protectFromSpam) {
-                    val s = SenderState("", ThreadSpamState.MIXED, spamCount = 1, hamCount = 0)
-                    PolicyOutput(s, NotificationDecision.SILENT)
-                } else {
-                    val s = SenderState("", ThreadSpamState.SPAM, spamCount = 1, hamCount = 0)
-                    PolicyOutput(s, NotificationDecision.NONE)
-                }
-            }
+        val spamCount = (prev?.spamCount ?: 0) + if (input.isSpam) 1 else 0
+        val hamCount = (prev?.hamCount ?: 0) + if (input.isSpam) 0 else 1
+        val hasReplied = (prev?.hasReplied ?: false) || input.hasOutbound
+        val state = deriveState(spamCount, hamCount, hasReplied)
+        val newState = (prev ?: SenderState("", state)).copy(
+            state = state,
+            spamCount = spamCount,
+            hamCount = hamCount,
+            hasReplied = hasReplied,
+            updatedAt = System.currentTimeMillis(),
+        )
+        val notification = when {
+            !input.isSpam -> NotificationDecision.NORMAL
+            state == ThreadSpamState.SPAM -> NotificationDecision.NONE
+            // Spam that stays in the inbox: labelled and silent. Whether it posts
+            // a quiet notification is the user's setting, applied by the caller.
+            else -> NotificationDecision.SILENT
         }
-
-        // Existing CLEAN / MIXED — handle ham and spam
-        if (!input.isSpam) {
-            // Ham: if MIXED, stay MIXED (spec: mixed never flaps back to clean on single ham)
-            // If CLEAN, stay CLEAN. TRUSTED/BLOCKED/SPAM already returned.
-            return when (prev.state) {
-                ThreadSpamState.CLEAN -> {
-                    val ns = prev.copy(hamCount = prev.hamCount + 1, updatedAt = System.currentTimeMillis())
-                    PolicyOutput(ns, NotificationDecision.NORMAL)
-                }
-                ThreadSpamState.MIXED -> {
-                    val ns = prev.copy(hamCount = prev.hamCount + 1, updatedAt = System.currentTimeMillis())
-                    PolicyOutput(ns, NotificationDecision.NORMAL)
-                }
-                else -> PolicyOutput(prev, NotificationDecision.NORMAL)
-            }
-        } else {
-            // Spam
-            return when (prev.state) {
-                ThreadSpamState.CLEAN -> {
-                    // A sender with ham history goes to MIXED on its first spam
-                    // whether protected or not; the protection only decides
-                    // whether MIXED can later graduate to SPAM, below.
-                    val ns = prev.copy(state = ThreadSpamState.MIXED, spamCount = prev.spamCount + 1, updatedAt = System.currentTimeMillis())
-                    PolicyOutput(ns, NotificationDecision.SILENT)
-                }
-                ThreadSpamState.MIXED -> {
-                    val newSpam = prev.spamCount + 1
-                    val total = newSpam + prev.hamCount
-                    val ratio = if (total == 0) 0.0 else newSpam.toDouble() / total
-                    // `total >= GRADUATION_MIN_SPAM` needs no separate check: total is
-                    // newSpam + hamCount, so it is always at least newSpam.
-                    val shouldGraduate = !protectFromSpam &&
-                        newSpam >= GRADUATION_MIN_SPAM &&
-                        ratio >= GRADUATION_MIN_SPAM_RATIO
-                    if (shouldGraduate) {
-                        val ns = prev.copy(state = ThreadSpamState.SPAM, spamCount = newSpam, updatedAt = System.currentTimeMillis())
-                        PolicyOutput(ns, NotificationDecision.NONE)
-                    } else {
-                        val ns = prev.copy(state = ThreadSpamState.MIXED, spamCount = newSpam, updatedAt = System.currentTimeMillis())
-                        PolicyOutput(ns, NotificationDecision.SILENT)
-                    }
-                }
-                else -> PolicyOutput(prev, NotificationDecision.SILENT)
-            }
-        }
+        return PolicyOutput(newState, notification)
     }
 
     // Helper for callers that need to preserve normalizedAddress from prev or input

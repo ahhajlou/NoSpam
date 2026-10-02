@@ -178,6 +178,8 @@ internal fun ConversationRow(
                         conv.isBlocked -> Badge(stringResource(R.string.badge_blocked), colors.errorContainer, colors.onErrorContainer)
                         conv.spamState == ThreadSpamState.MIXED ->
                             Badge(stringResource(R.string.badge_mixed), colors.tertiaryContainer, colors.onTertiaryContainer)
+                        conv.spamState == ThreadSpamState.SUSPECTED ->
+                            Badge(stringResource(R.string.badge_suspected), colors.tertiaryContainer, colors.onTertiaryContainer)
                     }
                 }
                 Spacer(Modifier.width(8.dp))

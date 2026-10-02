@@ -4,6 +4,8 @@ package com.nospam.nospam.core.data
 
 import com.nospam.nospam.core.database.dao.SenderStateDao
 import com.nospam.nospam.core.database.entity.SenderStateEntity
+import com.nospam.nospam.core.model.ThreadSpamPolicy
+import com.nospam.nospam.core.model.ThreadSpamState
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -57,10 +59,19 @@ class SpamStateWriter(private val senderStateDao: SenderStateDao) {
             else {
                 val spamDelta = maxOf(0, (current?.spamCount ?: 0) - w.seedSpamCount)
                 val hamDelta = maxOf(0, (current?.hamCount ?: 0) - w.seedHamCount)
-                w.computed.copy(
+                val merged = w.computed.copy(
                     spamCount = w.computed.spamCount + spamDelta,
                     hamCount = w.computed.hamCount + hamDelta,
+                    hasReplied = w.computed.hasReplied || current?.hasReplied == true,
                 )
+                // With a message merged in, the state follows the merged counts.
+                // Without one the scan's own state stands: it may be CLEAN on
+                // purpose, with spam protection off.
+                if (spamDelta + hamDelta > 0 && merged.state in AUTOMATIC_STATES) {
+                    merged.copy(state = ThreadSpamPolicy.deriveState(merged.spamCount, merged.hamCount, merged.hasReplied))
+                } else {
+                    merged
+                }
             }
         }
         senderStateDao.upsertAll(toWrite)
@@ -68,4 +79,14 @@ class SpamStateWriter(private val senderStateDao: SenderStateDao) {
 
     /** Serializes explicit user-override writes against any running scan. */
     suspend fun <T> withSpamStateLock(block: suspend () -> T): T = mutex.withLock { block() }
+
+    companion object {
+        /** States [ThreadSpamPolicy.deriveState] produces; anything else is a user decision or a block. */
+        val AUTOMATIC_STATES = setOf(
+            ThreadSpamState.CLEAN,
+            ThreadSpamState.MIXED,
+            ThreadSpamState.SUSPECTED,
+            ThreadSpamState.SPAM,
+        )
+    }
 }

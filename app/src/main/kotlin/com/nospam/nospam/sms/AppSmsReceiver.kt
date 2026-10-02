@@ -21,10 +21,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * Single SMS_DELIVER entry point (see AndroidManifest). Classifies via
- * [com.nospam.nospam.core.data.SmsIngressUseCase], inserts with READ=1 for
- * spam, stores the verdict, then posts a MessagingStyle notification for ham
- * only. Spam is silent apart from the low-importance channel summary.
+ * Single SMS_DELIVER entry point (see AndroidManifest). Classifies and routes
+ * via [com.nospam.nospam.core.data.SmsIngressUseCase], then posts a
+ * MessagingStyle notification for ham. Suspected spam that stays in the inbox
+ * gets a quiet one on the low-importance channel only when the user turned
+ * that on; spam routed to Spam never notifies.
  */
 class AppSmsReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -71,9 +72,11 @@ class AppSmsReceiver : BroadcastReceiver() {
                         threadId = result.threadId.value,
                         visibleThreadId = container.visibleThread.value,
                         soundsEnabled = container.settingsRepository.messageSounds.first(),
+                        notifySuspectedSpam = container.settingsRepository.notifySuspectedSpam.first(),
                     )
                     when (alert) {
-                        IncomingAlert.NOTIFY -> postHamNotification(context.applicationContext, result, subscriptionId, timestamp)
+                        IncomingAlert.NOTIFY -> postNotification(context.applicationContext, result, subscriptionId, timestamp, suspected = false)
+                        IncomingAlert.NOTIFY_QUIET -> postNotification(context.applicationContext, result, subscriptionId, timestamp, suspected = true)
                         IncomingAlert.IN_APP_SOUND -> container.messageSounds.playReceived()
                         IncomingAlert.NONE -> Unit
                     }
@@ -86,11 +89,13 @@ class AppSmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun postHamNotification(
+    /** [suspected]: spam that stays in the inbox, posted quietly and labelled. */
+    private fun postNotification(
         context: Context,
         result: com.nospam.nospam.core.data.SmsIngressUseCase.Result,
         subscriptionId: Int?,
         timestamp: Long,
+        suspected: Boolean,
     ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         val notification = NotificationHelper.buildMessageNotification(
@@ -98,7 +103,7 @@ class AppSmsReceiver : BroadcastReceiver() {
             threadId = result.threadId.value,
             sender = result.sender,
             messageBody = result.body,
-            isSpam = false,
+            isSpam = suspected,
             subscriptionId = subscriptionId,
             timestamp = timestamp,
         )

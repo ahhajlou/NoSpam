@@ -26,8 +26,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * SpamBackfillUseCase: per-sender grading rules (new sender, graduation
- * threshold, contact/outbound protection, user overrides, retention).
+ * SpamBackfillUseCase: per-sender grading rules (probation, spam-only senders,
+ * ham and reply protection, the contact bypass, user overrides, retention).
  * Split out of the original 21-test SpamBackfillUseCaseTest by scenario group
  * (Wave 2A task brief).
  */
@@ -59,7 +59,7 @@ class SpamBackfillGradingTest {
         externalScope = scope,
     )
 
-    @Test fun `new sender single spam grades to SPAM and stores verdict`() = runTest {
+    @Test fun `new sender single spam is SUSPECTED in the inbox and stores verdict`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val telephony = FakeTelephonyDataSource().apply {
             allMessages.add(inbox(1, "+98912", "win prize now", recentAgo(60)))
@@ -71,12 +71,26 @@ class SpamBackfillGradingTest {
         advanceUntilIdle()
 
         assertEquals(BackfillStatus.Done, backfill.status.value)
-        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
+        assertEquals(ThreadSpamState.SUSPECTED, db.senderStateDao.getByAddress("+98912")!!.state)
         assertNotNull(db.messageVerdictDao.getByMessageId(1))
         assertEquals(1, classifier.callCount)
     }
 
-    @Test fun `mixed sender graduates to SPAM after 3+ spams at 80 percent`() = runTest {
+    @Test fun `a sender with only spam, two or more, grades to SPAM`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephonyDataSource().apply {
+            allMessages.add(inbox(1, "+98912", "win prize now", recentAgo(120)))
+            allMessages.add(inbox(2, "+98912", "claim your prize", recentAgo(60)))
+        }
+        val backfill = useCase(db, telephony, classifierWhere { true }, scope = this)
+
+        backfill.ensureStarted()
+        advanceUntilIdle()
+
+        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
+    }
+
+    @Test fun `a sender that has sent ham stays MIXED however much spam follows`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val telephony = FakeTelephonyDataSource().apply {
             allMessages.addAll(
@@ -95,14 +109,14 @@ class SpamBackfillGradingTest {
         backfill.ensureStarted()
         advanceUntilIdle()
 
-        // ham + 4 spam = 4/5 = 80% and >= 3 spams -> graduate
+        // One ham message is enough: nothing that has sent a legitimate message is hidden.
         val state = db.senderStateDao.getByAddress("+989111111111")!!
-        assertEquals(ThreadSpamState.SPAM, state.state)
+        assertEquals(ThreadSpamState.MIXED, state.state)
         assertEquals(4, state.spamCount)
         assertEquals(1, state.hamCount)
     }
 
-    @Test fun `contact or outbound sender never promotes to SPAM`() = runTest {
+    @Test fun `replied-to sender never promotes to SPAM`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val address = "+989222222222"
         // 1 ham + 6 spams (brutal) -- still only MIXED because the user has replied
@@ -119,7 +133,7 @@ class SpamBackfillGradingTest {
         assertEquals(ThreadSpamState.MIXED, db.senderStateDao.getByAddress(address)!!.state)
     }
 
-    @Test fun `contact sender via contacts list never promotes to SPAM`() = runTest {
+    @Test fun `a saved contact's messages are not classified at all`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val address = "+989333333333"
         val telephony = FakeTelephonyDataSource().apply {
@@ -132,7 +146,10 @@ class SpamBackfillGradingTest {
         backfill.ensureStarted()
         advanceUntilIdle()
 
-        assertEquals(ThreadSpamState.MIXED, db.senderStateDao.getByAddress(address)!!.state)
+        assertEquals(BackfillStatus.Done, backfill.status.value)
+        assertEquals(0, classifier.callCount)
+        assertNull(db.senderStateDao.getByAddress(address))
+        assertNull(db.messageVerdictDao.getByMessageId(1))
     }
 
     @Test fun `user override is never touched`() = runTest {
@@ -189,8 +206,8 @@ class SpamBackfillGradingTest {
         backfill.ensureStarted()
         advanceUntilIdle()
 
-        // Old spam voted -> SPAM (sticky, the recent ham can't rescue).
-        assertEquals(ThreadSpamState.SPAM, db.senderStateDao.getByAddress("+98912")!!.state)
+        // Old ham still counts as ham, so the sender is MIXED, not hidden.
+        assertEquals(ThreadSpamState.MIXED, db.senderStateDao.getByAddress("+98912")!!.state)
         // Old spam keeps a per-message row so the "Suspected spam" marker can render forever.
         val oldSpam = db.messageVerdictDao.getByMessageId(1)
         assertNotNull(oldSpam)
