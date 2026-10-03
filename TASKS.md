@@ -547,6 +547,11 @@ progress notification shows and dismisses.
     `ConversationsViewModel`.
   *Verify:* banner visible during scan, dismisses on done; cancel
   works; list re-renders live as senders move to Spam.
+  *As built (checked 2026-10-03):* there is no `BackfillProgress` class.
+  `ConversationsUiState.backfillProgress` is the `BackfillStatus?` itself
+  (`backfillStatus: StateFlow<BackfillStatus?>?` on the ViewModel), and
+  `ConversationsScreen` shows `BackfillBanner` as a list item only while it is
+  `BackfillStatus.Running`, which carries `processed` and `total`.
 
 - [x] **12.6 Manual rescan (`feature:settings`)** —
   `SettingsScreen`: add "Scan existing messages" row. Pass
@@ -555,6 +560,10 @@ progress notification shows and dismisses.
   guard prevents double-start.
   *Verify:* tap in Settings kicks off scan; tap while running is
   no-op.
+  *As built (checked 2026-10-03):* the row is "Re-check all messages" under
+  Settings → Advanced (`AdvancedSettingsScreen`, `onRecheck`), and it calls
+  `spamBackfill.rescanAll()`, which re-evaluates every message, not
+  `ensureStarted()`; the running-scan guard still makes a second tap a no-op.
 
 - [x] **12.7 Unit tests (`core:data`)** — `SpamBackfillUseCaseTest`
   using `NoSpamDatabase.inMemory()` + `FakeTelephonyDataSource` +

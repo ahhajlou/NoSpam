@@ -2,9 +2,13 @@ appId: com.nospam.nospam
 tags:
   - persistence
   - manual-only
+# tools/persistence_check.sh passes a numeric ADDR (the emulator console keeps
+# only a sender's digits); run on its own, the flow uses the seeded fixture.
+env:
+  ADDR: NSTEST_UNBLOCK1
 ---
 # Part 2: after tools/persistence_check.sh has run
-# `adb emu sms send NSTEST_UNBLOCK1 <text>` a second time (proving an inbound
+# `adb emu sms send <ADDR> <text>` a second time (proving an inbound
 # message from a still-blocked sender is absorbed rather than surfaced),
 # unblock from the Spam & blocked screen.
 - launchApp:
@@ -13,8 +17,8 @@ tags:
       all: allow
 - tapOn: "Open navigation menu"
 - tapOn: "Spam & blocked"
-- assertVisible: "NSTEST_UNBLOCK1"
-- longPressOn: "NSTEST_UNBLOCK1"
+- assertVisible: ".*${ADDR}.*"
+- longPressOn: ".*${ADDR}.*"
 - assertVisible: "Unblock"
 - tapOn: "Unblock"
-- assertNotVisible: "NSTEST_UNBLOCK1"
+- assertNotVisible: ".*${ADDR}.*"

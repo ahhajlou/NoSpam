@@ -42,6 +42,18 @@ class SqliteSenderStateDaoTest {
         SenderStateEntity(normalizedAddress = address, state = state, spamCount = spam, hamCount = ham, isUserOverride = override)
 
     @Test
+    fun getByAddresses_reads_existing_rows_across_query_chunks() = runTest {
+        // More than one IN (...) chunk, so the chunking is exercised.
+        val stored = (1..650).map { state("+98$it", ThreadSpamState.MIXED, spam = it, ham = 1) }
+        dao.upsertAll(stored)
+        val asked = stored.map { it.normalizedAddress } + "+98missing"
+        val found = dao.getByAddresses(asked)
+        assertEquals(650, found.size)
+        assertEquals(600, found["+98600"]?.spamCount)
+        assertNull(found["+98missing"])
+    }
+
+    @Test
     fun getByAddress_returns_null_when_absent() = runTest {
         assertNull(dao.getByAddress("+98912"))
     }

@@ -50,11 +50,26 @@ class SpamStateWriter(private val senderStateDao: SenderStateDao) {
      * Under the lock: bulk upsert. Skips addresses with a user override and adds
      * back any counter increments that raced in from new SMS while the scan was
      * running, so the scan's aggregated state never erases live ingress counts.
+     * The current rows are read in one query for the whole batch.
+     *
+     * The two-argument form takes `write`, which stores the result; the history scan passes one that writes its
+     * verdicts in the same transaction (`NoSpamDatabase.writeScanBatch`). It is
+     * called even when no state needs writing, so those verdicts still land.
      */
-    suspend fun upsertAllIfNotOverridden(pending: List<PendingStateWrite>) = mutex.withLock {
+    suspend fun upsertAllIfNotOverridden(pending: List<PendingStateWrite>) {
         if (pending.isEmpty()) return
+        upsertAllIfNotOverridden(pending) { senderStateDao.upsertAll(it) }
+    }
+
+    // An overload, not a default value: a suspend lambda as a parameter default
+    // crashes the Kotlin 2.2 JVM backend (AddContinuationLowering).
+    suspend fun upsertAllIfNotOverridden(
+        pending: List<PendingStateWrite>,
+        write: suspend (List<SenderStateEntity>) -> Unit,
+    ): Unit = mutex.withLock {
+        val currentByAddress = if (pending.isEmpty()) emptyMap() else senderStateDao.getByAddresses(pending.map { it.address })
         val toWrite = pending.mapNotNull { w ->
-            val current = senderStateDao.getByAddress(w.address)
+            val current = currentByAddress[w.address]
             if (current?.isUserOverride == true) null
             else {
                 val spamDelta = maxOf(0, (current?.spamCount ?: 0) - w.seedSpamCount)
@@ -74,7 +89,7 @@ class SpamStateWriter(private val senderStateDao: SenderStateDao) {
                 }
             }
         }
-        senderStateDao.upsertAll(toWrite)
+        write(toWrite)
     }
 
     /** Serializes explicit user-override writes against any running scan. */

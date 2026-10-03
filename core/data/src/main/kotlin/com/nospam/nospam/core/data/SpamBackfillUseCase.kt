@@ -99,9 +99,6 @@ class SpamBackfillUseCase(
         cancelled = true
     }
 
-    /** Test hook: force a fresh scan even if one already completed. */
-    fun forceScanForTesting() = rescanAll()
-
     private suspend fun run(forceReclassify: Boolean) {
         val allMessages = telephony.getAllMessages().filter { it.type == MessageType.INBOX }
         val total = allMessages.size
@@ -296,8 +293,8 @@ class SpamBackfillUseCase(
         pendingStates: MutableList<PendingStateWrite>,
         verdicts: MutableList<MessageVerdictEntity>,
     ) {
-        spamStateWriter.upsertAllIfNotOverridden(pendingStates.toList())
-        db.messageVerdictDao.insertAll(verdicts.toList())
+        val batch = verdicts.toList()
+        spamStateWriter.upsertAllIfNotOverridden(pendingStates.toList()) { states -> db.writeScanBatch(states, batch) }
         pendingStates.clear()
         verdicts.clear()
     }

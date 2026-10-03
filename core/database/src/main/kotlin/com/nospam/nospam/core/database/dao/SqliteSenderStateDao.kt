@@ -20,7 +20,7 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
     // Serializes each mutate-then-refresh pair. Without it two writers
     // could publish their snapshots out of order and strand the flow on
     // a stale list until the next write to this table.
-    private val writeLock = Mutex()
+    internal val writeLock = Mutex()
 
     /** True once [flow] holds a full snapshot. Guarded by [writeLock]. */
     private var loaded = false
@@ -85,6 +85,29 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
             ) else null
         }
     }
+    override suspend fun getByAddresses(addresses: Collection<String>): Map<String, SenderStateEntity> = withContext(Dispatchers.IO) {
+        val out = HashMap<String, SenderStateEntity>()
+        addresses.distinct().chunked(SQL_IN_CHUNK).forEach { chunk ->
+            helper.readableDatabase.query(
+                "sender_state", null, "normalizedAddress IN (${chunk.joinToString(",") { "?" }})",
+                chunk.toTypedArray(), null, null, null,
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val e = SenderStateEntity(
+                        normalizedAddress = c.getString(c.getColumnIndexOrThrow("normalizedAddress")),
+                        state = ThreadSpamState.valueOf(c.getString(c.getColumnIndexOrThrow("state"))),
+                        spamCount = c.getInt(c.getColumnIndexOrThrow("spamCount")),
+                        hamCount = c.getInt(c.getColumnIndexOrThrow("hamCount")),
+                        isUserOverride = c.getInt(c.getColumnIndexOrThrow("isUserOverride")) == 1,
+                        updatedAt = c.getLong(c.getColumnIndexOrThrow("updatedAt")),
+                        hasReplied = c.getInt(c.getColumnIndexOrThrow("hasReplied")) == 1,
+                    )
+                    out[e.normalizedAddress] = e
+                }
+            }
+        }
+        out
+    }
     override suspend fun getAll(): List<SenderStateEntity> = withContext(Dispatchers.IO) { readAllSync() }
     override suspend fun upsert(entity: SenderStateEntity) { withContext(Dispatchers.IO){ writeLock.withLock {
         upsertEntity(entity)
@@ -101,6 +124,12 @@ class SqliteSenderStateDao(private val helper: SqliteNoSpamOpenHelper) : SenderS
         }
         publish { it.withStates(entities) }
     } }}
+
+    /** Writes rows with no lock or transaction of its own; see [SqliteMessageVerdictDao.writeKeepingUserLabels]. */
+    internal fun writeRows(entities: List<SenderStateEntity>) = entities.forEach { upsertEntity(it) }
+
+    /** Publishes rows written by [writeRows]. Caller holds [writeLock]. */
+    internal fun publishWritten(entities: List<SenderStateEntity>) = publish { it.withStates(entities) }
 
     private fun upsertEntity(entity: SenderStateEntity) {
         val v = senderStateValues(entity)
