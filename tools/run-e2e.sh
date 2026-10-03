@@ -62,7 +62,9 @@ for flow in .maestro/flows/*.yaml; do
 
     echo "-- reseed + $name"
     bash tools/seed.sh core >/dev/null 2>&1
-    if maestro test "$flow" >/dev/null 2>&1; then
+    # --udid: with more than one device attached (a phone plus the emulator)
+    # Maestro would otherwise pick one itself, whichever adb and seed.sh used.
+    if maestro test ${ANDROID_SERIAL:+--udid "$ANDROID_SERIAL"} "$flow" >/dev/null 2>&1; then
         echo "   PASS $name"; pass=$((pass+1))
     else
         echo "   FAIL $name"; fail=$((fail+1)); failed_flows="$failed_flows $name"
