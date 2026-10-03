@@ -119,11 +119,6 @@ class ThreadViewModelTest {
         assertEquals(listOf("old1", "old2", "old3", "old4", "old5"), bodies.take(5))
     }
 
-    @Test fun `initial state has fake messages`() {
-        val vm = ThreadViewModel()
-        assertTrue(vm.uiState.value.messages.isNotEmpty())
-    }
-
     @Test fun `loadThread exposes per-message spam ids and not-spam action updates live`() = runTest {
         // StandardTestDispatcher makes the verdict collector + action deterministic.
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))

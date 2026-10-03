@@ -4,6 +4,9 @@
     <string name="send_message_desc">Send message</string>
     <string name="new_to">To:</string>
     <string name="new_hint">Type a name, phone number, or email</string>
+    <string name="thread_cannot_reply">You can\'t reply to this sender</string>
+    <string name="new_keyboard_dialpad">Show dial pad</string>
+    <string name="new_keyboard_text">Show keyboard</string>
     <string name="new_top">Top contacts</string>
     <string name="new_all">All contacts</string>
     <string name="message_sending">Sending…</string>

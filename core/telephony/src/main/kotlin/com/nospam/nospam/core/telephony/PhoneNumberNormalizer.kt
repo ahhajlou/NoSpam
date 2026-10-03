@@ -7,6 +7,7 @@ import android.telephony.PhoneNumberUtils
 import android.telephony.TelephonyManager
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import com.nospam.nospam.core.model.isAlphanumericSender
 
 object PhoneNumberNormalizer {
     /**
@@ -45,7 +46,7 @@ object PhoneNumberNormalizer {
 
     private fun compute(context: Context, trimmed: String): String {
         // Alphanumeric sender IDs (e.g. "Snapp") — keep as upper-cased raw.
-        if (trimmed.any { it.isLetter() }) return trimmed.uppercase(Locale.ROOT)
+        if (isAlphanumericSender(trimmed)) return trimmed.uppercase(Locale.ROOT)
         val e164 = try {
             PhoneNumberUtils.formatNumberToE164(trimmed, getCountryIso(context))
         } catch (_: Exception) { null }
@@ -78,7 +79,7 @@ object PhoneNumberNormalizer {
     /** Pure version for tests (no Context) — falls back to raw upper-cased. */
     fun normalizeForTest(raw: String): String {
         val trimmed = raw.trim()
-        if (trimmed.any { it.isLetter() }) return trimmed.uppercase(Locale.ROOT)
+        if (isAlphanumericSender(trimmed)) return trimmed.uppercase(Locale.ROOT)
         return try {
             PhoneNumberUtils.formatNumberToE164(trimmed, Locale.getDefault().country) ?: trimmed
         } catch (_: Exception) { trimmed }

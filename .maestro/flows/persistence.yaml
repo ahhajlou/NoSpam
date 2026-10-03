@@ -142,12 +142,14 @@ tags:
 - assertVisible: "NSTEST_SPAM3"             # inbox: correction survived restart
 
 # --- Per-thread draft ---
+# In the seeded contact's thread: the NSTEST_ senders are sender IDs, which a
+# reply cannot reach, so their threads have no compose box.
 - scrollUntilVisible:
     element:
-        text: "NSTEST_MUTE1"
+        text: "NoSpam QA Contact"
     direction: DOWN
     optional: true
-- tapOn: "NSTEST_MUTE1"
+- tapOn: "NoSpam QA Contact"
 - tapOn: "SMS message"
 - inputText: "Unsent draft persistence check"
 - stopApp
@@ -155,9 +157,9 @@ tags:
     clearState: false
 - scrollUntilVisible:
     element:
-        text: "NSTEST_MUTE1"
+        text: "NoSpam QA Contact"
     direction: DOWN
     optional: true
-- tapOn: "NSTEST_MUTE1"
+- tapOn: "NoSpam QA Contact"
 - assertVisible: "Unsent draft persistence check"
 - back

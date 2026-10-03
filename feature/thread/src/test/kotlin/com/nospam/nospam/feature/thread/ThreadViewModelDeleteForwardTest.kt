@@ -52,6 +52,8 @@ class ThreadViewModelDeleteForwardTest {
 
     @Test fun `preview path delete removes the row synchronously with no data source involved`() {
         val vm = ThreadViewModel()
+        // With no data source, loading a thread serves the preview conversation.
+        vm.loadThread(1L)
         val before = vm.uiState.value.messages
         assertTrue(before.isNotEmpty())
         val target = before.first().id.value

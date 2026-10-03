@@ -2,6 +2,8 @@
 
 package com.nospam.nospam.feature.thread
 
+import androidx.compose.material.icons.outlined.Dialpad
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -139,6 +141,9 @@ fun NewConversationScreen(
     // hardware Enter moves focus to the first focusable node — the up button —
     // and activates it.
     val recipientFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    // The field takes names as well as numbers, so it opens on the full
+    // keyboard; the dial pad is one tap away, as in Google Messages.
+    var dialPad by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { recipientFocus.requestFocus() }
     Scaffold(
         topBar = {
@@ -163,8 +168,23 @@ fun NewConversationScreen(
                 // letters to decide by, reads left to right, or a Persian layout
                 // moves its leading "+" to the other end.
                 textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
+                trailingIcon = {
+                    androidx.compose.material3.IconButton(onClick = { dialPad = !dialPad }) {
+                        androidx.compose.material3.Icon(
+                            if (dialPad) androidx.compose.material.icons.Icons.Outlined.Keyboard
+                            else androidx.compose.material.icons.Icons.Outlined.Dialpad,
+                            contentDescription = stringResource(
+                                if (dialPad) R.string.new_keyboard_text else R.string.new_keyboard_dialpad
+                            ),
+                        )
+                    }
+                },
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone,
+                    keyboardType = if (dialPad) {
+                        androidx.compose.ui.text.input.KeyboardType.Phone
+                    } else {
+                        androidx.compose.ui.text.input.KeyboardType.Text
+                    },
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done,
                 ),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(

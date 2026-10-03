@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Telephony
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +32,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -39,6 +41,7 @@ import androidx.navigation.toRoute
 import com.nospam.nospam.NoSpamApplication
 import com.nospam.nospam.R
 import com.nospam.nospam.core.notifications.NotificationHelper
+import com.nospam.nospam.core.model.Conversation
 import com.nospam.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -79,7 +82,74 @@ import kotlinx.serialization.Serializable
 @Serializable object SettingsAboutRoute
 @Serializable object OnboardingRoute
 @Serializable data class NewConversationRoute(val forwardBody: String? = null)
-@Serializable data class ThreadRoute(val threadId: Long, val address: String? = null, val forwardBody: String? = null)
+@Serializable data class ThreadRoute(
+    val threadId: Long,
+    val address: String? = null,
+    val forwardBody: String? = null,
+    /** What the list knew about the other party, so the title is right from the first frame. */
+    val contactName: String? = null,
+    val contactPhotoUri: String? = null,
+)
+
+/**
+ * The route for opening [threadId] from a list, carrying the other party as
+ * that list already shows them. Without it the title started empty, became the
+ * number and then the contact name while the thread loaded.
+ */
+internal fun threadRouteFrom(threadId: Long, shown: List<Conversation>?): ThreadRoute {
+    val participant = shown?.firstOrNull { it.threadId.value == threadId }?.participants?.singleOrNull()
+    return ThreadRoute(
+        threadId,
+        address = participant?.address,
+        contactName = participant?.displayName,
+        contactPhotoUri = participant?.photoUri,
+    )
+}
+
+/** The conversation a [LaunchTarget] asks for. */
+private suspend fun routeFor(target: LaunchTarget, container: com.nospam.nospam.AppContainer?): ThreadRoute =
+    when (target) {
+        is LaunchTarget.Thread -> ThreadRoute(target.threadId, target.address)
+        is LaunchTarget.Compose -> {
+            val threadId = container?.telephony?.getOrCreateThreadId(target.address) ?: -1L
+            ThreadRoute(threadId, target.address, forwardBody = target.body)
+        }
+    }
+
+/**
+ * Opens a conversation another app or a notification asked for, directly on
+ * top of the inbox: whatever was open before (another conversation, a settings
+ * page) is left behind, so Back goes to the inbox, as in Google Messages and
+ * Android's guidance for notifications. It used to open on top of the current
+ * screen, so Back from a notification's conversation led to the conversation
+ * open before it.
+ */
+internal fun NavHostController.openOnInbox(route: ThreadRoute) {
+    // getBackStackEntry throws when the inbox is not on the back stack.
+    val inboxOnStack = runCatching { getBackStackEntry<ConversationsRoute>() }.isSuccess
+    if (!inboxOnStack) {
+        // Started on a conversation (cold start from a notification): the inbox
+        // goes in first, in place of everything.
+        navigate(ConversationsRoute) { popUpTo(graph.id) { inclusive = true } }
+    }
+    navigate(route) { popUpTo<ConversationsRoute> { inclusive = false } }
+}
+
+/**
+ * Up, or back, from a screen: to the screen below, or to the inbox when there
+ * is none, as when the app started on a conversation from a notification.
+ */
+internal fun NavHostController.upOrInbox() {
+    if (previousBackStackEntry != null) {
+        navigateUp()
+    } else {
+        navigate(ConversationsRoute) { popUpTo(graph.id) { inclusive = true } }
+    }
+}
+
+/** Whether [entry] already shows conversation [threadId]: a second tap must not stack a copy. */
+internal fun NavBackStackEntry.isThread(threadId: Long): Boolean =
+    destination.hasRoute(ThreadRoute::class) && toRoute<ThreadRoute>().threadId == threadId
 
 
 /**
@@ -120,7 +190,16 @@ fun NoSpamNavHost(
             resolvedStart = ConversationsRoute
         } else {
             val onboarding = withContext(Dispatchers.IO) { needsOnboarding(context) }
-            resolvedStart = if (onboarding) OnboardingRoute else ConversationsRoute
+            // A cold start for a conversation (a notification tap) starts on
+            // that conversation, so the inbox is not drawn first and then
+            // crossfaded away. Back from it still leads to the inbox, below.
+            val opening = if (onboarding) null else launchTarget?.let { routeFor(it, container) }
+            resolvedStart = when {
+                onboarding -> OnboardingRoute
+                opening != null -> opening
+                else -> ConversationsRoute
+            }
+            if (opening != null) onLaunchTargetHandled()
         }
     }
     // Permissions can be revoked while the app is in the background. Android
@@ -145,7 +224,7 @@ fun NoSpamNavHost(
     LaunchedEffect(currentEntry, resumeTick) {
         val destination = currentEntry?.destination ?: return@LaunchedEffect
         if (destination.hasRoute(OnboardingRoute::class)) return@LaunchedEffect
-        if (!needsOnboarding(context)) return@LaunchedEffect
+        if (!withContext(Dispatchers.IO) { needsOnboarding(context) }) return@LaunchedEffect
         navController.navigate(OnboardingRoute) {
             // Nothing behind it: the inbox must not be reachable by back while a
             // required permission is missing. Pops the whole graph, not to its
@@ -163,17 +242,15 @@ fun NoSpamNavHost(
     // first would cancel this effect mid-lookup.
     LaunchedEffect(launchTarget, currentEntry) {
         val target = launchTarget ?: return@LaunchedEffect
-        val destination = currentEntry?.destination ?: return@LaunchedEffect
-        if (destination.hasRoute(OnboardingRoute::class)) return@LaunchedEffect
-        if (needsOnboarding(context)) return@LaunchedEffect
-        val route = when (target) {
-            is LaunchTarget.Thread -> ThreadRoute(target.threadId, target.address)
-            is LaunchTarget.Compose -> {
-                val threadId = container?.telephony?.getOrCreateThreadId(target.address) ?: -1L
-                ThreadRoute(threadId, target.address, forwardBody = target.body)
-            }
+        val entry = currentEntry ?: return@LaunchedEffect
+        if (entry.destination.hasRoute(OnboardingRoute::class)) return@LaunchedEffect
+        if (withContext(Dispatchers.IO) { needsOnboarding(context) }) return@LaunchedEffect
+        // Tapping the notification of the conversation already on screen: stay.
+        if (target is LaunchTarget.Thread && entry.isThread(target.threadId)) {
+            onLaunchTargetHandled()
+            return@LaunchedEffect
         }
-        navController.navigate(route)
+        navController.openOnInbox(routeFor(target, container))
         onLaunchTargetHandled()
     }
 
@@ -220,7 +297,10 @@ fun NoSpamNavHost(
                 title = stringResource(R.string.drawer_inbox),
                 onOpenDrawer = onOpenDrawer,
                 viewModel = conversationsVm,
-                onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
+                onConversationClick = { id ->
+                    val shown = conversationsVm.uiState.value.let { it.pinned + it.conversations }
+                    navController.navigate(threadRouteFrom(id, shown))
+                },
                 onNewMessage = { navController.navigate(NewConversationRoute()) },
                 onSetRead = { ids, read ->
                     scope.launch { container?.conversationsRepository?.setRead(ids.map(::ThreadId), read) }
@@ -256,7 +336,7 @@ fun NoSpamNavHost(
                 title = stringResource(R.string.drawer_archived),
                 onOpenDrawer = onOpenDrawer,
                 viewModel = archivedVm,
-                onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
+                onConversationClick = { id -> navController.navigate(threadRouteFrom(id, archivedVm?.conversations?.value)) },
                 onUnarchive = { ids ->
                     scope.launch { container?.conversationsRepository?.unarchive(ids.map(::ThreadId)) }
                 },
@@ -277,7 +357,7 @@ fun NoSpamNavHost(
                 title = stringResource(R.string.drawer_spam_blocked),
                 onOpenDrawer = onOpenDrawer,
                 viewModel = spamVm,
-                onConversationClick = { id -> navController.navigate(ThreadRoute(id)) },
+                onConversationClick = { id -> navController.navigate(threadRouteFrom(id, spamVm?.conversations?.value)) },
                 onNotSpam = { conversations ->
                     scope.launch {
                         container?.spamRepository?.markSendersNotSpam(conversations.map { (id, address) -> ThreadId(id) to address })
@@ -384,12 +464,17 @@ fun NoSpamNavHost(
                 }
             )
             val scope = rememberCoroutineScope()
+            // Started on this conversation: back goes to the inbox, not out of the app.
+            val isRoot = remember(backStackEntry) { navController.previousBackStackEntry == null }
+            BackHandler(enabled = isRoot) { navController.upOrInbox() }
             ThreadScreen(
                 threadId = args.threadId,
                 address = args.address,
                 forwardBody = args.forwardBody,
+                contactName = args.contactName,
+                contactPhotoUri = args.contactPhotoUri,
                 onForward = { body -> navController.navigate(NewConversationRoute(forwardBody = body)) },
-                onNavigateUp = { navController.navigateUp() },
+                onNavigateUp = { navController.upOrInbox() },
                 onVisibilityChange = { id, visible ->
                     val holder = container?.visibleThread
                     // Only clear it if no other conversation took over meanwhile.

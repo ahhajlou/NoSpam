@@ -14,6 +14,7 @@ import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.SenderState
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
+import com.nospam.nospam.core.model.isAlphanumericSender
 import com.nospam.nospam.core.model.isOutgoing
 import com.nospam.nospam.core.telephony.SendOptions
 import com.nospam.nospam.core.telephony.TelephonyDataSource
@@ -44,7 +45,16 @@ data class ThreadUiState(
     val loadingOlder: Boolean = false,
     /** Why this conversation is flagged, shown above the messages with a "Not spam" action. */
     val spamBanner: SpamBanner? = null,
-)
+    /**
+     * True until the provider's first answer for this thread. The screen draws
+     * no messages and no empty state meanwhile, so opening a conversation never
+     * shows anything but that conversation.
+     */
+    val isLoading: Boolean = true,
+) {
+    /** False for an alphanumeric sender ID, which a reply cannot reach. */
+    val canReply: Boolean get() = address?.let { !isAlphanumericSender(it) } ?: true
+}
 
 /** The banner at the top of a flagged conversation. */
 enum class SpamBanner {
@@ -83,7 +93,9 @@ class ThreadViewModel(
     // The system's default SMS SIM, read with the SIM list.
     private var defaultSimId: Int? = null
 
-    private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0, messages = fakeMessages()))
+    // Starts empty and loading. It used to start with the preview conversation,
+    // which every open drew for a frame or more while the screen faded in.
+    private val _uiState = MutableStateFlow(ThreadUiState(threadId = 0))
     val uiState: StateFlow<ThreadUiState> = _uiState.asStateFlow()
 
     private var messagesJob: Job? = null
@@ -92,6 +104,10 @@ class ThreadViewModel(
     /** Message ids the verdict store flags in this thread, before the contact check. */
     private var threadSpamIds: Set<Long> = emptySet()
     private var senderState: SenderState? = null
+    // Whether the contact lookup for the other party has answered. Labels and
+    // the banner wait for it: a contact's conversation carries neither, and
+    // showing them until the lookup returns made them flash.
+    private var contactChecked = false
     private var senderJob: Job? = null
     private var observedSender: String? = null
     private var lastRemote: List<Message> = emptyList()
@@ -106,7 +122,19 @@ class ThreadViewModel(
         private const val TAG = "ThreadViewModel"
     }
 
-    fun loadThread(id: Long, address: String? = null, context: android.content.Context? = null, forwardBody: String? = null) {
+    /**
+     * @param contactName and [contactPhotoUri] what the list the user came from
+     * already knew about the other party, shown at once instead of the number
+     * while the lookup runs. The lookup still runs and wins.
+     */
+    fun loadThread(
+        id: Long,
+        address: String? = null,
+        context: android.content.Context? = null,
+        forwardBody: String? = null,
+        contactName: String? = null,
+        contactPhotoUri: String? = null,
+    ) {
         if (address != null) pendingAddress = address
         // Cancel notification for this thread when user opens it (no core:notifications dep)
         context?.let { ctx ->
@@ -146,6 +174,7 @@ class ThreadViewModel(
                 // A contact, so previews show the name with the number beneath it.
                 address = address ?: "+15550101",
                 contactName = "Alice",
+                isLoading = false,
             )
             return
         }
@@ -158,8 +187,11 @@ class ThreadViewModel(
         _uiState.value = _uiState.value.copy(
             threadId = id, messages = emptyList(), spamMessageIds = emptySet(),
             hasMoreOlder = false, loadingOlder = false,
-            address = pendingAddress, contactName = null, contactPhotoUri = null, spamBanner = null,
+            address = pendingAddress, contactName = contactName, contactPhotoUri = contactPhotoUri, spamBanner = null,
+            isLoading = true,
         )
+        // A name from the list came from the same contact lookup.
+        contactChecked = contactName != null
         pendingAddress?.let(::resolveContact)
         threadSpamIds = emptySet()
         senderState = null
@@ -183,8 +215,13 @@ class ThreadViewModel(
                 if (other != null && _uiState.value.address == null) resolveContact(other)
                 other?.let(::observeSender)
                 _uiState.value = _uiState.value.copy(
-                    threadId = id, messages = merged(), hasMoreOlder = hasOlder, address = other,
+                    threadId = id, messages = merged(), hasMoreOlder = hasOlder, address = other, isLoading = false,
                 )
+                // Nobody to look up (no messages yet, no address): nothing to wait for.
+                if (other == null && !contactChecked) {
+                    contactChecked = true
+                    publishSpamIds()
+                }
                 syncSelectedSim()
             }
         }
@@ -219,8 +256,9 @@ class ThreadViewModel(
                     contactName = contact.displayName,
                     contactPhotoUri = contact.photoUri,
                 )
-                publishSpamIds()
             }
+            contactChecked = true
+            publishSpamIds()
         }
     }
 
@@ -245,6 +283,7 @@ class ThreadViewModel(
      * the user reported or blocked gets no banner: the user put it there.
      */
     private fun publishSpamIds() {
+        if (!contactChecked) return
         val trusted = senderState?.state == ThreadSpamState.TRUSTED
         val ids = if (_uiState.value.contactName != null || trusted) emptySet() else threadSpamIds
         val sender = senderState
@@ -383,7 +422,7 @@ class ThreadViewModel(
 
     fun onSend() {
         val current = _uiState.value
-        if (current.draft.isBlank()) return
+        if (current.draft.isBlank() || !current.canReply) return
         val dataSource = this.dataSource
         if (dataSource == null) {
             val newMsg = Message(

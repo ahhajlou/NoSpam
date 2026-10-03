@@ -243,7 +243,19 @@ class FakeTelephonyDataSource(
     override suspend fun runSendRetries(serviceIsBack: Boolean) { sendRetryRuns += serviceIsBack }
     override fun watchServiceForSendRetries() {}
 
-    override suspend fun lookupContact(address: String): Participant? = contacts[address]
+    /**
+     * When set, [lookupContact] suspends until it completes: a seam for testing
+     * what a screen shows before the contact lookup has answered.
+     */
+    var contactLookupGate: CompletableDeferred<Unit>? = null
+    /** Every address [lookupContact] was asked for, in order. */
+    val lookedUpContacts = mutableListOf<String>()
+
+    override suspend fun lookupContact(address: String): Participant? {
+        lookedUpContacts += address
+        contactLookupGate?.await()
+        return contacts[address]
+    }
 
     /** Photo bytes by photo URI; a URI not in the map has no photo. */
     val contactPhotos = mutableMapOf<String, ByteArray>()
