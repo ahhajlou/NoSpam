@@ -9,7 +9,8 @@
 #      reopen it;
 #   2. SENDTO while the app is open on the inbox (onNewIntent);
 #   3. tapping a message notification while the app is in the background;
-#   4. tapping a message notification after the process was killed.
+#   4. tapping a message notification after the process was killed;
+#   5. text shared from another app (ACTION_SEND), app not running.
 #
 # A script rather than plain flows because Maestro can neither send an
 # arbitrary intent nor deliver an SMS; `adb` does those, the `_launch_*`
@@ -48,7 +49,7 @@ flow() {
 pass() { echo "PASS: $1"; }
 
 cleanup() {
-    for a in "$NOTIF_ADDR" "+$NOTIF_ADDR" "+15557770001" "+15557770003"; do
+    for a in "$NOTIF_ADDR" "+$NOTIF_ADDR" "+15557770001" "+15557770003" "+15557770004"; do
         adbs shell "content delete --uri content://sms --where \"address='$a'\"" >/dev/null 2>&1 || true
     done
     adbs shell cmd statusbar collapse >/dev/null 2>&1 || true
@@ -91,5 +92,14 @@ sleep 1
 adbs shell am kill "$PKG"
 tap_notification "Notification tap check two"
 pass "notification tap opens its conversation (cold)"
+
+echo "-- 5: text shared from another app, cold start --"
+adbs shell am force-stop "$PKG"
+# Explicit component: an implicit share would open the system chooser.
+adbs shell am start -W -a android.intent.action.SEND -t text/plain \
+    --es android.intent.extra.TEXT "'Shared from another app'" -n "$PKG/.MainActivity" >/dev/null
+sleep 2
+flow _launch_share.yaml
+pass "shared text opens the recipient picker, then the conversation with the text"
 
 echo "All checks passed."

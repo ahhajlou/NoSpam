@@ -106,4 +106,18 @@ class LaunchNavigationTest {
         nav.openOnInbox(ThreadRoute(6L))
         assertEquals(listOf(ConversationsRoute::class, ThreadRoute::class), nav.screens())
     }
+
+    @Test fun `shared text opens the recipient picker on the inbox, carrying the text`() {
+        val nav = navController(start = ConversationsRoute)
+        nav.navigate(ThreadRoute(5L))
+        nav.openOnInbox(NewConversationRoute(forwardBody = "shared link"))
+        assertEquals(listOf(ConversationsRoute::class, NewConversationRoute::class), nav.screens())
+        assertEquals("shared link", nav.currentBackStackEntry!!.toRoute<NewConversationRoute>().forwardBody)
+    }
+
+    @Test fun `leaving the recipient picker the app started on goes to the inbox`() {
+        val nav = navController(start = NewConversationRoute(forwardBody = "shared link"))
+        nav.upOrInbox()
+        assertEquals(listOf(ConversationsRoute::class), nav.screens())
+    }
 }

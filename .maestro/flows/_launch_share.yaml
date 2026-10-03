@@ -1,0 +1,21 @@
+appId: com.nospam.nospam
+tags:
+  - launch
+  - manual-only
+---
+# Part 5 of tools/launch_intents_check.sh: another app shared text to NoSpam
+# (`am start -a SEND -t text/plain --es android.intent.extra.TEXT ...`), which
+# Maestro cannot send itself. No launchApp: that would replace the intent.
+# A share names no recipient, so it opens the recipient picker; the text waits
+# for the conversation the user picks.
+- assertVisible: "To:"
+- inputText: "+15557770004"
+- pressKey: Enter
+- assertVisible: "Shared from another app"
+- assertVisible: "Send message"
+# Up from the conversation returns to the picker, and up from the picker to the
+# inbox, even though the app started on the picker.
+- tapOn: "Navigate up"
+- assertVisible: "To:"
+- tapOn: "Navigate up"
+- assertVisible: "Inbox"

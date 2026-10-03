@@ -262,6 +262,11 @@ self-contained:
   `MainActivity` is `singleTop` so a tap lands in
   `onNewIntent` rather than a second copy of the app, and reads its start
   intent only when `savedInstanceState` is null so rotation does not reopen it.
+  Text shared from another app (`ACTION_SEND`, `text/plain`) is
+  `LaunchTarget.Share`: it opens the recipient picker on the inbox, and the
+  text goes into the compose box of the conversation picked. `EXTRA_TEXT` is
+  read as a CharSequence (styled shares), blank or over 5,000 characters is
+  ignored.
   Device check: `tools/launch_intents_check.sh`.
 - Role request on API 29+ through `roleManager.createRequestRoleIntent(ROLE_SMS)`
   launched via the Activity Result API. There is no public intent action to
