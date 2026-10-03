@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.ContactsContract
 import com.nospam.nospam.core.model.Participant
+import com.nospam.nospam.core.model.isAlphanumericSender
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,7 +101,7 @@ class ContactLookup(private val context: Context) {
 
     fun lookup(address: String): Participant? {
         // Alphanumeric senders are not in contacts PhoneLookup
-        if (address.any { it.isLetter() }) return null
+        if (isAlphanumericSender(address)) return null
         cache[address]?.let { return it.participant }
 
         val generationAtStart = _generation.value

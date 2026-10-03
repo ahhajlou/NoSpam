@@ -13,9 +13,17 @@ import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.graphics.drawable.IconCompat
 import com.nospam.nospam.core.model.TelephonyConstants
+import com.nospam.nospam.core.model.isAlphanumericSender
 
 object NotificationHelper {
-    const val CHANNEL_ID_MESSAGES = "messages"
+    /**
+     * The messages channel. A channel's importance cannot be raised by the app
+     * once it exists, and the first one ("messages") was created at DEFAULT,
+     * which never pops up on screen. Hence a new id at HIGH; see
+     * [createChannels] for what happens to the old one.
+     */
+    const val CHANNEL_ID_MESSAGES = "messages_v2"
+    internal const val LEGACY_CHANNEL_ID_MESSAGES = "messages"
     const val CHANNEL_ID_SPAM = "spam"
     const val CHANNEL_ID_BACKFILL = "backfill"
     const val KEY_TEXT_REPLY = TelephonyConstants.KEY_TEXT_REPLY
@@ -25,11 +33,26 @@ object NotificationHelper {
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
+            val legacy = manager.getNotificationChannel(LEGACY_CHANNEL_ID_MESSAGES)
             val messagesChannel = NotificationChannel(
                 CHANNEL_ID_MESSAGES,
                 context.getString(R.string.channel_messages),
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = context.getString(R.string.channel_messages_desc) }
+                messagesImportance(legacy?.importance),
+            ).apply {
+                description = context.getString(R.string.channel_messages_desc)
+                // Keep what the user set on the old channel. Untouched, these
+                // equal the defaults, so copying them changes nothing.
+                if (legacy != null) {
+                    setSound(legacy.sound, legacy.audioAttributes)
+                    // Pattern first: setting a null pattern turns vibration off.
+                    legacy.vibrationPattern?.let { vibrationPattern = it }
+                    enableVibration(legacy.shouldVibrate())
+                    enableLights(legacy.shouldShowLights())
+                    lightColor = legacy.lightColor
+                    setShowBadge(legacy.canShowBadge())
+                    lockscreenVisibility = legacy.lockscreenVisibility
+                }
+            }
             val spamChannel = NotificationChannel(
                 CHANNEL_ID_SPAM,
                 context.getString(R.string.channel_spam),
@@ -41,7 +64,20 @@ object NotificationHelper {
                 NotificationManager.IMPORTANCE_LOW
             ).apply { description = context.getString(R.string.channel_backfill_desc) }
             manager.createNotificationChannels(listOf(messagesChannel, spamChannel, backfillChannel))
+            if (legacy != null) manager.deleteNotificationChannel(LEGACY_CHANNEL_ID_MESSAGES)
         }
+    }
+
+    /**
+     * Importance of the messages channel, given the old channel's when there is
+     * one. HIGH (pops up on screen) unless the user had turned the old channel
+     * down, which is kept: off stays off, silent stays silent. The old default,
+     * DEFAULT, is what the app chose, not the user, so it becomes HIGH.
+     */
+    internal fun messagesImportance(legacyImportance: Int?): Int = when {
+        legacyImportance == null -> NotificationManager.IMPORTANCE_HIGH
+        legacyImportance < NotificationManager.IMPORTANCE_DEFAULT -> legacyImportance
+        else -> NotificationManager.IMPORTANCE_HIGH
     }
 
     /**
@@ -144,7 +180,8 @@ object NotificationHelper {
             .setWhen(timestamp)
             .setShowWhen(true)
             .setShortcutId("thread-$threadId")
-            .addAction(replyAction)
+            // A sender ID cannot receive a reply, so it is not offered.
+            .apply { if (!isAlphanumericSender(sender)) addAction(replyAction) }
             .setAutoCancel(true)
             .apply { if (isSpam) setSubText(context.getString(R.string.notification_suspected_spam)) }
             .build()

@@ -68,14 +68,19 @@ tags:
 # immediately after an AlertDialog dismiss — not an app bug (a real user
 # tapping the field normally has no such problem). Leaving the thread and
 # re-entering it sidesteps the dialog-adjacent state entirely.
+#
+# NSTEST_MIXED1 is a sender ID, which a reply cannot reach, so its thread has
+# no compose box. The reply is sent in the seeded contact's thread instead.
+- assertVisible: "You can't reply to this sender"
+- assertNotVisible: "SMS message"
 - back
 - scrollUntilVisible:
     element:
-        text: "NSTEST_MIXED1"
+        text: "NoSpam QA Contact"
     direction: DOWN
-- tapOn: "NSTEST_MIXED1"
+- tapOn: "NoSpam QA Contact"
 - extendedWaitUntil:
-    visible: "Suspected spam"
+    visible: "See you then."
     timeout: 8000
 - tapOn: "SMS message"
 - inputText: "Automated Maestro reply"

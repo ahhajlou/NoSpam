@@ -165,6 +165,14 @@ Messages does. Sounds are Android's own (`SystemMessageSoundPlayer`: default
 notification sound, a system confirmation tone for sent), nothing bundled, and
 silent unless the ringer is in normal mode.
 
+Messages post on the `messages_v2` channel at HIGH importance, which is what
+makes them pop up on screen. The first channel, `messages`, was DEFAULT, and an
+app cannot raise a channel's importance once it exists, so `createChannels`
+replaces it, keeping the user's sound, vibration, badge and lock-screen choices
+and any importance they had lowered it to. A sender ID (letters in the address,
+`isAlphanumericSender`) gets no Reply action and no compose box: a reply cannot
+reach it. Numeric short codes stay replyable.
+
 **Multi-select actions are one call with the whole selection**, never a loop
 of single calls from the UI. Each flag table (archived, pinned, starred, muted)
 takes the selection in one transaction and publishes once, so the inbox changes
@@ -244,7 +252,14 @@ self-contained:
 - An activity handling `ACTION_SENDTO` for `sms:`/`smsto:`/`mms:`/`mmsto:`.
   `parseLaunchIntent` (`:app` navigation) turns it, and a notification's
   `VIEW` + `thread_id`, into a `LaunchTarget`; `NoSpamNavHost` opens it once,
-  after the onboarding gate. `MainActivity` is `singleTop` so a tap lands in
+  after the onboarding gate. On a cold start the conversation is the start
+  destination, so the inbox is never drawn first, and Up or Back from a
+  conversation with nothing below it goes to the inbox (`upOrInbox`). A target
+  for the conversation already on screen is dropped rather than stacked, and
+  any other opens directly on the inbox (`openOnInbox`): Back from a
+  notification's conversation goes to the inbox, never to the conversation or
+  page that was open before, as in Google Messages.
+  `MainActivity` is `singleTop` so a tap lands in
   `onNewIntent` rather than a second copy of the app, and reads its start
   intent only when `savedInstanceState` is null so rotation does not reopen it.
   Device check: `tools/launch_intents_check.sh`.

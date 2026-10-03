@@ -97,6 +97,9 @@ fun ThreadScreen(
     threadId: Long,
     address: String? = null,
     forwardBody: String? = null,
+    /** The contact's name and photo as the list that opened this knew them, shown while the lookup runs. */
+    contactName: String? = null,
+    contactPhotoUri: String? = null,
     onForward: (String) -> Unit = {},
     onNavigateUp: () -> Unit = {},
     onArchive: (Long) -> Unit = {},
@@ -108,7 +111,9 @@ fun ThreadScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    LaunchedEffect(threadId, address, forwardBody) { viewModel.loadThread(threadId, address, context, forwardBody) }
+    LaunchedEffect(threadId, address, forwardBody) {
+        viewModel.loadThread(threadId, address, context, forwardBody, contactName, contactPhotoUri)
+    }
     // Resumed means the user can see it: a message arriving here then plays the
     // in-app sound instead of posting a notification.
     LifecycleResumeEffect(threadId) {
@@ -132,18 +137,24 @@ fun ThreadScreen(
     }
     var hasScrolledInitially by remember { mutableStateOf(false) }
     LaunchedEffect(threadId) { hasScrolledInitially = false }
-    // Initial scroll must not depend on the atBottom race — use threadId + first non-empty
-    LaunchedEffect(threadId, uiState.messages.isNotEmpty()) {
-        if (!hasScrolledInitially && uiState.messages.isNotEmpty()) {
+    // The first scroll waits for this thread's own messages, not a loading state.
+    LaunchedEffect(threadId, uiState.isLoading, uiState.messages.isNotEmpty()) {
+        if (!hasScrolledInitially && !uiState.isLoading && uiState.messages.isNotEmpty()) {
             lazyState.scrollToItem(0)
             hasScrolledInitially = true
         }
     }
-    // Subsequent inbound while already at bottom auto-stick
-    LaunchedEffect(uiState.messages.size) {
-        if (hasScrolledInitially && atBottom && uiState.messages.isNotEmpty()) {
-            lazyState.animateScrollToItem(0)
-        }
+    // A new newest message comes into view when the one before it was in view.
+    // Not "first visible index is 0": the list keeps its place by key, so once
+    // the new row is inserted at index 0 that index is already 1, and messages
+    // arriving while the user watched the bottom stayed below the screen.
+    val newestId = uiState.messages.lastOrNull()?.id?.value
+    var previousNewestId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(newestId) {
+        val previous = previousNewestId
+        previousNewestId = newestId
+        if (!hasScrolledInitially || previous == null || newestId == previous) return@LaunchedEffect
+        if (lazyState.layoutInfo.visibleItemsInfo.any { it.key == previous }) lazyState.animateScrollToItem(0)
     }
     // Sending shows what was sent, however far up the list was, as Google
     // Messages does. onSend adds the message to the state before returning, so
@@ -167,7 +178,8 @@ fun ThreadScreen(
     val title = uiState.contactName ?: (uiState.address ?: address)?.let(::isolateIfPhoneNumber) ?: ""
     val conversationActions = buildList {
         val target = uiState.address
-        if (target != null) {
+        // A sender ID has no number to call or to save.
+        if (target != null && uiState.canReply) {
             add(TopBarAction(stringResource(R.string.action_call), Icons.Outlined.Call) { dial(context, target) })
             if (uiState.contactName == null) {
                 add(TopBarAction(stringResource(R.string.action_add_contact), Icons.Outlined.PersonAdd) {
@@ -280,7 +292,9 @@ fun ThreadScreen(
                                 onMarkNotSpam = { uiState.onMarkNotSpam?.invoke(id) },
                                 onReportSpam = { uiState.onReportSpam?.invoke(id) },
                                 onRetry = { viewModel.onRetry(id) },
-                                modifier = Modifier.animateItem(),
+                                // No fade on the first load: the bubbles appeared a
+                                // frame after their date headers, which do not fade.
+                                modifier = if (hasScrolledInitially) Modifier.animateItem() else Modifier.animateItem(fadeInSpec = null),
                             )
                         }
                         stickyHeader(key = "date-$date") { DateHeader(date) }
@@ -298,7 +312,9 @@ fun ThreadScreen(
                         }
                     }
                 }
-                ComposeBar(
+                if (!uiState.canReply) {
+                    NoReplyNotice()
+                } else ComposeBar(
                     draft = uiState.draft,
                     onDraftChanged = viewModel::onDraftChanged,
                     onSend = {
@@ -355,6 +371,19 @@ fun ThreadScreen(
             onDismiss = { confirm = null },
         )
         null -> Unit
+    }
+}
+
+/** In place of the compose bar for a sender ID, which a reply cannot reach. */
+@Composable
+private fun NoReplyNotice() {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            stringResource(R.string.thread_cannot_reply),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+        )
     }
 }
 
