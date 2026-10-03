@@ -38,7 +38,7 @@ class ParseLaunchIntentTest {
         )
     }
 
-    @Test fun `SEND action returns null`() {
+    @Test fun `SEND without EXTRA_TEXT returns null even with sms_body`() {
         assertNull(
             parseLaunchIntent(
                 action = "android.intent.action.SEND", scheme = "sms", schemeSpecificPart = "+15551234",

@@ -106,9 +106,10 @@ internal fun threadRouteFrom(threadId: Long, shown: List<Conversation>?): Thread
     )
 }
 
-/** The conversation a [LaunchTarget] asks for. */
-private suspend fun routeFor(target: LaunchTarget, container: com.nospam.nospam.AppContainer?): ThreadRoute =
+/** The screen a [LaunchTarget] asks for: a conversation, or the recipient picker for a share. */
+private suspend fun routeFor(target: LaunchTarget, container: com.nospam.nospam.AppContainer?): Any =
     when (target) {
+        is LaunchTarget.Share -> NewConversationRoute(forwardBody = target.text)
         is LaunchTarget.Thread -> ThreadRoute(target.threadId, target.address)
         is LaunchTarget.Compose -> {
             val threadId = container?.telephony?.getOrCreateThreadId(target.address) ?: -1L
@@ -117,14 +118,14 @@ private suspend fun routeFor(target: LaunchTarget, container: com.nospam.nospam.
     }
 
 /**
- * Opens a conversation another app or a notification asked for, directly on
- * top of the inbox: whatever was open before (another conversation, a settings
+ * Opens what another app or a notification asked for (a conversation, or the
+ * recipient picker for shared text) directly on top of the inbox: whatever was open before (another conversation, a settings
  * page) is left behind, so Back goes to the inbox, as in Google Messages and
  * Android's guidance for notifications. It used to open on top of the current
  * screen, so Back from a notification's conversation led to the conversation
  * open before it.
  */
-internal fun NavHostController.openOnInbox(route: ThreadRoute) {
+internal fun NavHostController.openOnInbox(route: Any) {
     // getBackStackEntry throws when the inbox is not on the back stack.
     val inboxOnStack = runCatching { getBackStackEntry<ConversationsRoute>() }.isSuccess
     if (!inboxOnStack) {
@@ -440,15 +441,19 @@ fun NoSpamNavHost(
         composable<NewConversationRoute> { backStackEntry ->
             val args = backStackEntry.toRoute<NewConversationRoute>()
             val scope = rememberCoroutineScope()
+            // Started here from a share: back goes to the inbox, not out of the app.
+            val isRoot = remember(backStackEntry) { navController.previousBackStackEntry == null }
+            BackHandler(enabled = isRoot) { navController.upOrInbox() }
             NewConversationScreen(
-                onNavigateUp = { navController.navigateUp() },
+                onNavigateUp = { navController.upOrInbox() },
                 onAddressEntered = { address ->
                     scope.launch {
                         val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L
                         navController.navigate(ThreadRoute(threadId, address, args.forwardBody))
                     }
                 },
-                dataSource = container?.telephony
+                dataSource = container?.telephony,
+                textToSend = args.forwardBody,
             )
         }
         composable<ThreadRoute> { backStackEntry ->

@@ -12,10 +12,19 @@ sealed interface LaunchTarget {
 
     /** A conversation with [address], starting with [body] in the compose box. */
     data class Compose(val address: String, val body: String?) : LaunchTarget
+
+    /** Text shared from another app: the user picks who it goes to. */
+    data class Share(val text: String) : LaunchTarget
 }
 
 /** Longest address accepted from another app; anything longer is not a recipient. */
 internal const val MAX_ADDRESS_LENGTH = 64
+
+/**
+ * Longest text accepted from a share. Far beyond what an SMS carries; anything
+ * longer is not something to text, and is ignored rather than cut.
+ */
+internal const val MAX_SHARED_TEXT_LENGTH = 5_000
 
 private val SCHEMES = TelephonyConstants.SEND_SCHEMES.toSet()
 
@@ -30,6 +39,10 @@ private val SCHEMES = TelephonyConstants.SEND_SCHEMES.toSet()
  *   URI opens a conversation with the first recipient it names. The body comes
  *   from the `sms_body` extra, else [text] (`EXTRA_TEXT`), else a `body=`
  *   parameter in the URI.
+ * - `SEND` (another app's share sheet) with [text] that is not blank and at
+ *   most [MAX_SHARED_TEXT_LENGTH] long is a [LaunchTarget.Share] of that text,
+ *   unchanged. A share names no recipient, so the URI and [threadId] are
+ *   ignored, and so is `sms_body`: the share contract carries `EXTRA_TEXT`.
  *
  * @param schemeSpecificPart the URI after its scheme, already decoded, e.g.
  * `+15551234,+15555678?body=hi`.
@@ -42,6 +55,10 @@ fun parseLaunchIntent(
     smsBody: String?,
     text: String?,
 ): LaunchTarget? {
+    if (action == Intent.ACTION_SEND) {
+        val shared = text?.takeIf { it.isNotBlank() && it.length <= MAX_SHARED_TEXT_LENGTH } ?: return null
+        return LaunchTarget.Share(shared)
+    }
     if (action != Intent.ACTION_SENDTO && action != Intent.ACTION_VIEW) return null
     val validScheme = scheme?.lowercase() in SCHEMES
     val recipients = if (validScheme) schemeSpecificPart?.substringBefore('?') else null
@@ -70,7 +87,8 @@ fun Intent.toLaunchTarget(): LaunchTarget? = runCatching {
         schemeSpecificPart = data?.schemeSpecificPart,
         threadId = getLongExtra(TelephonyConstants.EXTRA_THREAD_ID, -1L),
         smsBody = getStringExtra(EXTRA_SMS_BODY),
-        text = getStringExtra(Intent.EXTRA_TEXT),
+        // A CharSequence: apps may share styled text, which getStringExtra drops.
+        text = getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString(),
     )
 }.getOrNull()
 
