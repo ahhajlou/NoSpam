@@ -38,6 +38,17 @@ ui_has() {
 # Revoking a permission or moving the SMS role kills the process, and relaunching
 # into that teardown races it — hence the generous waits.
 launch() { adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 8; }
+tap_text() { # tap the centre of the first node whose text is exactly $1
+    local dump xy
+    dump="$(mktemp)"
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+    adb exec-out cat /sdcard/ui.xml > "$dump" 2>/dev/null
+    xy="$(tr '>' '\n' < "$dump" | grep "text=\"$1\"" | head -1 \
+        | sed -n 's/.*bounds="\[\([0-9]*\),\([0-9]*\)\]\[\([0-9]*\),\([0-9]*\)\]".*/\1 \2 \3 \4/p' \
+        | awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2) }')"
+    rm -f "$dump"
+    [ -n "$xy" ] && adb shell input tap $xy
+}
 check() { # check DESCRIPTION EXPECTED_TEXT
     if ui_has "$2"; then echo "   PASS $1"; else echo "   FAIL $1 (expected '$2' on screen)"; fail=1; fi
 }
@@ -60,6 +71,22 @@ sleep 4
 launch
 check "returns to onboarding after a revoked permission" "Welcome to NoSpam"
 adb shell pm grant "$PKG" android.permission.READ_CONTACTS >/dev/null 2>&1
+
+echo "== granting from outside the app while onboarding waits"
+# The other direction (fixed in 7143870): the user leaves onboarding, grants the
+# permission in system Settings, and comes back. Granting does not kill the
+# process, so this is the on-resume re-check, with no restart to hide behind.
+adb shell am force-stop "$PKG"
+adb shell pm revoke "$PKG" android.permission.READ_CONTACTS >/dev/null 2>&1
+launch
+check "onboarding shows for the missing permission" "Welcome to NoSpam"
+adb shell input keyevent KEYCODE_HOME; sleep 2
+adb shell pm grant "$PKG" android.permission.READ_CONTACTS >/dev/null 2>&1
+sleep 2
+launch
+check "onboarding sees the grant on return, without a restart" "Granted"
+tap_text "Continue"; sleep 4
+check "Continue then reaches the inbox" "Search conversations"
 
 echo "== revoking the phone permissions"
 adb shell am force-stop "$PKG"

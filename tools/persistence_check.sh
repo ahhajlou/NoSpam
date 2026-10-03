@@ -36,13 +36,17 @@ command -v maestro >/dev/null 2>&1 || { echo "maestro not found" >&2; exit 1; }
 SERIAL="${ANDROID_SERIAL:-}"
 PKG="com.nospam.nospam"
 DB="/data/data/${PKG}/databases/nospam.db"
-ADDR="NSTEST_UNBLOCK1"
+# Numeric: the emulator console keeps only a sender's digits, so an alphanumeric
+# id here arrived as address "1" and the live messages never reached the
+# sender being blocked. The app stores it in E.164 ("+1555..." on an emulator),
+# so the SQL below matches by suffix.
+ADDR="5559200001"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAESTRO_DIR="$ROOT_DIR/.maestro"
 
 adbs() { if [ -n "$SERIAL" ]; then adb -s "$SERIAL" "$@"; else adb "$@"; fi; }
 sql() { adbs shell "sqlite3 '$DB' \"$1\""; }
-maestro_flow() { maestro test ${SERIAL:+--udid "$SERIAL"} --include-tags=manual-only "$MAESTRO_DIR/flows/$1"; }
+maestro_flow() { maestro test ${SERIAL:+--udid "$SERIAL"} --include-tags=manual-only -e ADDR="$ADDR" "$MAESTRO_DIR/flows/$1"; }
 
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; exit 1; }
@@ -52,9 +56,9 @@ adbs root >/dev/null 2>&1 || true; sleep 1; adbs wait-for-device
 
 echo "-- clean slate for $ADDR --"
 adbs shell "content delete --uri content://sms --where \"address='${ADDR}'\"" >/dev/null 2>&1 || true
-sql "DELETE FROM blocklist WHERE address='${ADDR}'" >/dev/null 2>&1 || true
-sql "DELETE FROM sender_state WHERE normalizedAddress='${ADDR}'" >/dev/null 2>&1 || true
-sql "DELETE FROM message_verdict WHERE normalizedAddress='${ADDR}'" >/dev/null 2>&1 || true
+sql "DELETE FROM blocklist WHERE address LIKE '%${ADDR}'" >/dev/null 2>&1 || true
+sql "DELETE FROM sender_state WHERE normalizedAddress LIKE '%${ADDR}'" >/dev/null 2>&1 || true
+sql "DELETE FROM message_verdict WHERE normalizedAddress LIKE '%${ADDR}'" >/dev/null 2>&1 || true
 
 echo "-- step 1: live inbound message creates the thread --"
 adbs emu sms send "$ADDR" "first message before blocking" >/dev/null
@@ -77,8 +81,9 @@ adbs shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&
 sleep 3
 
 echo "-- step 6: assert on-disk state after relaunch --"
-blocklist_row="$(sql "SELECT address FROM blocklist WHERE address='${ADDR}'" || true)"
-state_row="$(sql "SELECT state FROM sender_state WHERE normalizedAddress='${ADDR}'" || true)"
+blocklist_row="$(sql "SELECT address FROM blocklist WHERE address LIKE '%${ADDR}'" || true)"
+state_row="$(sql "SELECT state FROM sender_state WHERE normalizedAddress LIKE '%${ADDR}'" || true)"
+[ -n "$state_row" ] || fail "no sender_state row for $ADDR: the live messages never reached the app's ingress"
 
 [ -z "$blocklist_row" ] && pass "blocklist row absent after unblock + restart" \
     || fail "blocklist row for $ADDR still present after unblock + restart"
@@ -93,10 +98,10 @@ tags: [manual-only]
 ---
 - launchApp:
     clearState: false
-- assertVisible: "$ADDR"
-- tapOn: "Menu"
+- assertVisible: ".*$ADDR.*"
+- tapOn: "Open navigation menu"
 - tapOn: "Spam & blocked"
-- assertNotVisible: "$ADDR"
+- assertNotVisible: ".*$ADDR.*"
 EOF
 maestro test ${SERIAL:+--udid "$SERIAL"} --include-tags=manual-only /tmp/nstest_unblock_ui_assert.yaml
 rm -f /tmp/nstest_unblock_ui_assert.yaml
@@ -104,6 +109,6 @@ pass "$ADDR visible in Inbox and absent from Spam & blocked after unblock + rest
 
 echo "-- cleanup --"
 adbs shell "content delete --uri content://sms --where \"address='${ADDR}'\"" >/dev/null 2>&1 || true
-sql "DELETE FROM sender_state WHERE normalizedAddress='${ADDR}'" >/dev/null 2>&1 || true
-sql "DELETE FROM message_verdict WHERE normalizedAddress='${ADDR}'" >/dev/null 2>&1 || true
+sql "DELETE FROM sender_state WHERE normalizedAddress LIKE '%${ADDR}'" >/dev/null 2>&1 || true
+sql "DELETE FROM message_verdict WHERE normalizedAddress LIKE '%${ADDR}'" >/dev/null 2>&1 || true
 echo "All checks passed."
