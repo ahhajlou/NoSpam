@@ -230,4 +230,22 @@ class SpamBackfillRescanTest {
         assertEquals(1, state.hamCount)
         assertEquals(1, state.spamCount)
     }
+
+    @Test fun `a user label set while a rescan runs is kept`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        val telephony = FakeTelephonyDataSource().apply {
+            allMessages.add(inbox(1, "+98912", "free gift", recentAgo(200)))
+        }
+        db.messageVerdictDao.insert(MessageVerdictEntity(1, 1, "+98912", isSpam = true, score = 2.0))
+        // The user taps "Not spam" on the message while the rescan is classifying it.
+        val classifier = FakeSpamClassifier(
+            verdictFor = { SpamVerdict(SpamLabel.SPAM, 2.0) },
+            onClassify = { db.messageVerdictDao.updateUserLabel(1, false) },
+        )
+        val recheck = useCase(db, telephony, classifier, scope = this)
+        recheck.rescanAll()
+        advanceUntilIdle()
+
+        assertEquals(false, db.messageVerdictDao.getByMessageId(1)!!.userLabel)
+    }
 }

@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 interface MessageVerdictDao {
     suspend fun insert(entity: MessageVerdictEntity)
     /** One atomic bulk insert; refreshes the observable flow once at the end. */
+    /**
+     * Bulk insert for the history scan. A row already carrying the user's own
+     * label ("Not spam" / "Report spam") keeps that label: the scan re-evaluates
+     * the classifier's verdict, never the user's.
+     */
     suspend fun insertAll(entities: List<MessageVerdictEntity>)
     /** All classified message ids — used by backfill resume-skip checks. */
     suspend fun getAllMessageIds(): Set<Long>
@@ -29,7 +34,7 @@ class InMemoryMessageVerdictDao : MessageVerdictDao {
     override suspend fun insert(entity: MessageVerdictEntity) { data[entity.messageId] = entity; refresh() }
     override suspend fun insertAll(entities: List<MessageVerdictEntity>) {
         if (entities.isEmpty()) return
-        entities.forEach { data[it.messageId] = it }
+        entities.forEach { data[it.messageId] = it.copy(userLabel = data[it.messageId]?.userLabel ?: it.userLabel) }
         refresh()
     }
     override suspend fun getAllMessageIds(): Set<Long> = data.keys.toSet()

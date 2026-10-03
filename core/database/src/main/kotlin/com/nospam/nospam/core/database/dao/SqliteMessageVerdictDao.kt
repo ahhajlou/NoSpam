@@ -19,7 +19,7 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
     // Serializes each mutate-then-refresh pair. Without it two writers
     // could publish their snapshots out of order and strand the flow on
     // a stale list until the next write to this table.
-    private val writeLock = Mutex()
+    internal val writeLock = Mutex()
 
     /** True once [flow] holds a full snapshot. Guarded by [writeLock]. */
     private var loaded = false
@@ -82,14 +82,35 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
     override suspend fun insertAll(entities: List<MessageVerdictEntity>) = withContext(Dispatchers.IO) { writeLock.withLock {
         if (entities.isEmpty()) return@withContext
         helper.writableDatabase.beginTransaction()
-        try {
-            entities.forEach { insertEntity(it) }
-            helper.writableDatabase.setTransactionSuccessful()
+        val written = try {
+            writeKeepingUserLabels(entities).also { helper.writableDatabase.setTransactionSuccessful() }
         } finally {
             helper.writableDatabase.endTransaction()
         }
-        publish { it.withVerdicts(entities) }
+        publishWritten(written)
     } }
+
+    /**
+     * Writes [entities], keeping any user label already stored for the same
+     * message, and returns what was written. No lock and no transaction of its
+     * own: the caller holds [writeLock], inside a transaction, on this thread.
+     */
+    internal fun writeKeepingUserLabels(entities: List<MessageVerdictEntity>): List<MessageVerdictEntity> {
+        val labels = HashMap<Long, Boolean>()
+        entities.map { it.messageId }.chunked(SQL_IN_CHUNK).forEach { ids ->
+            helper.writableDatabase.query(
+                "message_verdict", arrayOf("messageId", "userLabel"),
+                "userLabel IS NOT NULL AND messageId IN (${ids.joinToString(",") { "?" }})",
+                ids.map(Long::toString).toTypedArray(), null, null, null,
+            ).use { c -> while (c.moveToNext()) labels[c.getLong(0)] = c.getInt(1) == 1 }
+        }
+        val written = entities.map { e -> labels[e.messageId]?.let { e.copy(userLabel = it) } ?: e }
+        written.forEach { insertEntity(it) }
+        return written
+    }
+
+    /** Publishes rows written by [writeKeepingUserLabels]. Caller holds [writeLock]. */
+    internal fun publishWritten(written: List<MessageVerdictEntity>) = publish { it.withVerdicts(written) }
 
     private fun insertEntity(entity: MessageVerdictEntity) {
         val v = messageVerdictValues(entity)
@@ -158,3 +179,6 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
         publish { it.withUserLabel(messageId, userLabel) }
     } }}
 }
+
+/** Bound variables per `IN (...)` query, below SQLite's limit of 999 on older Android. */
+internal const val SQL_IN_CHUNK = 500

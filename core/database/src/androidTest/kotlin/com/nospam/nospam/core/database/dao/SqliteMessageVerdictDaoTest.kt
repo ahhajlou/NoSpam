@@ -95,6 +95,22 @@ class SqliteMessageVerdictDaoTest {
     }
 
     @Test
+    fun insertAll_keeps_a_user_label_already_stored() = runTest {
+        dao.insert(MessageVerdictEntity(messageId = 1, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0))
+        dao.updateUserLabel(1, false)
+        dao.insertAll(
+            listOf(
+                MessageVerdictEntity(messageId = 1, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 2.0),
+                MessageVerdictEntity(messageId = 2, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 2.0),
+            )
+        )
+        assertEquals(false, dao.getByMessageId(1)?.userLabel)
+        assertEquals(2.0, dao.getByMessageId(1)!!.score, 0.0)
+        assertNull(dao.getByMessageId(2)?.userLabel)
+        assertEquals(false, dao.observeAll().first().first { it.messageId == 1L }.userLabel)
+    }
+
+    @Test
     fun updateUserLabel_touches_only_the_named_row() = runTest {
         dao.insert(MessageVerdictEntity(messageId = 1, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0))
         dao.insert(MessageVerdictEntity(messageId = 2, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0))

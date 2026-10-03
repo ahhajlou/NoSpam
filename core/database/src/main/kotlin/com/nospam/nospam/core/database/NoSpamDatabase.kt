@@ -20,6 +20,13 @@ import com.nospam.nospam.core.database.dao.PinnedDao
 import com.nospam.nospam.core.database.dao.SenderStateDao
 import com.nospam.nospam.core.database.dao.SpamVerdictDao
 import com.nospam.nospam.core.database.dao.StarredDao
+import com.nospam.nospam.core.database.dao.SqliteMessageVerdictDao
+import com.nospam.nospam.core.database.dao.SqliteSenderStateDao
+import com.nospam.nospam.core.database.entity.MessageVerdictEntity
+import com.nospam.nospam.core.database.entity.SenderStateEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class NoSpamDatabase(
     val blocklistDao: BlocklistDao = InMemoryBlocklistDao(),
@@ -31,23 +38,70 @@ class NoSpamDatabase(
     val starredDao: StarredDao = InMemoryStarredDao(),
     val pinnedDao: PinnedDao = InMemoryPinnedDao(),
     val mutedDao: MutedDao = InMemoryMutedDao(),
+    private val scanBatch: suspend (List<SenderStateEntity>, List<MessageVerdictEntity>) -> Unit = { states, verdicts ->
+        senderStateDao.upsertAll(states)
+        messageVerdictDao.insertAll(verdicts)
+    },
 ) {
+    /**
+     * One history-scan batch: sender states and message verdicts in a single
+     * transaction. Written separately, a crash between them left counts that
+     * included messages with no verdict, and the next scan, which skips only
+     * messages with a verdict, counted them again. Verdicts keep any user label
+     * already stored (see [MessageVerdictDao.insertAll]).
+     */
+    suspend fun writeScanBatch(states: List<SenderStateEntity>, verdicts: List<MessageVerdictEntity>) =
+        scanBatch(states, verdicts)
+
     companion object {
         fun inMemory(): NoSpamDatabase = NoSpamDatabase()
 
         fun persistent(context: android.content.Context): NoSpamDatabase {
             val helper = SqliteNoSpamOpenHelper(context.applicationContext)
+            val senderStates = com.nospam.nospam.core.database.dao.SqliteSenderStateDao(helper)
+            val verdicts = com.nospam.nospam.core.database.dao.SqliteMessageVerdictDao(helper)
             return NoSpamDatabase(
                 blocklistDao = com.nospam.nospam.core.database.dao.SqliteBlocklistDao(helper),
                 spamVerdictDao = com.nospam.nospam.core.database.dao.SqliteSpamVerdictDao(helper),
                 modelMetadataDao = com.nospam.nospam.core.database.dao.SqliteModelMetadataDao(helper),
                 archivedDao = com.nospam.nospam.core.database.dao.SqliteArchivedDao(helper),
-                messageVerdictDao = com.nospam.nospam.core.database.dao.SqliteMessageVerdictDao(helper),
-                senderStateDao = com.nospam.nospam.core.database.dao.SqliteSenderStateDao(helper),
+                messageVerdictDao = verdicts,
+                senderStateDao = senderStates,
                 starredDao = com.nospam.nospam.core.database.dao.SqliteStarredDao(helper),
                 pinnedDao = com.nospam.nospam.core.database.dao.SqlitePinnedDao(helper),
                 mutedDao = com.nospam.nospam.core.database.dao.SqliteMutedDao(helper),
+                scanBatch = { states, rows -> writeScanBatch(helper, senderStates, verdicts, states, rows) },
             )
+        }
+    }
+}
+
+/**
+ * Both tables in one SQLite transaction on one thread (a transaction is bound to
+ * its thread). Holds both DAOs' write locks, always states then verdicts; nothing
+ * else takes both, so the order cannot deadlock. Each flow is published only
+ * after the commit.
+ */
+private suspend fun writeScanBatch(
+    helper: SqliteNoSpamOpenHelper,
+    senderStates: SqliteSenderStateDao,
+    verdicts: SqliteMessageVerdictDao,
+    states: List<SenderStateEntity>,
+    rows: List<MessageVerdictEntity>,
+) = withContext(Dispatchers.IO) {
+    if (states.isEmpty() && rows.isEmpty()) return@withContext
+    senderStates.writeLock.withLock {
+        verdicts.writeLock.withLock {
+            val db = helper.writableDatabase
+            db.beginTransaction()
+            val written = try {
+                senderStates.writeRows(states)
+                verdicts.writeKeepingUserLabels(rows).also { db.setTransactionSuccessful() }
+            } finally {
+                db.endTransaction()
+            }
+            if (states.isNotEmpty()) senderStates.publishWritten(states)
+            if (written.isNotEmpty()) verdicts.publishWritten(written)
         }
     }
 }

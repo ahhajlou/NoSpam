@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 interface SenderStateDao {
     suspend fun getByAddress(normalizedAddress: String): SenderStateEntity?
+    /** The rows for [addresses] that exist, keyed by address, in one read. */
+    suspend fun getByAddresses(addresses: Collection<String>): Map<String, SenderStateEntity>
     fun observeAll(): Flow<List<SenderStateEntity>>
     /** Full snapshot — backfill preloads the current state map from this. */
     suspend fun getAll(): List<SenderStateEntity>
@@ -22,6 +24,8 @@ class InMemorySenderStateDao : SenderStateDao {
     private val flow = MutableStateFlow<List<SenderStateEntity>>(emptyList())
     private fun refresh() { flow.value = data.values.toList() }
     override suspend fun getByAddress(normalizedAddress: String) = data[normalizedAddress]
+    override suspend fun getByAddresses(addresses: Collection<String>) =
+        addresses.mapNotNull { a -> data[a]?.let { a to it } }.toMap()
     override fun observeAll(): Flow<List<SenderStateEntity>> = flow
     override suspend fun getAll(): List<SenderStateEntity> = data.values.toList()
     override suspend fun upsert(entity: SenderStateEntity) { data[entity.normalizedAddress] = entity; refresh() }
