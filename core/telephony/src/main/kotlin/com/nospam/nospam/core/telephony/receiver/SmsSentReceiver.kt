@@ -23,7 +23,17 @@ class SmsSentReceiver : BroadcastReceiver() {
         val isOurRow = uri.authority == Telephony.Sms.CONTENT_URI.authority &&
             runCatching { ContentUris.parseId(uri) }.getOrDefault(-1L) > 0
         if (!isOurRow) return
-        SmsSender.recordResult(context, uri, resultCode)
+        // Off the main thread: the result is a provider write and, for a failure
+        // that may be retried, SendRetry's stored state.
+        val result = resultCode
+        val pending = goAsync()
+        Thread {
+            try {
+                SmsSender.recordResult(context.applicationContext, uri, result)
+            } finally {
+                pending.finish()
+            }
+        }.start()
     }
 
     companion object {

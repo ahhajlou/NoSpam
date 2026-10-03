@@ -19,6 +19,9 @@
         <receiver
             android:name=".receiver.SmsDeliveredReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".receiver.SendRetryReceiver"
+            android:exported="false" />
         <service
             android:name=".service.HeadlessSmsSendService"
             android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE"

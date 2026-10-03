@@ -34,6 +34,16 @@ interface TelephonyDataSource {
     /** Writes an outgoing message as OUTBOX (sending) before it is sent. Null when this app may not write the provider. */
     suspend fun insertOutboxMessage(address: String, body: String, date: Long, subscriptionId: Int? = null): Long?
     suspend fun updateMessageType(messageId: Long, type: com.nospam.nospam.core.model.MessageType)
+    /**
+     * Sends messages waiting for a retry that are due, and fails sends that
+     * never reported back. [serviceIsBack]: service is known to have returned
+     * (an SMS just arrived), so every waiting message is sent now.
+     */
+    suspend fun runSendRetries(serviceIsBack: Boolean)
+
+    /** Retries waiting messages as soon as the phone reports service (Android 12+, while the process lives). */
+    fun watchServiceForSendRetries()
+
     suspend fun markAsRead(threadId: ThreadId)
     suspend fun markAsUnread(threadId: ThreadId)
     /**

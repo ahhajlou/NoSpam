@@ -383,6 +383,12 @@ class RealTelephonyDataSource(
         SmsSender.setType(context, SmsSender.rowUri(messageId), type)
     }
 
+    override suspend fun runSendRetries(serviceIsBack: Boolean) = withContext(Dispatchers.IO) {
+        SendRetry.runDue(context, force = serviceIsBack)
+    }
+
+    override fun watchServiceForSendRetries() = SendRetry.watchServiceState(context)
+
     override suspend fun markAsRead(threadId: ThreadId) = setThreadsRead(listOf(threadId), read = true)
 
     override suspend fun markAsUnread(threadId: ThreadId) = setThreadsRead(listOf(threadId), read = false)

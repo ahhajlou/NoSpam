@@ -448,7 +448,8 @@ private fun MessageBubble(
                     .padding(top = 2.dp),
             )
             MessageType.OUTBOX, MessageType.QUEUED -> Text(
-                stringResource(R.string.message_sending),
+                // QUEUED: a send failed for lack of service and will be retried.
+                stringResource(if (msg.type == MessageType.QUEUED) R.string.message_waiting_for_signal else R.string.message_sending),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),

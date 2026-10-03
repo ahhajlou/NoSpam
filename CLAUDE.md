@@ -126,6 +126,19 @@ paths (`RealTelephonyDataSource`, `HeadlessSmsSendService`) go through
 `SmsSender`. When this app is not the default SMS app the `OUTBOX` insert fails
 and the send proceeds without a row (the system stores that message itself).
 
+**Failed sends retry by themselves** (`SendRetry`, `SendRetryPolicy`, modelled on
+AOSP Messaging). "No service" and "radio off" move the row to the provider's
+`QUEUED` type ("Waiting for signal…") and it is resent after 5 s, doubling,
+until 20 minutes after the first failure, then `FAILED` for a manual retry,
+which starts a new window. Any other failure is `FAILED` at once. Attempts come
+from an inexact `AlarmManager` alarm (`SendRetryReceiver`, not exported), and
+at once when an SMS arrives (proof of service), at app start, and on Android 12+
+when the phone reports service. A send with no result after 5 minutes becomes
+`FAILED` rather than "Sending…" forever; it is not resent, since it may have
+gone out. The per-message state is a private SharedPreferences file in
+`core:telephony`: scheduling state of that module, not a user setting, so it is
+not in `core:preferences`, which a capability module may not depend on.
+
 **Delivery reports** are per SIM and off by default (`SettingsRepository
 .deliveryReportSims`). When on, `SmsSender` marks the row `status = PENDING` and
 passes a `deliveryIntent` naming `SmsDeliveredReceiver` (explicit, immutable,

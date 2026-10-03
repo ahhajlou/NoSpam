@@ -91,6 +91,15 @@ class NoSpamApplication : Application() {
                 com.nospam.nospam.core.telephony.PhoneNumberNormalizer.warm(this@NoSpamApplication)
             }
         }
+        // Messages waiting for a retry: send what is due, fail sends that never
+        // reported back, and retry at once when service returns. Off the main
+        // thread; touches nothing when no send is pending.
+        appScope.launch {
+            runCatching {
+                container.telephony.runSendRetries(serviceIsBack = false)
+                container.telephony.watchServiceForSendRetries()
+            }
+        }
         // History backfill is one-shot: it runs after SMS permission is granted
         // (onboarding) and resumes once on a later cold start only if the process
         // died mid-scan. When nothing is pending we never touch SMS or the
