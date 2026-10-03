@@ -238,6 +238,11 @@ class FakeTelephonyDataSource(
 
     override suspend fun getSystemBlockedNumbers(): List<String> = systemBlocked.toList()
 
+    /** Every [runSendRetries] call, true when service was known to be back. */
+    val sendRetryRuns = mutableListOf<Boolean>()
+    override suspend fun runSendRetries(serviceIsBack: Boolean) { sendRetryRuns += serviceIsBack }
+    override fun watchServiceForSendRetries() {}
+
     override suspend fun lookupContact(address: String): Participant? = contacts[address]
 
     /** Photo bytes by photo URI; a URI not in the map has no photo. */

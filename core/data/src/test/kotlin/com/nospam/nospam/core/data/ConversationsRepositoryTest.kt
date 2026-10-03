@@ -250,4 +250,29 @@ class ConversationsRepositoryTest {
         // Back to its date position: the pin no longer floats it above the newer one.
         assertEquals(listOf(2L, 1L), back.map { it.threadId.value })
     }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun `a draft shows as the preview and lifts its conversation by when it was saved`() = runTest {
+        val older = conv(1, "+98911", snippet = "old message", date = 100L)
+        val newer = conv(2, "+98922", snippet = "new message", date = 500L)
+        val untimed = conv(3, "+98933", snippet = "middle", date = 300L)
+        val drafts = kotlinx.coroutines.flow.MutableStateFlow(
+            mapOf(1L to Draft("half-written reply", 900L), 3L to Draft("old draft", 0L))
+        )
+        val repo = ConversationsRepository(
+            FakeTelephonyDataSource(listOf(older, newer, untimed)), NoSpamDatabase.inMemory(),
+            CoroutineScope(UnconfinedTestDispatcher(testScheduler)), drafts = drafts,
+        )
+
+        val inbox = repo.observeConversations().first()
+
+        assertEquals(listOf(1L, 2L, 3L), inbox.map { it.threadId.value })
+        val drafted = inbox.first()
+        assertTrue(drafted.hasDraft)
+        assertEquals("half-written reply", drafted.draftText)
+        // A draft with no recorded time keeps its conversation where it was.
+        assertEquals(300L, inbox.last().date)
+        assertEquals("old draft", inbox.last().draftText)
+        assertEquals(null, inbox[1].draftText)
+    }
 }

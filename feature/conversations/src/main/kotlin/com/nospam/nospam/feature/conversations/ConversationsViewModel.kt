@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
@@ -36,6 +37,11 @@ data class ConversationsUiState(
     val backfillProgress: BackfillStatus? = null,
     /** What swiping a row does, by direction. */
     val swipeActions: SwipeActions = SwipeActions(),
+    /**
+     * Every unread conversation in the inbox, whatever chip or search is
+     * active: what "Mark all as read" acts on.
+     */
+    val unreadThreadIds: List<Long> = emptyList(),
 )
 
 /**
@@ -73,7 +79,8 @@ class ConversationsViewModel(
         ConversationsUiState(
             conversations = all.drop(1),
             pinned = all.take(1),
-            isLoading = false
+            isLoading = false,
+            unreadThreadIds = all.filterNot { it.read }.map { it.threadId.value },
         )
     )
 
@@ -102,11 +109,16 @@ class ConversationsViewModel(
                 isLoading = false
             )
         }
+        val unread = repo.observeConversations(ConversationFilter.ALL)
+            .map { all -> all.filterNot { it.read }.map { it.threadId.value } }
         combine(
             baseState,
             backfillStatus ?: MutableStateFlow<BackfillStatus?>(null),
             swipeActions ?: MutableStateFlow(SwipeActions()),
-        ) { ui, backfill, swipe -> ui.copy(backfillProgress = backfill, swipeActions = swipe) }
+            unread,
+        ) { ui, backfill, swipe, unreadIds ->
+            ui.copy(backfillProgress = backfill, swipeActions = swipe, unreadThreadIds = unreadIds)
+        }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConversationsUiState())
     }
 

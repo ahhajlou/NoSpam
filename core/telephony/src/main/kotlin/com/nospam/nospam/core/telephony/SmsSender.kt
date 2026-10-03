@@ -42,6 +42,8 @@ internal object SmsSender {
         subscriptionId: Int?,
         messageUri: Uri?,
         options: SendOptions = SendOptions(),
+        /** A [SendRetry] attempt: keeps the message's retry window rather than starting a new one. */
+        fromRetry: Boolean = false,
     ) {
         val mgr = context.resolveSmsManager(subscriptionId)
         val parts = mgr.divideMessage(body)
@@ -61,6 +63,13 @@ internal object SmsSender {
                 address, null, parts,
                 sent?.let { s -> ArrayList(parts.map { s }) },
                 delivered?.let { d -> ArrayList(parts.map { d }) },
+            )
+        }
+        // Only a message with a row can be retried, or failed when it never reports back.
+        if (messageUri != null) {
+            SendRetry.onSent(
+                context, ContentUris.parseId(messageUri), subscriptionId, options.deliveryReport, fromRetry,
+                System.currentTimeMillis(),
             )
         }
     }
@@ -109,12 +118,24 @@ internal object SmsSender {
         }
     }
 
-    /** Applies the radio's verdict to the row. A part failure is never overwritten by a later success. */
+    /**
+     * Applies the radio's verdict to the row. A part failure is never overwritten
+     * by a later success. A failure that can clear by itself (no service, radio
+     * off) waits for [SendRetry] instead, while its retry window lasts.
+     */
     fun recordResult(context: Context, messageUri: Uri, resultCode: Int) {
+        val rowId = ContentUris.parseId(messageUri)
         try {
             if (resultCode == Activity.RESULT_OK) {
                 update(context, messageUri, MessageType.SENT, null, "${Telephony.Sms.TYPE} = ?", Telephony.Sms.MESSAGE_TYPE_OUTBOX)
+                SendRetry.forget(context, rowId)
+            } else if (
+                SendRetryPolicy.isTemporary(resultCode) &&
+                SendRetry.onTemporaryFailure(context, messageUri, rowId, resultCode, System.currentTimeMillis())
+            ) {
+                // Waiting for the next attempt.
             } else {
+                SendRetry.forget(context, rowId)
                 update(
                     context, messageUri, MessageType.FAILED, resultCode,
                     "${Telephony.Sms.TYPE} IN (?, ?)", Telephony.Sms.MESSAGE_TYPE_OUTBOX, Telephony.Sms.MESSAGE_TYPE_SENT,

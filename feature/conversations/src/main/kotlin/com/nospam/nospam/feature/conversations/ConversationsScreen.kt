@@ -84,7 +84,7 @@ import com.nospam.nospam.core.designsystem.component.rememberSelectionState
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import com.nospam.nospam.core.model.ConversationFilter
 
-private enum class InboxConfirm { DELETE, BLOCK }
+private enum class InboxConfirm { DELETE, BLOCK, MARK_ALL_READ }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -204,11 +204,19 @@ fun ConversationsScreen(
         }
     }
 
+    // Only while something is unread: an action that would do nothing is not offered.
+    val barActions = if (uiState.unreadThreadIds.isEmpty()) emptyList() else listOf(
+        TopBarAction(stringResource(R.string.menu_mark_all_read), Icons.Outlined.MarkChatRead) {
+            confirm = InboxConfirm.MARK_ALL_READ
+        },
+    )
+
     ConversationListScaffold(
         title = title,
         onOpenDrawer = onOpenDrawer,
         selection = selection,
         selectionActions = actions,
+        actions = barActions,
         snackbarHostState = snackbar,
         floatingActionButton = {
             FloatingActionButton(onClick = onNewMessage) {
@@ -313,6 +321,14 @@ fun ConversationsScreen(
         InboxConfirm.BLOCK -> ConfirmBlockDialog(
             count = addressesOf(selected).size,
             onConfirm = { act { onBlock(addressesOf(selected)) } },
+            onDismiss = { confirm = null },
+        )
+        InboxConfirm.MARK_ALL_READ -> ConfirmMarkAllReadDialog(
+            count = uiState.unreadThreadIds.size,
+            onConfirm = {
+                onSetRead(uiState.unreadThreadIds, true)
+                confirm = null
+            },
             onDismiss = { confirm = null },
         )
         null -> Unit

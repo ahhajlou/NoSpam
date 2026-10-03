@@ -105,7 +105,8 @@ class AppContainer(private val context: Context) {
         ConversationsRepository(
             telephony,
             database,
-            normalizer = { PhoneNumberNormalizer.normalize(appContext, it) }
+            normalizer = { PhoneNumberNormalizer.normalize(appContext, it) },
+            drafts = draftRepository.observeDrafts(),
         )
     }
 

@@ -38,6 +38,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.nospam.nospam.NoSpamApplication
 import com.nospam.nospam.R
+import com.nospam.nospam.core.notifications.NotificationHelper
 import com.nospam.nospam.core.model.ThreadId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -223,6 +224,9 @@ fun NoSpamNavHost(
                 onNewMessage = { navController.navigate(NewConversationRoute()) },
                 onSetRead = { ids, read ->
                     scope.launch { container?.conversationsRepository?.setRead(ids.map(::ThreadId), read) }
+                    // Read means seen: their notifications go too, as when the
+                    // conversation itself is opened.
+                    if (read) ids.forEach { NotificationHelper.cancelNotification(context, it) }
                 },
                 onArchive = { ids ->
                     scope.launch { container?.conversationsRepository?.archive(ids.map(::ThreadId)) }

@@ -118,6 +118,22 @@ class ThreadScreenRobolectricTest {
         )
     }
 
+    @Test fun `a message waiting for a retry says it is waiting for signal`() {
+        val fake = com.nospam.nospam.core.testing.FakeTelephonyDataSource()
+        fake.emitMessages(
+            com.nospam.nospam.core.model.ThreadId(9),
+            listOf(
+                com.nospam.nospam.core.model.Message(
+                    com.nospam.nospam.core.model.MessageId(7), com.nospam.nospam.core.model.ThreadId(9),
+                    "+15550009", "will go when there is signal", 1L, com.nospam.nospam.core.model.MessageType.QUEUED, true,
+                ),
+            ),
+        )
+        rule.setContent { ThreadScreen(threadId = 9L, viewModel = ThreadViewModel(fake)) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Waiting for signal…").assertIsDisplayed()
+    }
+
     @Test fun `a message that is still sending says so`() {
         val fake = com.nospam.nospam.core.testing.FakeTelephonyDataSource()
         fake.emitMessages(

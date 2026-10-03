@@ -90,6 +90,8 @@ internal fun ConversationListScaffold(
     selection: SelectionState,
     selectionActions: List<TopBarAction>,
     modifier: Modifier = Modifier,
+    /** The top bar's own actions while nothing is selected. */
+    actions: List<TopBarAction> = emptyList(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     floatingActionButton: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
@@ -110,6 +112,7 @@ internal fun ConversationListScaffold(
                 NoSpamTopAppBar(
                     title = title,
                     navigation = TopBarNavigation.Menu(onOpenDrawer),
+                    actions = actions,
                     scrollBehavior = scrollBehavior,
                 )
             }
@@ -189,8 +192,20 @@ internal fun ConversationRow(
             }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // An unsent draft replaces the last message as the preview, after
+                // a "Draft" label, as in Google Messages.
+                val draft = conv.draftText
+                if (draft != null) {
+                    Text(
+                        stringResource(R.string.draft_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.error,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
-                    conv.snippet,
+                    draft ?: conv.snippet,
                     // An English message in a Persian inbox otherwise takes the
                     // layout's direction, which moves its full stop to the front.
                     style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),
@@ -304,6 +319,19 @@ internal fun ConfirmDeleteDialog(count: Int, onConfirm: () -> Unit, onDismiss: (
         title = resources.getQuantityString(R.plurals.confirm_delete_title, count, count),
         text = stringResource(R.string.confirm_delete_body),
         confirmLabel = stringResource(R.string.menu_delete),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
+}
+
+/** "Mark all as read" acts on conversations the user has not looked at, so it asks first. */
+@Composable
+internal fun ConfirmMarkAllReadDialog(count: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val resources = LocalResources.current
+    ConfirmationDialog(
+        title = resources.getQuantityString(R.plurals.confirm_mark_all_read_title, count, count),
+        text = stringResource(R.string.confirm_mark_all_read_body),
+        confirmLabel = stringResource(R.string.menu_mark_read),
         onConfirm = onConfirm,
         onDismiss = onDismiss,
     )

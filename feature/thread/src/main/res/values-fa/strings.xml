@@ -7,6 +7,7 @@
     <string name="new_top">مخاطبان پرتکرار</string>
     <string name="new_all">همهٔ مخاطبان</string>
     <string name="message_sending">در حال ارسال…</string>
+    <string name="message_waiting_for_signal">در انتظار آنتن…</string>
     <string name="message_failed_retry">ارسال نشد · برای تلاش دوباره ضربه بزنید</string>
     <string name="message_delivered">تحویل داده شد</string>
     <string name="message_not_delivered">تحویل داده نشد</string>

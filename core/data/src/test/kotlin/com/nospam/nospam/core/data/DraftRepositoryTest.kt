@@ -2,6 +2,7 @@
 
 package com.nospam.nospam.core.data
 
+import kotlinx.coroutines.flow.first
 import app.cash.turbine.test
 import com.nospam.nospam.core.preferences.PreferenceFile
 import com.nospam.nospam.core.testing.FakePreferencesDataSource
@@ -132,5 +133,33 @@ class DraftRepositoryTest {
         val repo = DraftRepository(fake)
         repo.save(1L, "hello")
         assertTrue(fake.contents(PreferenceFile.DRAFTS).isEmpty())
+    }
+
+    @Test fun `observeDrafts returns each draft with when it was saved`() = runTest {
+        val repo = DraftRepository(FakePreferencesDataSource())
+        repo.save(1L, "first", now = 100L)
+        repo.save(2L, "second", now = 200L)
+        repo.save(1L, "first, edited", now = 300L)
+        assertEquals(
+            mapOf(1L to Draft("first, edited", 300L), 2L to Draft("second", 200L)),
+            repo.observeDrafts().first(),
+        )
+    }
+
+    @Test fun `removing a draft removes its save time too`() = runTest {
+        val prefs = FakePreferencesDataSource()
+        val repo = DraftRepository(prefs)
+        repo.save(1L, "text", now = 100L)
+        repo.save(1L, "")
+        assertEquals(emptyMap<String, Any>(), prefs.contents(PreferenceFile.DRAFTS))
+    }
+
+    @Test fun `a draft saved before save times were recorded reads as time zero`() = runTest {
+        val prefs = FakePreferencesDataSource(initial = mapOf(PreferenceFile.DRAFTS to mapOf("draft_7" to "old")))
+        val repo = DraftRepository(prefs)
+        assertEquals(mapOf(7L to Draft("old", 0L)), repo.observeDrafts().first())
+        // ...and the save-time key never shows up as a draft in the text-only view.
+        repo.save(8L, "new", now = 5L)
+        assertEquals(mapOf(7L to "old", 8L to "new"), repo.observeAll().first())
     }
 }

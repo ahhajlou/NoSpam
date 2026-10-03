@@ -7,6 +7,7 @@
     <string name="new_top">Top contacts</string>
     <string name="new_all">All contacts</string>
     <string name="message_sending">Sending…</string>
+    <string name="message_waiting_for_signal">Waiting for signal…</string>
     <string name="message_failed_retry">Not sent · Tap to retry</string>
     <string name="message_delivered">Delivered</string>
     <string name="message_not_delivered">Not delivered</string>

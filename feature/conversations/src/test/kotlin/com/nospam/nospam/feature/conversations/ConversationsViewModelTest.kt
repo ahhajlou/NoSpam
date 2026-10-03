@@ -177,4 +177,15 @@ class ConversationsViewModelTest {
         assertTrue(after.pinned.any { it.threadId.value == recentId })
         assertFalse(after.conversations.any { it.threadId.value == recentId })
     }
+
+    @Test fun `unread ids cover the whole inbox whatever the chip or search`() = runTest {
+        val vm = liveVm(conv(1, "hello", read = false), conv(2, "seen"), conv(3, "other", read = false))
+        vm.uiState.test {
+            assertEquals(setOf(1L, 3L), expectMostRecentItem().unreadThreadIds.toSet())
+            vm.onFilterSelected(ConversationFilter.STARRED)
+            vm.onSearchQueryChanged("nothing matches this")
+            assertEquals(setOf(1L, 3L), expectMostRecentItem().unreadThreadIds.toSet())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }
