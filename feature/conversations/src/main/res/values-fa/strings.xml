@@ -22,6 +22,7 @@
     <string name="marked_as_not_spam">%1$s هرزنامه نیست</string>
     <string name="menu_mark_read">علامت‌گذاری به‌عنوان خوانده‌شده</string>
     <string name="menu_mark_unread">علامت‌گذاری به‌عنوان خوانده‌نشده</string>
+    <string name="menu_mark_all_read">علامت‌گذاری همه به‌عنوان خوانده‌شده</string>
     <string name="menu_archive">بایگانی</string>
     <string name="menu_unarchive">خارج کردن از بایگانی</string>
     <string name="swipe_archived">گفت‌وگو بایگانی شد</string>
@@ -70,4 +71,9 @@
         <item quantity="one">%d ساعت</item>
         <item quantity="other">%d ساعت</item>
     </plurals>
+    <plurals name="confirm_mark_all_read_title">
+        <item quantity="one">%d گفت‌وگو خوانده‌شده علامت بخورد؟</item>
+        <item quantity="other">%d گفت‌وگو خوانده‌شده علامت بخورد؟</item>
+    </plurals>
+    <string name="confirm_mark_all_read_body">اعلان‌هایشان هم پاک می‌شود. برای خوانده‌نشده کردن دوباره‌ی یک گفت‌وگو، آن را لمس طولانی کنید و «علامت‌گذاری به‌عنوان خوانده‌نشده» را بزنید.</string>
 </resources>

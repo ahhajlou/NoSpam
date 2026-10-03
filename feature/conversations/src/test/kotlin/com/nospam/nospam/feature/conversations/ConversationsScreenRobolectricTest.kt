@@ -16,6 +16,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -152,5 +155,35 @@ class ConversationsScreenRobolectricTest {
         }
         rule.onNodeWithText("Design Team Sync").performClick()
         assertEquals(2L, clicked)
+    }
+
+    @Test fun `mark all as read asks first, then marks every unread conversation`() {
+        val marked = mutableListOf<Pair<List<Long>, Boolean>>()
+        rule.setContent {
+            ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(), onSetRead = { ids, read -> marked += ids to read })
+        }
+        rule.onNodeWithContentDescription("Mark all as read").performClick()
+        rule.waitForIdle()
+        assertEquals(emptyList<Pair<List<Long>, Boolean>>(), marked)
+        rule.onNodeWithText("Mark 1 conversation as read?").assertIsDisplayed()
+        rule.onNodeWithText("Mark as read").performClick()
+        rule.waitForIdle()
+        assertEquals(listOf(listOf(1L) to true), marked)
+    }
+
+    @Test fun `mark all as read is not offered when nothing is unread`() {
+        val allRead = listOf(
+            com.nospam.nospam.core.model.Conversation(
+                com.nospam.nospam.core.model.ThreadId(1),
+                listOf(com.nospam.nospam.core.model.Participant("+15550001")), "seen", 1L, 1, read = true,
+            ),
+        )
+        val repo = com.nospam.nospam.core.data.ConversationsRepository(
+            com.nospam.nospam.core.testing.FakeTelephonyDataSource(allRead),
+            com.nospam.nospam.core.database.NoSpamDatabase.inMemory(),
+        )
+        rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(repo)) }
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("seen").fetchSemanticsNodes().isNotEmpty() }
+        rule.onAllNodesWithContentDescription("Mark all as read").assertCountEquals(0)
     }
 }

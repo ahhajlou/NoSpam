@@ -22,6 +22,7 @@
     <string name="marked_as_not_spam">%1$s marked as not spam</string>
     <string name="menu_mark_read">Mark as read</string>
     <string name="menu_mark_unread">Mark as unread</string>
+    <string name="menu_mark_all_read">Mark all as read</string>
     <string name="menu_archive">Archive</string>
     <string name="menu_unarchive">Unarchive</string>
     <string name="swipe_archived">Conversation archived</string>
@@ -70,4 +71,9 @@
         <item quantity="one">%d hr</item>
         <item quantity="other">%d hr</item>
     </plurals>
+    <plurals name="confirm_mark_all_read_title">
+        <item quantity="one">Mark %d conversation as read?</item>
+        <item quantity="other">Mark %d conversations as read?</item>
+    </plurals>
+    <string name="confirm_mark_all_read_body">Their notifications are cleared too. To make one unread again, long-press it and choose Mark as unread.</string>
 </resources>

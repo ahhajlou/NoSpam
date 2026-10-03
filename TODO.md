@@ -226,6 +226,9 @@ Worth having:
   if users ask for it). Contacts bypass the classifier by default, so this
   toggle turns labelling on. Safe under the rule above because it can only add
   a warning, never hide a message. Not worth building speculatively.
+  **Decided 2026-10-03: not now.** Designed (a setting, off by default, that runs
+  contacts' messages through the classifier for the label only: never silenced,
+  never moved), but not built until users ask for it.
   **Decided 2026-09-22:** the disabled placeholder row phase 1 added is removed
   in phase 2 step 3. It comes back, if ever, with the routing rework above,
   because until contacts actually bypass the classifier it has nothing to turn on.
@@ -384,7 +387,7 @@ for when a new instrumented test is the right call.
 
 ## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
 
-- [] **"Mark all as read"** — the drawer item was removed. Its `onClick` only
+- [x] **Done 2026-10-03:** "Mark all as read" is in the inbox top bar, shown only while something is unread; it asks first with the count ("Mark 3 conversations as read?"), marks every unread inbox conversation through the bulk `setRead`, and clears their notifications (marking a selection read now clears them too). Original: **"Mark all as read"** — the drawer item was removed. Its `onClick` only
   closed the drawer; it had never done anything. A menu item that silently does
   nothing is worse than no menu item, so it is gone rather than left lying.
   Re-add it when it is actually implemented. Note it is a bulk action over every
