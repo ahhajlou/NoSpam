@@ -520,6 +520,16 @@ is roughly 1.75s debuggable and 0.91s release, because a debuggable APK JITs far
 more and runs StrictMode. Discard the first launch after install and take the
 median of three.
 
+Compile the baseline profile **after** that first launch, not before:
+`ProfileInstaller` writes the APK's profile during it, so `adb shell cmd package
+compile -f -m speed-profile com.nospam.nospam` run earlier finds no profile and
+only verifies. Then check `adb shell dumpsys package dexopt` for the package:
+`status=speed-profile` is compiled; `status=verify` with `reason=cmdline` is not,
+and numbers taken in that state measure interpreted code (real too: a sideloaded
+APK runs like that until background dexopt, which waits for an idle, charging
+phone). `tools/bench_startup.sh` applies these steps and refuses to measure when
+one fails; `TODO.md` ("Cold start") has the other traps.
+
 ## 11. Where this project diverges from common Android practice
 
 Recorded with the *kind* of divergence, because the previous file listed choices
