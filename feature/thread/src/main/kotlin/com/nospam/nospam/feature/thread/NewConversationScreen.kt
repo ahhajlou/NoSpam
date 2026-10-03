@@ -73,30 +73,6 @@ private fun contactEntryToUi(e: com.nospam.nospam.core.model.ContactEntry) = Con
     photoUri = e.photoUri,
 )
 
-/** One line of the text waiting for a recipient, so the picker says what it is for. */
-@Composable
-private fun TextToSendPreview(text: String) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    ) {
-        Text(
-            stringResource(R.string.new_text_to_send),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            // One line: a shared link or paragraph would push the picker down.
-            text.replace('\n', ' '),
-            style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        )
-    }
-}
-
 /**
  * Resolves a typed query to a destination address: an exact/contains match
  * on a known contact name wins, otherwise the raw query is treated as a
@@ -116,12 +92,6 @@ fun NewConversationScreen(
     onNavigateUp: () -> Unit = {},
     onAddressEntered: (String) -> Unit = {},
     dataSource: com.nospam.nospam.core.telephony.TelephonyDataSource? = null,
-    /**
-     * Text that will go into the conversation picked: shared from another app,
-     * or a message being forwarded. Shown at the top so the user knows what the
-     * recipient is for.
-     */
-    textToSend: String? = null,
 ) {
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -187,7 +157,6 @@ fun NewConversationScreen(
             modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()
                 .padding(horizontal = 16.dp)
         ) {
-            if (!textToSend.isNullOrBlank()) TextToSendPreview(textToSend)
             Text(stringResource(R.string.new_to), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = query,
