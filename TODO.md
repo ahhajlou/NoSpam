@@ -460,11 +460,11 @@ not the system store. So the ordering and the label are the app's own doing, and
 we can match the behaviour without writing to the provider.
 
 Agreed for a later phase:
-- [] Show a "Draft" marker and the draft text as the preview in the inbox row.
-- [] Sort a conversation with a draft by when the draft was saved, so it rises
+- [x] **Done 2026-10-03.** The row shows a "Draft" label (error colour) and the draft text instead of the last message. Original: Show a "Draft" marker and the draft text as the preview in the inbox row.
+- [x] **Done 2026-10-03.** `DraftRepository` records when each draft was saved (`draft_at_<id>`); the inbox dates a drafted conversation by the later of its last message and its draft. Drafts saved before this recorded nothing and keep their place. Original: Sort a conversation with a draft by when the draft was saved, so it rises
   to the top like Messages does. A half-written message is the conversation the
   user is most likely to return to.
-- [] Set `Conversation.hasDraft` from the draft store rather than leaving the
+- [x] **Done 2026-10-03.** Set by `ConversationsRepository` from `DraftRepository.observeDrafts()`, with the text in `Conversation.draftText`. Original: Set `Conversation.hasDraft` from the draft store rather than leaving the
   field unused.
 - [x] Needs a home the inbox can read. **Done 2026-09-23 (phase 2, P2.1):**
   `DraftRepository` in `core:data`, same DataStore file and `draft_<id>` keys,

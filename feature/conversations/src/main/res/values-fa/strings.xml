@@ -42,6 +42,7 @@
     <string name="action_mute">بی‌صدا کردن</string>
     <string name="action_unmute">فعال کردن صدا</string>
     <string name="badge_suspected">هرزنامه مشکوک</string>
+    <string name="draft_label">پیش‌نویس</string>
     <string name="status_muted">بی‌صدا</string>
     <string name="action_call">تماس</string>
     <string name="action_add_contact">افزودن به مخاطبان</string>

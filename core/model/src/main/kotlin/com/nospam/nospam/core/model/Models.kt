@@ -80,6 +80,8 @@ data class Conversation(
      * history and decides the folder.
      */
     val hasSuspectedSpam: Boolean = false,
+    /** The unsent draft, shown as the inbox row's preview; null when there is none. */
+    val draftText: String? = null,
 )
 
 data class RawMessage(

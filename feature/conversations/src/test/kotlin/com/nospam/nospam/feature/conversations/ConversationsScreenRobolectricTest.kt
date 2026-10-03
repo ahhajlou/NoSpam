@@ -186,4 +186,20 @@ class ConversationsScreenRobolectricTest {
         rule.waitUntil(5_000) { rule.onAllNodesWithText("seen").fetchSemanticsNodes().isNotEmpty() }
         rule.onAllNodesWithContentDescription("Mark all as read").assertCountEquals(0)
     }
+
+    @Test fun `a conversation with a draft shows the Draft label and the draft as its preview`() {
+        val conv = com.nospam.nospam.core.model.Conversation(
+            com.nospam.nospam.core.model.ThreadId(1),
+            listOf(com.nospam.nospam.core.model.Participant("+15550001")), "last message", 1L, 1, read = true,
+        )
+        val repo = com.nospam.nospam.core.data.ConversationsRepository(
+            com.nospam.nospam.core.testing.FakeTelephonyDataSource(listOf(conv)),
+            com.nospam.nospam.core.database.NoSpamDatabase.inMemory(),
+            drafts = kotlinx.coroutines.flow.flowOf(mapOf(1L to com.nospam.nospam.core.data.Draft("see you at five", 2L))),
+        )
+        rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(repo)) }
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("see you at five").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Draft").assertIsDisplayed()
+        rule.onAllNodesWithText("last message").assertCountEquals(0)
+    }
 }

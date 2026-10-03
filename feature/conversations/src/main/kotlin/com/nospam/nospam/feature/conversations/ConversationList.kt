@@ -192,8 +192,20 @@ internal fun ConversationRow(
             }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // An unsent draft replaces the last message as the preview, after
+                // a "Draft" label, as in Google Messages.
+                val draft = conv.draftText
+                if (draft != null) {
+                    Text(
+                        stringResource(R.string.draft_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.error,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
-                    conv.snippet,
+                    draft ?: conv.snippet,
                     // An English message in a Persian inbox otherwise takes the
                     // layout's direction, which moves its full stop to the front.
                     style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content),

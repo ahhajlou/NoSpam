@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onStart
@@ -30,6 +31,8 @@ class ConversationsRepository(
     // Default is a harmless identity-ish fallback; AppContainer injects E.164
     // normalization so lookups match what SmsIngressUseCase stored.
     private val normalizer: (String) -> String = { it.trim().uppercase() },
+    // Unsent drafts by thread id; the inbox shows them and sorts by them.
+    private val drafts: Flow<Map<Long, Draft>> = flowOf(emptyMap()),
 ) {
     // Shared repository scope keeps hot flows alive across ViewModel recreation
     // (e.g. navigating Inbox -> Settings -> Inbox). Without this, each new
@@ -154,6 +157,16 @@ class ConversationsRepository(
     }
 
     /**
+     * A conversation with an unsent draft shows it as its preview and sorts by
+     * the later of its last message and the draft, so a half-written reply rises
+     * to the top as in Google Messages (verified 2026-09-18). A draft saved
+     * before save times were recorded keeps the conversation where it was.
+     */
+    private fun withDraft(conv: Conversation, draft: Draft?): Conversation =
+        if (draft == null) conv
+        else conv.copy(hasDraft = true, draftText = draft.text, date = maxOf(conv.date, draft.savedAt))
+
+    /**
      * Whether the inbox row is labelled "Suspected spam": the conversation holds
      * a message flagged as spam right now, the same messages the thread screen
      * labels. It follows the messages, not the sender's history, so deleting the
@@ -186,7 +199,7 @@ class ConversationsRepository(
 
     fun observeConversations(filter: ConversationFilter = ConversationFilter.ALL): Flow<List<Conversation>> {
         // Cold per-collector – cheap filter/sort, but reuses hot sharedTelephony/flags.
-        return combine(sharedTelephony, sharedFlags) { conversations, flags ->
+        return combine(sharedTelephony, sharedFlags, drafts) { conversations, flags, draftsByThread ->
             val withFlags = withFlags(
                 conversations,
                 flags.senderStates,
@@ -196,7 +209,7 @@ class ConversationsRepository(
                 flags.pinnedIds,
                 flags.mutedIds,
                 flags.suspectedThreadIds,
-            )
+            ).map { withDraft(it, draftsByThread[it.threadId.value]) }
             val sorted = withFlags.sortedWith(compareByDescending<Conversation> { it.isPinned }.thenByDescending { it.date })
             applyFilter(sorted, flags.senderStates, filter)
         // Without this the combine runs on the collector's context, which is
