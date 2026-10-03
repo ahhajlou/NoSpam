@@ -9,6 +9,9 @@ tags:
 # A share names no recipient, so it opens the recipient picker; the text waits
 # for the conversation the user picks.
 - assertVisible: "To:"
+# The picker says what the recipient is for.
+- assertVisible: "Text to send"
+- assertVisible: "Shared from another app"
 - inputText: "+15557770004"
 - pressKey: Enter
 - assertVisible: "Shared from another app"

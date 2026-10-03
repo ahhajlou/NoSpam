@@ -452,7 +452,8 @@ fun NoSpamNavHost(
                         navController.navigate(ThreadRoute(threadId, address, args.forwardBody))
                     }
                 },
-                dataSource = container?.telephony
+                dataSource = container?.telephony,
+                textToSend = args.forwardBody,
             )
         }
         composable<ThreadRoute> { backStackEntry ->
