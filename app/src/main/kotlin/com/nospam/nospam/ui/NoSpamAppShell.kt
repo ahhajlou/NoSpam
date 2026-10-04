@@ -2,6 +2,7 @@
 
 package com.nospam.nospam.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.CompositionLocalProvider
 import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
 import com.nospam.nospam.core.designsystem.component.LocalContactPhotoLoader
@@ -28,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -85,40 +87,63 @@ fun NoSpamAppShell(
                 // gesture.
                 gesturesEnabled = drawerState.isOpen,
                 drawerContent = {
-                    ModalDrawerSheet {
-                        Text(
-                            stringResource(R.string.drawer_messages),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 16.dp),
-                        )
-                        fun go(route: Any) {
+                    // The latest registered Back handler gets Back first. The
+                    // NavHost registers its own once the start screen is known,
+                    // after this drawer was first composed, so it outranked the
+                    // drawer's handlers on every page with a page below it:
+                    // Back from Settings went past an open drawer. Keyed on the
+                    // first destination, the drawer content is composed again
+                    // once the NavHost exists, and its handlers register after.
+                    key(destination != null) {
+                        // Back while the drawer is still sliding open: the sheet's
+                        // own handler (below) is enabled only once the drawer is
+                        // fully open, so a Back in that first half second went past
+                        // it. Placed before the sheet, so once the drawer is open the
+                        // sheet's handler (registered later) wins and keeps its
+                        // predictive-back animation.
+                        BackHandler(enabled = drawerState.targetValue == DrawerValue.Open) {
                             scope.launch { drawerState.close() }
-                            navController.navigateTopLevel(route)
                         }
-                        TopLevelItem(R.string.drawer_inbox, Icons.Filled.Inbox, Icons.Outlined.Inbox,
-                            destination.isOn(ConversationsRoute::class)) { go(ConversationsRoute) }
-                        TopLevelItem(R.string.drawer_archived, Icons.Filled.Archive, Icons.Outlined.Archive,
-                            destination.isOn(ArchivedRoute::class)) { go(ArchivedRoute) }
-                        TopLevelItem(R.string.drawer_spam_blocked, Icons.Filled.Report, Icons.Outlined.Report,
-                            destination.isOn(SpamRoute::class), count = newSpamCount) { go(SpamRoute) }
-                        // Developer tools. Empty in release: the feature modules are
-                        // debugImplementation, so nothing to show and nothing linked.
-                        if (debugTools.isNotEmpty()) {
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
-                        }
-                        debugTools.forEach { tool ->
-                            TopLevelItem(tool.labelRes, tool.icon, tool.icon,
-                                destination.isOnDebugTool(tool.routeTag)) {
+                        // Given the state, the sheet handles Back: it closes the
+                        // drawer (with the predictive-back animation on Android 14+).
+                        // Without it Back went past the open drawer: it left the app
+                        // from the inbox, and from other pages it switched the page
+                        // behind the drawer while the drawer stayed open.
+                        ModalDrawerSheet(drawerState = drawerState) {
+                            Text(
+                                stringResource(R.string.drawer_messages),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 24.dp, bottom = 16.dp),
+                            )
+                            fun go(route: Any) {
                                 scope.launch { drawerState.close() }
-                                tool.navigate(navController)
+                                navController.navigateTopLevel(route)
                             }
+                            TopLevelItem(R.string.drawer_inbox, Icons.Filled.Inbox, Icons.Outlined.Inbox,
+                                destination.isOn(ConversationsRoute::class)) { go(ConversationsRoute) }
+                            TopLevelItem(R.string.drawer_archived, Icons.Filled.Archive, Icons.Outlined.Archive,
+                                destination.isOn(ArchivedRoute::class)) { go(ArchivedRoute) }
+                            TopLevelItem(R.string.drawer_spam_blocked, Icons.Filled.Report, Icons.Outlined.Report,
+                                destination.isOn(SpamRoute::class), count = newSpamCount) { go(SpamRoute) }
+                            // Developer tools. Empty in release: the feature modules are
+                            // debugImplementation, so nothing to show and nothing linked.
+                            if (debugTools.isNotEmpty()) {
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                            }
+                            debugTools.forEach { tool ->
+                                TopLevelItem(tool.labelRes, tool.icon, tool.icon,
+                                    destination.isOnDebugTool(tool.routeTag)) {
+                                    scope.launch { drawerState.close() }
+                                    tool.navigate(navController)
+                                }
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
+                            TopLevelItem(R.string.drawer_settings, Icons.Filled.Settings, Icons.Outlined.Settings,
+                                destination.isOn(SettingsRoute::class)) { go(SettingsRoute) }
+                            Spacer(modifier = Modifier.padding(bottom = 12.dp))
                         }
-                        Spacer(modifier = Modifier.weight(1f))
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
-                        TopLevelItem(R.string.drawer_settings, Icons.Filled.Settings, Icons.Outlined.Settings,
-                            destination.isOn(SettingsRoute::class)) { go(SettingsRoute) }
-                        Spacer(modifier = Modifier.padding(bottom = 12.dp))
                     }
                 }
             ) {
