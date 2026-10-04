@@ -155,11 +155,11 @@ tags:
 - stopApp
 - launchApp:
     clearState: false
-- scrollUntilVisible:
-    element:
-        text: "NoSpam QA Contact"
-    direction: DOWN
-    optional: true
+# A conversation with a draft rises to the top of the inbox, so wait for it
+# there. Scrolling down to find it raced the first load and could scroll past it.
+- extendedWaitUntil:
+    visible: "NoSpam QA Contact"
+    timeout: 8000
 - tapOn: "NoSpam QA Contact"
 - assertVisible: "Unsent draft persistence check"
 - back

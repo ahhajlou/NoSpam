@@ -512,9 +512,20 @@ reset_addresses() {
     done
 }
 
+# Drafts live in a DataStore file, keyed by thread id, outside nospam.db, so
+# reset_addresses cannot reach them. A draft left by one flow (persistence.yaml
+# types one into the contact's thread) replaced the empty compose box's
+# "SMS message" hint, and every later flow that taps that hint failed. The app
+# is stopped first: DataStore holds the file in memory and would write it back.
+clear_drafts() {
+    adbs shell am force-stop "$PKG" >/dev/null 2>&1 || true
+    adbs shell "rm -f /data/data/${PKG}/files/datastore/drafts.preferences_pb" >/dev/null 2>&1 || true
+}
+
 teardown_all() {
     ensure_root
     echo "Tearing down fixtures..."
+    clear_drafts
     reset_addresses "${CORE_ADDRS[@]}" "${HEAVY_ADDRS[@]}" "${PREFIX}CAPOLD1" "${PREFIX}CAPFLOOD1" "$CONTACT_PHONE"
     contact_delete
     echo "Done."
@@ -538,6 +549,7 @@ case "${1:-}" in
         # Idempotency: clear what this entry point is about to re-create. Does
         # NOT touch LONG1/PAGEBUG1/HISTORY1, which `core` deliberately skips —
         # resetting those would delete heavy fixtures it never rebuilds.
+        clear_drafts
         reset_addresses "${CORE_ADDRS[@]}" "$CONTACT_PHONE"
         contact_delete
         seed_contact_clean
