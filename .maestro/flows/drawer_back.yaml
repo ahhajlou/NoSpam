@@ -1,0 +1,35 @@
+appId: com.nospam.nospam
+tags:
+  - navigation
+---
+# Back with the navigation drawer open closes the drawer and nothing else, as in
+# Gmail and Drive. It used to go past the drawer: from the inbox it left the app,
+# and from another page it switched the page behind the drawer to the inbox while
+# the drawer stayed open. "Spam & blocked" is only on screen while the drawer is.
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+- assertVisible: "Inbox"
+
+# --- From the inbox ---
+- tapOn: "Open navigation menu"
+- assertVisible: "Spam & blocked"
+- back
+# The drawer slides shut; an immediate check catches it mid-animation.
+- extendedWaitUntil:
+    notVisible: "Spam & blocked"
+    timeout: 3000
+- assertVisible: "Search conversations"   # still in the app, on the inbox
+
+# --- From another page ---
+- tapOn: "Open navigation menu"
+- tapOn: "Settings"
+- assertVisible: "General"
+- tapOn: "Open navigation menu"
+- assertVisible: "Spam & blocked"
+- back
+- extendedWaitUntil:
+    notVisible: "Spam & blocked"
+    timeout: 3000
+- assertVisible: "General"                # still on Settings
