@@ -54,6 +54,21 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
     suspend fun setBackfillPending(pending: Boolean) = write { it[KEY_BACKFILL_PENDING] = pending }
 
     /**
+     * The sender-key scheme the stored data was last keyed with (see
+     * `SenderKeyRepair`); null before the first repair. A failed read is null,
+     * which only repeats the repair, and a repeated repair changes nothing.
+     */
+    suspend fun senderKeyScheme(): String? = try {
+        prefs.data(PreferenceFile.SETTINGS).first()[KEY_SENDER_KEY_SCHEME] as? String
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    suspend fun setSenderKeyScheme(scheme: String) = write { it[KEY_SENDER_KEY_SCHEME] = scheme }
+
+    /**
      * Random UUID minted on first use and kept for the life of the install.
      *
      * The debug export stamps exported lines with it, so exported corpora can
@@ -229,6 +244,7 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
         private const val KEY_SPAM_PROTECTION = "spam_protection_enabled"
         private const val KEY_BACKFILL_PENDING = "history_backfill_pending"
         private const val KEY_INSTALL_ID = "install_id"
+        private const val KEY_SENDER_KEY_SCHEME = "sender_key_scheme"
         private const val KEY_THEME = "theme"
         private const val KEY_DYNAMIC_COLOR = "dynamic_color"
         private const val KEY_SWIPE_RIGHT = "swipe_right"

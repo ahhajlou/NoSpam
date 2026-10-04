@@ -38,6 +38,11 @@ dependencies {
     implementation(project(":core:common"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.core)
+    // Phone-number parsing for sender keys. Android's own copy is not public
+    // API, and PhoneNumberUtils.formatNumberToE164 rejects numbers it cannot
+    // validate, which split Iranian service numbers in two (see
+    // PhoneNumberNormalizer).
+    implementation(libs.libphonenumber)
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)

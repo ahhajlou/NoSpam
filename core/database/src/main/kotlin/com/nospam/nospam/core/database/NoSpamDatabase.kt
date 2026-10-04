@@ -24,7 +24,9 @@ import com.nospam.nospam.core.database.dao.SqliteMessageVerdictDao
 import com.nospam.nospam.core.database.dao.SqliteSenderStateDao
 import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
+import com.nospam.nospam.core.database.dao.SqliteBlocklistDao
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -42,6 +44,22 @@ class NoSpamDatabase(
         senderStateDao.upsertAll(states)
         messageVerdictDao.insertAll(verdicts)
     },
+    private val rekey: suspend (SenderRekey) -> Unit = { change ->
+        change.newKeyFor.keys.forEach { senderStateDao.deleteByAddress(it) }
+        senderStateDao.upsertAll(change.mergedStates)
+        val verdicts = messageVerdictDao.observeAll().first()
+        messageVerdictDao.insertAll(
+            verdicts.mapNotNull { v -> change.newKeyFor[v.normalizedAddress]?.let { v.copy(normalizedAddress = it) } }
+        )
+        val blocked = blocklistDao.observeAll().first()
+        val kept = blocked.map { it.address }.toMutableSet()
+        blocked.forEach { entry ->
+            val newKey = change.newKeyFor[entry.address] ?: return@forEach
+            blocklistDao.deleteByAddress(entry.address)
+            kept.remove(entry.address)
+            if (kept.add(newKey)) blocklistDao.insert(entry.copy(id = 0, address = newKey))
+        }
+    },
 ) {
     /**
      * One history-scan batch: sender states and message verdicts in a single
@@ -53,6 +71,18 @@ class NoSpamDatabase(
     suspend fun writeScanBatch(states: List<SenderStateEntity>, verdicts: List<MessageVerdictEntity>) =
         scanBatch(states, verdicts)
 
+    /**
+     * Moves everything keyed by sender to new keys, in one transaction: the old
+     * `sender_state` rows go and [SenderRekey.mergedStates] take their place,
+     * and verdicts and block-list entries point at the new key. A crash halfway
+     * would otherwise leave merged counts beside the rows they were summed from,
+     * and the next run would add them again. No-op when there is nothing to move.
+     */
+    suspend fun rekeySenders(change: SenderRekey) {
+        if (change.newKeyFor.isEmpty()) return
+        rekey(change)
+    }
+
     companion object {
         fun inMemory(): NoSpamDatabase = NoSpamDatabase()
 
@@ -60,8 +90,9 @@ class NoSpamDatabase(
             val helper = SqliteNoSpamOpenHelper(context.applicationContext)
             val senderStates = com.nospam.nospam.core.database.dao.SqliteSenderStateDao(helper)
             val verdicts = com.nospam.nospam.core.database.dao.SqliteMessageVerdictDao(helper)
+            val blocklist = com.nospam.nospam.core.database.dao.SqliteBlocklistDao(helper)
             return NoSpamDatabase(
-                blocklistDao = com.nospam.nospam.core.database.dao.SqliteBlocklistDao(helper),
+                blocklistDao = blocklist,
                 spamVerdictDao = com.nospam.nospam.core.database.dao.SqliteSpamVerdictDao(helper),
                 modelMetadataDao = com.nospam.nospam.core.database.dao.SqliteModelMetadataDao(helper),
                 archivedDao = com.nospam.nospam.core.database.dao.SqliteArchivedDao(helper),
@@ -71,6 +102,7 @@ class NoSpamDatabase(
                 pinnedDao = com.nospam.nospam.core.database.dao.SqlitePinnedDao(helper),
                 mutedDao = com.nospam.nospam.core.database.dao.SqliteMutedDao(helper),
                 scanBatch = { states, rows -> writeScanBatch(helper, senderStates, verdicts, states, rows) },
+                rekey = { change -> rekeySenders(helper, senderStates, verdicts, blocklist, change) },
             )
         }
     }
@@ -102,6 +134,54 @@ private suspend fun writeScanBatch(
             }
             if (states.isNotEmpty()) senderStates.publishWritten(states)
             if (written.isNotEmpty()) verdicts.publishWritten(written)
+        }
+    }
+}
+
+/**
+ * Sender keys that change: each old key mapped to its new one, and the
+ * `sender_state` rows to store under the new keys (one per new key, already
+ * merged). Every old key's row is removed.
+ */
+data class SenderRekey(
+    val newKeyFor: Map<String, String>,
+    val mergedStates: List<SenderStateEntity>,
+)
+
+/**
+ * [NoSpamDatabase.rekeySenders] in one SQLite transaction, holding the three
+ * tables' write locks in the order states, verdicts, block list. Every flow is
+ * re-read after the commit.
+ */
+private suspend fun rekeySenders(
+    helper: SqliteNoSpamOpenHelper,
+    senderStates: SqliteSenderStateDao,
+    verdicts: SqliteMessageVerdictDao,
+    blocklist: SqliteBlocklistDao,
+    change: SenderRekey,
+) = withContext(Dispatchers.IO) {
+    senderStates.writeLock.withLock {
+        verdicts.writeLock.withLock {
+            blocklist.writeLock.withLock {
+                val db = helper.writableDatabase
+                db.beginTransaction()
+                try {
+                    for ((old, new) in change.newKeyFor) {
+                        db.delete("sender_state", "normalizedAddress = ?", arrayOf(old))
+                        db.execSQL("UPDATE message_verdict SET normalizedAddress = ? WHERE normalizedAddress = ?", arrayOf(new, old))
+                        // An entry already under the new key wins; the old one goes.
+                        db.execSQL("UPDATE OR IGNORE blocklist SET address = ? WHERE address = ?", arrayOf(new, old))
+                        db.delete("blocklist", "address = ?", arrayOf(old))
+                    }
+                    senderStates.writeRows(change.mergedStates)
+                    db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
+                }
+                senderStates.load()
+                verdicts.load()
+                blocklist.load()
+            }
         }
     }
 }

@@ -186,10 +186,26 @@ because the provider recycles thread ids) and keeps `sender_state`. Block and
 unblock still go sender by sender inside the call: Android's own block list has
 no bulk form.
 
-**Address normalisation is the join key everywhere.** E.164 via
-`PhoneNumberUtils`, falling back to the trimmed upper-cased raw value for
-alphanumeric sender IDs, which are common on Iranian networks. Comparing raw
-`+98912…` against `0912…` is a bug, not an edge case.
+**Address normalisation is the join key everywhere** (`PhoneNumberNormalizer`).
+A number is read with libphonenumber (a dependency of `core:telephony`) in the
+SIM's country and written as E.164 **without** requiring it to be valid or of
+possible length; sender IDs (any letter) are the trimmed upper-cased text, and
+what the library cannot read keeps its trimmed text. Comparing raw `+98912…`
+against `0912…` is a bug, not an edge case. Until 2026-10-04 the key came from
+`PhoneNumberUtils.formatNumberToE164`, which rejects numbers it cannot
+validate, so Iranian service numbers fell back to raw text and one sender
+became two (`5000301630` and `+985000301630`: ten spam messages in Spam, one
+in the inbox, in one conversation). Android groups conversations by trailing
+digits instead, which is fine for display and too loose for spam state: the
+filter matches Android's grouping except where that joins different numbers.
+The country is the SIM's, else the last SIM country seen, else the language
+region, never the network's (roaming would change keys). Known limit: a foreign
+number sent without "+" is read as local. When the rule changes, bump
+`PhoneNumberNormalizer.KEY_SCHEME` (a test ties it to the libphonenumber
+version): `SenderKeyRepair` then re-keys stored rows at the next start, merging
+senders that now share a key in one transaction (`NoSpamDatabase.rekeySenders`;
+counts add up, a block wins, then the latest user decision, else the state is
+derived).
 
 **Blocklist writes target `BlockedNumberContract.BlockedNumbers`** when the app
 holds the default-SMS role, so blocks apply system-wide including to calls and
