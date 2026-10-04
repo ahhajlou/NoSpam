@@ -19,6 +19,7 @@ import com.nospam.nospam.core.data.SettingsRepository
 import com.nospam.nospam.core.data.SmsIngressUseCase
 import com.nospam.nospam.core.data.SpamBackfillUseCase
 import com.nospam.nospam.core.data.SpamRepository
+import com.nospam.nospam.core.data.SenderKeyRepair
 import com.nospam.nospam.core.data.SpamStateWriter
 import com.nospam.nospam.core.database.NoSpamDatabase
 import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
@@ -96,6 +97,18 @@ class AppContainer(private val context: Context) {
      * check-then-write on `sender_state` cannot interleave (CLAUDE.md §15).
      */
     val spamStateWriter: SpamStateWriter by lazy { SpamStateWriter(database.senderStateDao) }
+
+    /** Moves stored sender data to the current sender key, once per key scheme. */
+    val senderKeyRepair: SenderKeyRepair by lazy {
+        SenderKeyRepair(
+            db = database,
+            spamStateWriter = spamStateWriter,
+            keyFor = { PhoneNumberNormalizer.normalize(appContext, it) },
+            scheme = PhoneNumberNormalizer.KEY_SCHEME,
+            storedScheme = settingsRepository::senderKeyScheme,
+            saveScheme = settingsRepository::setSenderKeyScheme,
+        )
+    }
 
     val spamRepository: SpamRepository by lazy { SpamRepository(database, deferredClassifier, appContext, spamStateWriter) }
     val blocklistRepository: BlocklistRepository by lazy { BlocklistRepository(database, appContext, telephony = telephony) }

@@ -21,13 +21,13 @@ class SqliteBlocklistDao(
     // Serializes each mutate-then-refresh pair. Without it two writers
     // could publish their snapshots out of order and strand the flow on
     // a stale list until the next write to this table.
-    private val writeLock = Mutex()
+    internal val writeLock = Mutex()
 
     /** True once [flow] holds a full snapshot. Guarded by [writeLock]. */
     private var loaded = false
 
     /** Reads the whole table. Caller must hold [writeLock]. */
-    private fun load() {
+    internal fun load() {
         flow.value = readAllSync()
         loaded = true
         initialized.set(true)

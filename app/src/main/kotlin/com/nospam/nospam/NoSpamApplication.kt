@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -80,7 +81,9 @@ class NoSpamApplication : Application() {
             runCatching { container.classifier }
         }
         // Pre-warm database off main thread so lazy init does not block NavHost composition (Fix 2).
-        appScope.launch {
+        // Then bring stored sender data in line with the current sender key
+        // (SenderKeyRepair): a no-op unless the key rule changed since last run.
+        val senderKeysReady = appScope.async {
             runCatching { container.database }
             // Country lookup binds the telephony service, which a trace measured
             // at ~68ms per call. Warming it here was measured as neutral on inbox
@@ -90,6 +93,8 @@ class NoSpamApplication : Application() {
             runCatching {
                 com.nospam.nospam.core.telephony.PhoneNumberNormalizer.warm(this@NoSpamApplication)
             }
+            runCatching { container.senderKeyRepair.runIfNeeded() }
+                .onFailure { android.util.Log.w("NoSpamApplication", "Sender key repair failed", it) }
         }
         // Messages waiting for a retry: send what is due, fail sends that never
         // reported back, and retry at once when service returns. Off the main
@@ -105,6 +110,8 @@ class NoSpamApplication : Application() {
         // died mid-scan. When nothing is pending we never touch SMS or the
         // classifier here, so an ordinary launch adds no scan overhead.
         appScope.launch {
+            // A scan counts under the new keys; old ones must be merged first.
+            senderKeysReady.await()
             if (container.settingsRepository.isBackfillPending()) {
                 container.spamBackfill.ensureStarted()
             }

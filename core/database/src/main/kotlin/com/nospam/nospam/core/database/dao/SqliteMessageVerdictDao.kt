@@ -25,7 +25,7 @@ class SqliteMessageVerdictDao(private val helper: SqliteNoSpamOpenHelper) : Mess
     private var loaded = false
 
     /** Reads the whole table. Caller must hold [writeLock]. */
-    private fun load() {
+    internal fun load() {
         flow.value = readAllSync()
         loaded = true
         initialized.set(true)
