@@ -33,7 +33,7 @@ class BlocklistRepository(
     /**
      * Every blocked sender, for the "Blocked and allowed senders" page: this
      * app's blocklist plus Android's own block list (numbers blocked from the
-     * dialer or another app), one entry per normalised address, this app's
+     * dialer or another app), one entry per normalized address, this app's
      * newest blocks first. The system list cannot be observed, so it is re-read
      * whenever this app's list changes: a number blocked elsewhere appears the
      * next time the page opens.

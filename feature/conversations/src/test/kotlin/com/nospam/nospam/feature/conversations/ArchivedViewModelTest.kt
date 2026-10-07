@@ -30,7 +30,7 @@ import org.junit.Test
  * ("future work"). That is stale: core:database's ArchivedDao and
  * ConversationsRepository.archive()/observeArchived() are already fully wired
  * (see core-data.md, feature-conversations.md contradiction #1). These tests
- * assert the real, current behaviour -- not the KDoc's claim -- per the task
+ * assert the real, current behavior -- not the KDoc's claim -- per the task
  * brief's explicit instruction not to encode the stale comment as a test.
  *
  * `conversations` is `StateFlow<List<Conversation>?>`: null until the first

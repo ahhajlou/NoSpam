@@ -28,7 +28,7 @@ class SwipeActionsSettingsTest {
         }
     }
 
-    @Test fun `a pre-existing stored value is honoured for both sides`() = runTest {
+    @Test fun `a pre-existing stored value is honored for both sides`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.SETTINGS to mapOf("swipe_right" to "DELETE", "swipe_left" to "TOGGLE_READ")),
         )

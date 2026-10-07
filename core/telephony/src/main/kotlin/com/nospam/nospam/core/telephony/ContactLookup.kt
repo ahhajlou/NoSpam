@@ -157,7 +157,7 @@ class ContactLookup(private val context: Context) {
                 val raw = c.getString(number) ?: continue
                 val key = matchKey(raw)
                 if (key.isEmpty()) continue
-                // First row wins, matching PhoneLookup's single-result behaviour
+                // First row wins, matching PhoneLookup's single-result behavior
                 // when one number is attached to several contacts.
                 if (out.containsKey(key)) continue
                 out[key] = Participant(

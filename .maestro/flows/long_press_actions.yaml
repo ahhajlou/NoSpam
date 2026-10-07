@@ -73,7 +73,7 @@ tags:
 - assertVisible: "Unstar"
 - tapOn: "Unstar"
 
-# --- Delete is confirmed; cancelling leaves the row and the selection alone ---
+# --- Delete is confirmed; canceling leaves the row and the selection alone ---
 - scrollUntilVisible:
     element:
         text: "NSTEST_MUTE1"

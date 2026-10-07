@@ -12,7 +12,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * The in-memory DAOs honour the same contracts as the SQLite ones, which the
+ * The in-memory DAOs honor the same contracts as the SQLite ones, which the
  * device tests check: tests in other modules rely on them behaving alike.
  */
 class InMemoryDaoContractTest {

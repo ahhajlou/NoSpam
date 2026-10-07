@@ -32,7 +32,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The ThreadViewModel behaviour that needs an Android [Context]: the SIM list and the draft store. */
+/** The ThreadViewModel behavior that needs an Android [Context]: the SIM list and the draft store. */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])

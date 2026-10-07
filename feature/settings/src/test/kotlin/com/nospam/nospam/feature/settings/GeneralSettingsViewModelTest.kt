@@ -20,7 +20,7 @@ import org.junit.Test
 
 /**
  * Tests for GeneralSettingsViewModel written from the spec (default state,
- * write-through behaviour, and failure fallback), not from the
+ * write-through behavior, and failure fallback), not from the
  * implementation.
  */
 class GeneralSettingsViewModelTest {

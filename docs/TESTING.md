@@ -26,7 +26,7 @@ how the previous version drifted into contradicting them.
 | End-to-end | `.maestro/flows` | yes | 12 flows, 8 run by default |
 | Manual checks | `tools/*.sh` | yes | permission gate, block/unblock persistence |
 
-Tests are written against behaviour, not implementation. The fakes in
+Tests are written against behavior, not implementation. The fakes in
 `core:testing` are the substitution point — do not hand-roll a local fake.
 Turbine for Flow assertions.
 
@@ -64,9 +64,9 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=�
 | `core:testing` | 10 | The fakes themselves (classifier counts, telephony filters) |
 | `core:database` | 31 | DAO logic against `NoSpamDatabase.inMemory()` |
 | `core:data` | 205 | Repositories and `SmsIngressUseCase` (ingress ordering, override-preserving prune); `SettingsRepository`/`DraftRepository` defaults, stored key names and failure fallbacks |
-| `core:ml` | 10 | Preprocessing (URL/NUM tokens, Persian normalisation, ZWNJ), `char_wb` n-grams, classifier parity |
-| `core:telephony` | 62 | Address normalisation, default-SMS detection, `SmsManager` resolution |
-| `core:preferences` | 12 | The DataStore source against real files: type round-trips, removal, serialised edits, unsupported types |
+| `core:ml` | 10 | Preprocessing (URL/NUM tokens, Persian normalization, ZWNJ), `char_wb` n-grams, classifier parity |
+| `core:telephony` | 62 | Address normalization, default-SMS detection, `SmsManager` resolution |
+| `core:preferences` | 12 | The DataStore source against real files: type round-trips, removal, serialized edits, unsupported types |
 | `core:notifications` | 9 | Channel ids, reply-extra constants and the incoming-alert rule (notify / in-app sound / nothing) — see Known gaps |
 | `core:i18n` | 3 | RTL detection, date formatting |
 | `core:designsystem` | 36 | Color roles, type scale, shapes, avatar palette, top-bar action partition, bidi isolation, avatar semantics and contact photos |

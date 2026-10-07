@@ -69,10 +69,10 @@ object ThreadSpamPolicy {
      * The automatic state for a sender with these counts:
      * - no spam: CLEAN;
      * - spam, but the sender has also sent ham or the user has replied: MIXED,
-     *   in the inbox with the spam labelled. Nothing that has ever produced a
+     *   in the inbox with the spam labeled. Nothing that has ever produced a
      *   legitimate message is hidden;
      * - exactly one spam message and nothing else: SUSPECTED (probation), in the
-     *   inbox, labelled;
+     *   inbox, labeled;
      * - two or more spam messages and nothing else: SPAM.
      */
     fun deriveState(spamCount: Int, hamCount: Int, hasReplied: Boolean): ThreadSpamState = when {
@@ -96,7 +96,7 @@ object ThreadSpamPolicy {
         }
 
         // The user's own decisions are never changed by a message. TRUSTED is
-        // honoured on the state alone, whatever the override flag says.
+        // honored on the state alone, whatever the override flag says.
         if (prev?.state == ThreadSpamState.TRUSTED) return PolicyOutput(prev, NotificationDecision.NORMAL)
         if (prev?.isUserOverride == true) {
             return PolicyOutput(prev, if (prev.state == ThreadSpamState.SPAM) NotificationDecision.NONE else NotificationDecision.NORMAL)
@@ -122,7 +122,7 @@ object ThreadSpamPolicy {
         val notification = when {
             !input.isSpam -> NotificationDecision.NORMAL
             state == ThreadSpamState.SPAM -> NotificationDecision.NONE
-            // Spam that stays in the inbox: labelled and silent. Whether it posts
+            // Spam that stays in the inbox: labeled and silent. Whether it posts
             // a quiet notification is the user's setting, applied by the caller.
             else -> NotificationDecision.SILENT
         }

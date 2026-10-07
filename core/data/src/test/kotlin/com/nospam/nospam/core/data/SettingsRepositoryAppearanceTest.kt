@@ -45,7 +45,7 @@ class SettingsRepositoryAppearanceTest {
         assertEquals("DARK", fake.contents(PreferenceFile.UI_SETTINGS)["theme"])
     }
 
-    @Test fun `a pre-existing stored theme is honoured`() = runTest {
+    @Test fun `a pre-existing stored theme is honored`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.UI_SETTINGS to mapOf("theme" to "LIGHT")),
         )
@@ -56,7 +56,7 @@ class SettingsRepositoryAppearanceTest {
         }
     }
 
-    @Test fun `an unrecognised stored theme reads as SYSTEM`() = runTest {
+    @Test fun `an unrecognized stored theme reads as SYSTEM`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.UI_SETTINGS to mapOf("theme" to "PURPLE")),
         )
@@ -120,7 +120,7 @@ class SettingsRepositoryAppearanceTest {
         assertEquals(true, fake.contents(PreferenceFile.UI_SETTINGS)["dynamic_color"])
     }
 
-    @Test fun `a pre-existing stored dynamic color is honoured`() = runTest {
+    @Test fun `a pre-existing stored dynamic color is honored`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.UI_SETTINGS to mapOf("dynamic_color" to true)),
         )

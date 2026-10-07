@@ -102,7 +102,7 @@ class SenderKeyTest {
         val a = PhoneNumberNormalizer.keyFor("+98100123451", ir)
         val b = PhoneNumberNormalizer.keyFor("98200012345", ir)
         assertNotEquals(a, b)
-        // And each is distinct from its neighbour.
+        // And each is distinct from its neighbor.
         assertNotEquals(
             PhoneNumberNormalizer.keyFor("+98100123451", ir),
             PhoneNumberNormalizer.keyFor("+98100123452", ir),

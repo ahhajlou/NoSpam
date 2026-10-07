@@ -29,7 +29,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Behaviour tests for ExportViewModel per feature-export.md.
+ * Behavior tests for ExportViewModel per feature-export.md.
  *
  * `export()` fires a real `viewModelScope.launch(Dispatchers.IO)` and its
  * terminal state updates run via `withContext(Dispatchers.Main)` — a real,

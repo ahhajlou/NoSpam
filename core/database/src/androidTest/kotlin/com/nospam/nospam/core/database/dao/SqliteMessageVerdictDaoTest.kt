@@ -126,7 +126,7 @@ class SqliteMessageVerdictDaoTest {
         dao.insert(MessageVerdictEntity(messageId = 1, threadId = 1, normalizedAddress = "+98911", isSpam = true, score = 1.0, createdAt = old))
         // Auto ham older than the cutoff is the only thing pruned.
         dao.insert(MessageVerdictEntity(messageId = 2, threadId = 1, normalizedAddress = "+98911", isSpam = false, score = -1.0, createdAt = old))
-        // A user-labelled row is never pruned regardless of age or isSpam.
+        // A user-labeled row is never pruned regardless of age or isSpam.
         dao.insert(MessageVerdictEntity(messageId = 3, threadId = 1, normalizedAddress = "+98911", isSpam = false, score = -1.0, createdAt = old, userLabel = false))
         // Recent ham is not old enough to prune.
         dao.insert(MessageVerdictEntity(messageId = 4, threadId = 1, normalizedAddress = "+98911", isSpam = false, score = -1.0, createdAt = 9_000L))

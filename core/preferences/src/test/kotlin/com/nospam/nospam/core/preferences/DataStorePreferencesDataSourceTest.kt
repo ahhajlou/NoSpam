@@ -141,7 +141,7 @@ class DataStorePreferencesDataSourceTest {
     }
 
     @Test
-    fun `concurrent edits on one file are serialised`() = runBlocking {
+    fun `concurrent edits on one file are serialized`() = runBlocking {
         subject.edit(PreferenceFile.SETTINGS) { it["counter"] = 0 }
 
         val jobs = (1..50).map {

@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config
 class SpamScreenRobolectricTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun `spam rows are listed, and a blocked sender is labelled`() {
+    @Test fun `spam rows are listed, and a blocked sender is labeled`() {
         rule.setContent { SpamScreen(title = "Spam & blocked") }
         rule.onNodeWithText("Win A Free Cruise!").assertIsDisplayed()
         rule.onNodeWithText("Blocked").assertIsDisplayed()

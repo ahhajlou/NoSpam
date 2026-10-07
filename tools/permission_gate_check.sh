@@ -38,7 +38,7 @@ ui_has() {
 # Revoking a permission or moving the SMS role kills the process, and relaunching
 # into that teardown races it — hence the generous waits.
 launch() { adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 8; }
-tap_text() { # tap the centre of the first node whose text is exactly $1
+tap_text() { # tap the center of the first node whose text is exactly $1
     local dump xy
     dump="$(mktemp)"
     adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1

@@ -38,7 +38,7 @@ class MessageSoundsSettingTest {
         }
     }
 
-    @Test fun `a pre-existing stored false is honoured`() = runTest {
+    @Test fun `a pre-existing stored false is honored`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.SETTINGS to mapOf("message_sounds" to false)),
         )
@@ -49,7 +49,7 @@ class MessageSoundsSettingTest {
         }
     }
 
-    @Test fun `a pre-existing stored true is honoured`() = runTest {
+    @Test fun `a pre-existing stored true is honored`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.SETTINGS to mapOf("message_sounds" to true)),
         )

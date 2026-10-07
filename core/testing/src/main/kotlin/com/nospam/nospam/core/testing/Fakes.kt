@@ -64,7 +64,7 @@ class FakeSpamClassifier(
  *
  * Reads come from mutable state a test can seed; writes are recorded so a test
  * can assert on them. Nothing here talks to a `ContentResolver`, so it runs on
- * the JVM. Behaviour is deliberately simple: this fake records what was asked
+ * the JVM. Behavior is deliberately simple: this fake records what was asked
  * of it, it does not reimplement provider semantics.
  */
 class FakeTelephonyDataSource(

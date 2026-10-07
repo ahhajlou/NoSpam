@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
  * covers the new photoUri/LocalContactPhotoLoader contract layered on top of
  * the existing letter/icon avatar. See CLAUDE.md §9 for why this runs through
  * Robolectric, and AvatarRobolectricTest for the baseline decorative-letter
- * behaviour this does not repeat.
+ * behavior this does not repeat.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")

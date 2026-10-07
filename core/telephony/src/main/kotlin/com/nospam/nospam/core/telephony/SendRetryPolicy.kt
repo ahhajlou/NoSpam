@@ -8,7 +8,7 @@ import android.telephony.SmsManager
  * When a failed send is tried again, and when it stops. Pure, so it is unit-tested
  * on its own; [SendRetry] applies it.
  *
- * Modelled on AOSP Messaging (`ProcessPendingMessagesAction`, `SmsSender`,
+ * Modeled on AOSP Messaging (`ProcessPendingMessagesAction`, `SmsSender`,
  * `BugleGservicesKeys`): only a failure that can clear by itself is retried, the
  * delay starts at 5 s and doubles up to 2 hours, and retrying stops 20 minutes
  * after the first failure, when the message is marked failed for a manual retry.

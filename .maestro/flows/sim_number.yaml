@@ -33,7 +33,7 @@ tags:
 
 # Save does nothing for text that is not a number, or for a blank field: the
 # dialog stays open. (Maestro reads "enabled" off the button's label, which is
-# always enabled, so the flow asserts the behaviour instead.)
+# always enabled, so the flow asserts the behavior instead.)
 - tapOn: "+15551234567"
 - eraseText: 20
 - inputText: "abc"

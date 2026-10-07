@@ -31,7 +31,7 @@ jobs:
           # the SDK repository manifest on 2026-09-14, so sdkmanager exits 1
           # with "Failed to find package 'tools'". Every project on this action
           # broke the same day. An empty value still sets ANDROID_HOME and
-          # pre-accepts the licences; AGP provisions the platform and
+          # pre-accepts the licenses; AGP provisions the platform and
           # build-tools it needs. v4 did not change this: it still defaults to
           # "tools platform-tools", so the override stays necessary.
           packages: ''

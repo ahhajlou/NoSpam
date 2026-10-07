@@ -218,7 +218,7 @@ fun NoSpamNavHost(
     //
     // Resume alone is not enough. Revoking a permission kills the process; when
     // the user reopens the app the task is restored, the NavHost restores its
-    // saved back stack (the inbox) rather than honouring `resolvedStart`, and at
+    // saved back stack (the inbox) rather than honoring `resolvedStart`, and at
     // that first resume `currentBackStackEntry` is still null, so a resume-only
     // check skips and never runs again. That left the app on the inbox with a
     // required permission missing — caught by tools/permission_gate_check.sh.

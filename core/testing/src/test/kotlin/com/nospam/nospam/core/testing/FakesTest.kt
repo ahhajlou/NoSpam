@@ -12,7 +12,7 @@ import org.junit.Test
 /**
  * These guard the fakes themselves. They matter more than they look: every
  * other module's tests substitute these for the real `SpamClassifier` and
- * `TelephonyDataSource`, so a fake that quietly stops honouring its interface
+ * `TelephonyDataSource`, so a fake that quietly stops honoring its interface
  * would make those suites pass for the wrong reason.
  */
 class FakesTest {

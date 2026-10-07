@@ -11,7 +11,7 @@ repository, and verified in a build.
 > command below was run on that date. If a claim here contradicts the code, the
 > code wins; fix this file.
 
-**The build wiring is summarised in [`../CLAUDE.md`](../CLAUDE.md) §10.** This
+**The build wiring is summarized in [`../CLAUDE.md`](../CLAUDE.md) §10.** This
 file is the operational detail behind it.
 
 ## 1. Generating a key
@@ -243,7 +243,7 @@ Two things people get wrong here:
    no revocation for a self-signed Android signing key. If the `.jks` itself
    leaks, anyone can ship a convincing update to anyone who sideloads — and the
    only real remedy is a new package name and an orphaned user base.
-5. **Verify before publishing** (§4). The unsigned-fallback behaviour means a
+5. **Verify before publishing** (§4). The unsigned-fallback behavior means a
    bad `storeFile` path yields a green build and an unpublishable APK.
 6. **Never ship a debug-signed APK.** The debug key is shared, well-known, and
    on every developer machine.

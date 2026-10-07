@@ -419,7 +419,7 @@ private fun isCurrentYear(millis: Long): Boolean {
  * One swipe direction's action on a [SwipeableConversationRow].
  *
  * @param keepsRow true when the conversation stays in this list afterwards (a
- * delete that asks first and may be cancelled, marking read): the row springs
+ * delete that asks first and may be canceled, marking read): the row springs
  * back instead of staying swiped away.
  */
 internal class SwipeSpec(

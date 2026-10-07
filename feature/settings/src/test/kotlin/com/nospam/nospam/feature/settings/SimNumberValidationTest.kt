@@ -47,7 +47,7 @@ class SimNumberValidationTest {
     @Test fun `a lone plus sign is invalid`() {
         // Not blank, and every character IS one of the allowed characters,
         // but this pins down that "not blank" alone is not the whole rule --
-        // included as a boundary case, not asserting a required behaviour
+        // included as a boundary case, not asserting a required behavior
         // beyond what the spec states (allowed characters, non-blank).
         assertTrue(isValidSimNumber("+"))
     }

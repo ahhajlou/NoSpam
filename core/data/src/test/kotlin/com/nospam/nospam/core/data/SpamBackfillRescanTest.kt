@@ -169,7 +169,7 @@ class SpamBackfillRescanTest {
         assertTrue(!db.messageVerdictDao.getByMessageId(1)!!.isSpam)
     }
 
-    @Test fun `rescanAll can be cancelled mid re-evaluation and stays fail-open`() = runTest {
+    @Test fun `rescanAll can be canceled mid re-evaluation and stays fail-open`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val telephony = FakeTelephonyDataSource().apply {
             allMessages.addAll(listOf(inbox(1, "+98912", "spam a", recentAgo(300)), inbox(2, "+98999", "spam b", recentAgo(200))))

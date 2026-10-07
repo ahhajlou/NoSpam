@@ -167,7 +167,7 @@ class ConversationsRepository(
         else conv.copy(hasDraft = true, draftText = draft.text, date = maxOf(conv.date, draft.savedAt))
 
     /**
-     * Whether the inbox row is labelled "Suspected spam": the conversation holds
+     * Whether the inbox row is labeled "Suspected spam": the conversation holds
      * a message flagged as spam right now, the same messages the thread screen
      * labels. It follows the messages, not the sender's history, so deleting the
      * flagged message or marking it "Not spam" removes it. Never for a saved

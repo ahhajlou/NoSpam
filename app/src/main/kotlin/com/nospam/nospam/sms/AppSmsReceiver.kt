@@ -107,7 +107,7 @@ class AppSmsReceiver : BroadcastReceiver() {
         }
     }
 
-    /** [suspected]: spam that stays in the inbox, posted quietly and labelled. */
+    /** [suspected]: spam that stays in the inbox, posted quietly and labeled. */
     private fun postNotification(
         context: Context,
         result: com.nospam.nospam.core.data.SmsIngressUseCase.Result,

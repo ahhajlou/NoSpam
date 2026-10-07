@@ -36,7 +36,7 @@ class ExportJsonlTest {
     }
 
     @Test
-    fun `writeJsonl writes one null-labelled line per message in order`() {
+    fun `writeJsonl writes one null-labeled line per message in order`() {
         val messages = listOf(
             Message(MessageId(1), ThreadId(1), "111", "Msg 1", 1000L, MessageType.INBOX, true),
             Message(MessageId(2), ThreadId(1), "222", "Msg 2", 2000L, MessageType.SENT, true),

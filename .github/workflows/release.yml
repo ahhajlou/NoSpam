@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 # One run per tag. Not cancel-in-progress: a half-finished signing job that gets
-# cancelled is harmless, but a cancelled *publish* can leave a release with some
+# canceled is harmless, but a canceled *publish* can leave a release with some
 # of its assets, which is worse than waiting.
 concurrency:
   group: release-${{ github.ref }}
@@ -66,7 +66,7 @@ jobs:
           # See the matching comment in android.yml: the action's default package
           # list requests the legacy "tools" package, removed from Google's SDK
           # manifest on 2026-09-14. An empty value still sets ANDROID_HOME and
-          # pre-accepts the licences; AGP provisions the platform and
+          # pre-accepts the licenses; AGP provisions the platform and
           # build-tools it needs, including the apksigner used to verify below.
           packages: ''
 
@@ -78,7 +78,7 @@ jobs:
           cache-provider: basic
           # cache-read-only is deliberately NOT set. The action already writes
           # only on the default branch and reads everywhere else, which is the
-          # behaviour wanted here: a tag build can never poison main's cache.
+          # behavior wanted here: a tag build can never poison main's cache.
           # Forcing it to true additionally blocked writes on main, and since
           # GitHub scopes a cache written on refs/tags/X so that refs/tags/Y
           # cannot see it, and this workflow otherwise only runs on tags, no

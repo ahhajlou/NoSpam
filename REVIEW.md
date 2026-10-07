@@ -32,7 +32,7 @@ concrete failure scenario below.
 **What I could not verify.** Only JDK 25 is installed, so Robolectric is broken,
 and there is no emulator, so the 7 `androidTest` suites never ran. Every finding
 below is derived from reading the source plus the build output. Findings that
-depend on device behavior are labelled as such. One JDK-level claim was confirmed
+depend on device behavior are labeled as such. One JDK-level claim was confirmed
 by direct execution and is marked accordingly.
 
 ---
@@ -188,7 +188,7 @@ What remains, measured:
 cost, so the country lookup was moved into the existing application warm-up.
 Measured result: 920, 936, 920, 930 ms against 909, 895, 946, 910 ms without —
 neutral. The calls are evidently not blocking the inbox path. The change was kept
-because it is free and folds two never-cancelled `CoroutineScope(Dispatchers.IO)`
+because it is free and folds two never-canceled `CoroutineScope(Dispatchers.IO)`
 instances into `appScope`, which closes the scope-leak item from pass 3, but it
 is not a performance win and should not be recorded as one.
 
@@ -239,7 +239,7 @@ promoted to `SPAM` when it should be, or a mixed sender is promoted when it
 should not be.
 
 That this is a bug rather than a deliberate trade-off is clear from the two
-neighbouring paths that get it right. The blocked branch at line 72 does use the
+neighboring paths that get it right. The blocked branch at line 72 does use the
 locked value:
 
 ```kotlin
@@ -564,7 +564,7 @@ The doc drives future agent work, so fixing it has leverage beyond this review.
    correctly say. Internally inconsistent.
 5. **§15 atomicity guarantee.** Claims the writer lock makes every
    read-decide-write on `sender_state` non-interleaving. HIGH-1 shows ingress
-   does not honour it. Either fix the code or soften the claim; right now the doc
+   does not honor it. Either fix the code or soften the claim; right now the doc
    asserts a guarantee the code does not provide.
 6. **§12 migration status.** Five dead packages still exist under `app/` and are
    excluded from coverage rather than deleted: `ui`, `navigation`, `receiver`,

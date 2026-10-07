@@ -18,5 +18,5 @@ Kotlin + Jetpack Compose + Material 3, English first with full RTL support
 
 NoSpam is free software, licensed under the
 [GNU General Public License v3.0 or later](LICENSE) (`GPL-3.0-or-later`).
-You may use, study, modify and redistribute it under the terms of that licence;
-derived works must remain under the same licence and make their source available.
+You may use, study, modify and redistribute it under the terms of that license;
+derived works must remain under the same license and make their source available.

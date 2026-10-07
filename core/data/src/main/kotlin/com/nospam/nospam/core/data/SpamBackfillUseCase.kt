@@ -302,7 +302,7 @@ class SpamBackfillUseCase(
     /**
      * Combines a forced rescan's fresh counts with the stored row. The row also
      * counts messages that are gone from the provider (deleted conversations, so
-     * that deleting cannot take protection away) and messages the user labelled,
+     * that deleting cannot take protection away) and messages the user labeled,
      * which the rescan skips, so it cannot simply replace the row. Adding the two
      * would count every re-checked message twice, and a sender with one suspected
      * message would reach two and be hidden.
