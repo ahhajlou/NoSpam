@@ -20,7 +20,9 @@
 # flows (tagged manual-only, so tools/run-e2e.sh skips them) assert.
 #
 # Needs the debug build installed, the SMS role and permissions granted
-# (tools/run-e2e.sh does both), and an emulator for `adb emu sms send`.
+# (tools/run-e2e.sh does both), and an emulator for `adb emu sms send` whose
+# image allows adb root (google_apis, not Google Play): only root can delete
+# the test messages afterwards. The script restarts adb as root itself.
 # Usage: tools/launch_intents_check.sh
 set -euo pipefail
 
@@ -65,8 +67,7 @@ messages_left() {
 # Checks rather than trusts that the test messages are gone, retrying once, and
 # says what is left. It used to discard every error unchecked: on 2026-10-07, 21
 # messages from seven runs were found in the inbox, pushing the seeded rows of
-# tools/run-e2e.sh off screen, and nothing had said so. Runs that day cleaned up
-# fine, so why those deletes failed is not known.
+# tools/run-e2e.sh off screen, and nothing had said so (see ensure_root).
 cleanup() {
     local a left
     for a in "${TEST_ADDRS[@]}"; do delete_messages "$a"; done
@@ -82,6 +83,25 @@ cleanup() {
     done
     adbs shell cmd statusbar collapse >/dev/null 2>&1 || true
 }
+# The test messages can only be deleted as root. Android ignores a write to the
+# SMS provider from anything but the default SMS app, silently: as the shell
+# user a delete reports success and removes nothing. Every run left its messages
+# behind until something else (tools/seed.sh) had restarted adb as root.
+# Checked before any message is sent, so a run that could not clean up never
+# starts; an emulator image with Google Play does not allow adb root.
+ensure_root() {
+    if [ "$(adbs shell id -u 2>/dev/null | tr -d '\r')" != "0" ]; then
+        adbs root >/dev/null 2>&1 || true
+        sleep 1
+        adbs wait-for-device
+    fi
+    if [ "$(adbs shell id -u 2>/dev/null | tr -d '\r')" != "0" ]; then
+        echo "adb cannot run as root on this device, so this check could not delete its test messages." >&2
+        echo "Use an emulator image without Google Play (google_apis), which allows adb root." >&2
+        exit 1
+    fi
+}
+ensure_root
 cleanup
 trap cleanup EXIT
 
