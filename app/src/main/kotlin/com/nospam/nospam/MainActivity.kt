@@ -17,9 +17,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 // AppCompatActivity (not ComponentActivity): AppCompatDelegate applies
 // per-app locales and recreates activities on pre-33 devices only for
 // activities running through its delegate. Required for fa/RTL switching.
-class MainActivity : AppCompatActivity() {
+open class MainActivity : AppCompatActivity() {
     /** A conversation an intent asked for, until the navigation graph opens it. */
     private val launchTarget = MutableStateFlow<LaunchTarget?>(null)
+
+    /**
+     * Whether leaving the screen this activity started on finishes it, back to
+     * the app that opened it, instead of going to the inbox.
+     */
+    protected open val leavesAtStart: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Suppress Samsung Typeface / AppLocalesStorageHelper disk read violations (Fix 4).
@@ -45,6 +51,7 @@ class MainActivity : AppCompatActivity() {
                 photoLoader = app.container.contactPhotos,
                 launchTarget = target,
                 onLaunchTargetHandled = { launchTarget.value = null },
+                onLeaveStart = if (leavesAtStart) ::finish else null,
             )
         }
     }

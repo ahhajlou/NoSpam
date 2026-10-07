@@ -178,6 +178,12 @@ fun NoSpamNavHost(
     onOpenDrawer: () -> Unit = {},
     launchTarget: LaunchTarget? = null,
     onLaunchTargetHandled: () -> Unit = {},
+    /**
+     * Set in a share's own task ([com.nospam.nospam.ShareActivity]): leaving the
+     * recipient picker it started on calls this, back to the app that shared,
+     * instead of opening the inbox.
+     */
+    onLeaveStart: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val container = remember(context) {
@@ -441,11 +447,17 @@ fun NoSpamNavHost(
         composable<NewConversationRoute> { backStackEntry ->
             val args = backStackEntry.toRoute<NewConversationRoute>()
             val scope = rememberCoroutineScope()
-            // Started here from a share: back goes to the inbox, not out of the app.
+            // Started here from a share: back goes to the inbox, not out of the
+            // app, except in a share's own task, which returns to the app that
+            // shared.
             val isRoot = remember(backStackEntry) { navController.previousBackStackEntry == null }
-            BackHandler(enabled = isRoot) { navController.upOrInbox() }
+            val leave = {
+                val exit = onLeaveStart
+                if (isRoot && exit != null) exit() else navController.upOrInbox()
+            }
+            BackHandler(enabled = isRoot) { leave() }
             NewConversationScreen(
-                onNavigateUp = { navController.upOrInbox() },
+                onNavigateUp = leave,
                 onAddressEntered = { address ->
                     scope.launch {
                         val threadId = container?.telephony?.getOrCreateThreadId(address) ?: -1L

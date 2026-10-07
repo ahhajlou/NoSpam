@@ -35,9 +35,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.NoSpam">
 
-        <!-- singleTop: a notification tap or a "send SMS to" landing in our own
-             task reaches the running activity through onNewIntent instead of
-             stacking a second copy of the app on top of it. -->
+        <!-- Only the launcher entry. What other apps send arrives through the
+             two activities below, and a notification tap starts a fresh task,
+             because an intent handed to a running MainActivity was lost after
+             process death (the restored back stack won). singleTop keeps an
+             explicit intent from stacking a second copy of the app. -->
         <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"
@@ -49,8 +51,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
 
-            <!-- Intent filter required to be an SMS handler -->
+        <!-- Another app's "send SMS to"; also what the SMS role requires.
+             Draws nothing: it opens the conversation in a fresh task. -->
+        <activity
+            android:name=".LaunchConversationActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.SENDTO" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -59,8 +68,17 @@
                 <data android:scheme="mms" />
                 <data android:scheme="mmsto" />
             </intent-filter>
+        </activity>
 
-            <!-- Text shared from another app: pick a recipient, then send it. -->
+        <!-- Text shared from another app: pick a recipient, then send it, in a
+             task of the share's own that leaves the main one as it was. -->
+        <activity
+            android:name=".ShareActivity"
+            android:documentLaunchMode="always"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="true"
+            android:theme="@style/Theme.NoSpam">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

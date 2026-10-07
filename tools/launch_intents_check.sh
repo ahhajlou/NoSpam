@@ -7,11 +7,13 @@
 #
 #   1. SENDTO while the app is not running (cold start), then rotation must not
 #      reopen it;
-#   2. SENDTO while the app is open on the inbox (onNewIntent);
+#   2. SENDTO while the app is open on the inbox, and (2b) after its process
+#      was killed;
 #   3. tapping a message notification while the app is in the background;
 #   4. tapping a message notification after the process was killed, before
 #      and after the notification was posted;
-#   5. text shared from another app (ACTION_SEND), app not running.
+#   5. text shared from another app (ACTION_SEND), app not running, and (5b)
+#      after its process was killed.
 #
 # A script rather than plain flows because Maestro can neither send an
 # arbitrary intent nor deliver an SMS; `adb` does those, the `_launch_*`
@@ -48,9 +50,12 @@ flow() {
         || { echo "FAIL: $name"; exit 1; }
 }
 pass() { echo "PASS: $1"; }
+# The app that sends a request is in front when it does, which is what makes a
+# request after process death go wrong; the home screen in front does not.
+other_app_in_front() { adbs shell am start -W -a android.settings.SETTINGS >/dev/null; sleep 1; }
 
 cleanup() {
-    for a in "$NOTIF_ADDR" "+$NOTIF_ADDR" "+15557770001" "+15557770003" "+15557770004"; do
+    for a in "$NOTIF_ADDR" "+$NOTIF_ADDR" "+15557770001" "+15557770003" "+15557770004" "+15557770005" "+15557770006"; do
         adbs shell "content delete --uri content://sms --where \"address='$a'\"" >/dev/null 2>&1 || true
     done
     adbs shell cmd statusbar collapse >/dev/null 2>&1 || true
@@ -70,8 +75,21 @@ echo "-- 2: SENDTO, app already open --"
 adbs shell am start -W -a android.intent.action.SENDTO -d "smsto:+15557770003" \
     --es sms_body "'Second request'" >/dev/null
 sleep 2
-flow _launch_sendto_warm.yaml
+flow _launch_sendto_warm.yaml -e ADDR=5557770003 -e TEXT="Second request"
 pass "warm SENDTO opens the conversation with its text"
+
+# The app has a task but no process: the request used to reach the restored
+# activity, whose saved back stack (the inbox) won. Only with another app in
+# front, as the app asking always is; from the home screen it got through.
+echo "-- 2b: SENDTO, process killed --"
+other_app_in_front
+adbs shell am kill "$PKG"
+sleep 1
+adbs shell am start -W -a android.intent.action.SENDTO -d "smsto:+15557770005" \
+    --es sms_body "'After the process died'" >/dev/null
+sleep 2
+flow _launch_sendto_warm.yaml -e ADDR=5557770005 -e TEXT="After the process died"
+pass "SENDTO opens the conversation after the process died"
 
 tap_notification() {
     local text="$1"
@@ -111,13 +129,27 @@ sleep 1
 flow _launch_notification_tap.yaml -e TEXT="$text"
 pass "notification tap opens its conversation after the process died"
 
+share() {
+    # Limited to our package, so it resolves without the system chooser.
+    adbs shell am start -W -a android.intent.action.SEND -t text/plain \
+        --es android.intent.extra.TEXT "'Shared from another app'" -p "$PKG" >/dev/null
+    sleep 2
+}
+
 echo "-- 5: text shared from another app, cold start --"
 adbs shell am force-stop "$PKG"
-# Explicit component: an implicit share would open the system chooser.
-adbs shell am start -W -a android.intent.action.SEND -t text/plain \
-    --es android.intent.extra.TEXT "'Shared from another app'" -n "$PKG/.MainActivity" >/dev/null
-sleep 2
+share
 flow _launch_share.yaml
 pass "shared text opens the recipient picker, then the conversation with the text"
+
+echo "-- 5b: text shared from another app, process killed --"
+adbs shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+sleep 3
+other_app_in_front
+adbs shell am kill "$PKG"
+sleep 1
+share
+flow _launch_share.yaml
+pass "shared text opens the recipient picker after the process died"
 
 echo "All checks passed."

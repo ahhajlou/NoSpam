@@ -113,6 +113,14 @@ android {
         compose = true
     }
 
+    // Robolectric reads the merged manifest, so tests can check which activity
+    // receives what other apps send (ExternalLaunchTest).
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+
     lint {
         checkReleaseBuilds = true
         // The gate is only a gate if it can fail. This was false, so CI's
