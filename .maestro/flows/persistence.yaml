@@ -84,7 +84,9 @@ tags:
 # --- Archived --- (NSTEST_ARCHIVE2 starts already archived, per tools/seed.sh;
 # a fixture dedicated to this flow, separate from NSTEST_ARCHIVE1 which
 # archived_unarchive.yaml round-trips, so the two never race each other)
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Archived"
 - assertVisible: "NSTEST_ARCHIVE2"
 - longPressOn: "NSTEST_ARCHIVE2"
@@ -111,14 +113,16 @@ tags:
 - tapOn: "Search conversations"
 - inputText: "NSTEST_ARCHIVE2"
 - assertNotVisible: "Your prescription is ready for pickup."   # gone from inbox again
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Archived"
 - assertVisible: "NSTEST_ARCHIVE2"           # present in Archived, survived restart
 
 # --- Spam verdict override ("Not spam" sticks) --- NSTEST_SPAM3 is dedicated
 # to this flow (NSTEST_SPAM1 belongs to spam_notspam_and_bulk.yaml, NSTEST_SPAM2
 # is the never-mutated fixture inbox_filters_and_search.yaml checks against).
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Spam & blocked"
 - runFlow:
     when:
@@ -129,10 +133,12 @@ tags:
 - stopApp
 - launchApp:
     clearState: false
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Spam & blocked"
 - assertNotVisible: "NSTEST_SPAM3"          # spam tab: stays not-spam
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Inbox"
 - scrollUntilVisible:
     element:

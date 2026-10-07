@@ -12,7 +12,9 @@ tags:
     permissions:
       all: allow
 - assertVisible: "Inbox"
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - assertVisible: "Spam & blocked"
 - tapOn: "Spam & blocked"
 - assertVisible: "NSTEST_SPAM1"
@@ -44,7 +46,8 @@ tags:
 - assertVisible:
     text: ".*moved to Inbox.*"
     optional: true
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Inbox"
 - scrollUntilVisible:
     element:
@@ -53,7 +56,8 @@ tags:
 - assertVisible: "NSTEST_SPAM1"
 
 # --- Two rows at once ---
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Spam & blocked"
 - longPressOn: "NSTEST_BULK1"
 - tapOn: "NSTEST_SPAM2"

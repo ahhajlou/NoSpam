@@ -21,7 +21,9 @@ tags:
 - tapOn:
     text: "Block"
     index: 0
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Spam & blocked"
 - longPressOn: "NSTEST_STAR1"
 - tapOn: "Delete"
@@ -29,7 +31,8 @@ tags:
 - assertNotVisible: "NSTEST_STAR1"
 
 # The rule is still there, and can be undone.
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Settings"
 - tapOn: "Spam protection"
 - tapOn: "Blocked and allowed senders"
@@ -40,13 +43,18 @@ tags:
 - assertNotVisible: "NSTEST_STAR1"
 
 # "Not spam" is listed as an allow, and removing it takes it off the page.
-- tapOn: "Navigate up"
-- tapOn: "Navigate up"
-- tapOn: "Open navigation menu"
+# Up by id: its tooltip also reads "Navigate up" (see NAVIGATE_UP_TAG).
+- tapOn:
+    id: "navigate_up"
+- tapOn:
+    id: "navigate_up"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Spam & blocked"
 - longPressOn: "NSTEST_SPAM1"
 - tapOn: "Not spam"
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Settings"
 - tapOn: "Spam protection"
 - tapOn: "Blocked and allowed senders"

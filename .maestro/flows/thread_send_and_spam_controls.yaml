@@ -113,7 +113,9 @@ tags:
 - assertVisible: ".*Automated Maestro reply.*"
 # Not `back`: the keyboard is usually still open after sending, and back only
 # closes it. The top bar's up button leaves the thread either way.
-- tapOn: "Navigate up"
+# Up by id: its tooltip also reads "Navigate up" (see NAVIGATE_UP_TAG).
+- tapOn:
+    id: "navigate_up"
 
 # --- New conversation ---
 - tapOn: "Start chat"

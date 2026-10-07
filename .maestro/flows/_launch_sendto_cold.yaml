@@ -9,7 +9,9 @@ tags:
 - assertVisible: ".*5557770001.*"
 - assertVisible: "Hello from another app"
 # Back lands on the inbox, which is what the conversation opened on top of.
-- tapOn: "Navigate up"
+# Up by id: its tooltip also reads "Navigate up" (see NAVIGATE_UP_TAG).
+- tapOn:
+    id: "navigate_up"
 - assertVisible: "Inbox"
 # Rotating recreates the activity with the same intent; it must not reopen
 # the conversation.

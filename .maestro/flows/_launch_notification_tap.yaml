@@ -11,5 +11,7 @@ tags:
 - assertVisible: ".*5557770002.*"
 - assertVisible: "${TEXT}"
 - assertVisible: "SMS message"
-- tapOn: "Navigate up"
+# Up by id: its tooltip also reads "Navigate up" (see NAVIGATE_UP_TAG).
+- tapOn:
+    id: "navigate_up"
 - assertVisible: "Inbox"

@@ -16,7 +16,9 @@ tags:
     permissions:
       all: allow
 - assertVisible: "Inbox"
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Settings"
 # Re-check moved to Settings > Advanced in P1.6.
 - tapOn: "Advanced"

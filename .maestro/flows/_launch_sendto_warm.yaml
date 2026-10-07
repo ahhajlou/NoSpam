@@ -9,5 +9,7 @@ tags:
 # activity it was lost after process death, and the inbox showed instead.
 - assertVisible: ".*${ADDR}.*"
 - assertVisible: "${TEXT}"
-- tapOn: "Navigate up"
+# Up by id: its tooltip also reads "Navigate up" (see NAVIGATE_UP_TAG).
+- tapOn:
+    id: "navigate_up"
 - assertVisible: "Inbox"
