@@ -14,13 +14,17 @@ tags:
 - pressKey: Enter
 - assertVisible: "Shared from another app"
 - assertVisible: "Send message"
-# The keyboard from the picker is still closing; a tap aimed before the screen
-# settles can land below the Up arrow.
-- waitForAnimationToEnd
 # Up from the conversation returns to the picker, and up from the picker leaves
 # the share, back to the app that shared (here the shell, so the home screen).
-- tapOn: "Navigate up"
+# Up is selected by id, not by its text. pressKey Enter is a hardware key, so
+# the app leaves touch mode and the conversation opens with keyboard focus on
+# Up, whose tooltip ("Navigate up", just below the arrow) then shows for a
+# moment. Selected by text, the tap could hit the tooltip and do nothing: case
+# 5 failed that way in 2 of 3 full runs of tools/launch_intents_check.sh.
+- tapOn:
+    id: "navigate_up"
 - assertVisible: "To:"
-- tapOn: "Navigate up"
+- tapOn:
+    id: "navigate_up"
 - assertNotVisible: "To:"
 - assertNotVisible: "Inbox"

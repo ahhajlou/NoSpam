@@ -32,15 +32,20 @@ tags:
 - assertVisible: "NSTEST_STAR1"
 
 # Left swipe set to Delete asks first; Cancel keeps the row.
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Settings"
 - tapOn: "General"
 - scrollUntilVisible:
     element: "Left swipe"
 - tapOn: "Left swipe"
 - tapOn: "Delete"
-- tapOn: "Navigate up"
-- tapOn: "Open navigation menu"
+# Up by id: its tooltip also reads "Navigate up" (see NAVIGATE_UP_TAG).
+- tapOn:
+    id: "navigate_up"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Inbox"
 - scrollUntilVisible:
     element: "NSTEST_STAR1"
@@ -52,7 +57,8 @@ tags:
 - assertVisible: "NSTEST_STAR1"
 
 # Back to the default.
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Settings"
 - tapOn: "General"
 - scrollUntilVisible:

@@ -15,7 +15,9 @@ env:
     clearState: false
     permissions:
       all: allow
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Spam & blocked"
 - assertVisible: ".*${ADDR}.*"
 - longPressOn: ".*${ADDR}.*"

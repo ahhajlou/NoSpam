@@ -33,6 +33,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import com.nospam.nospam.core.designsystem.R
@@ -205,6 +208,25 @@ private fun OverflowMenu(actions: List<TopBarAction>) {
     }
 }
 
+/**
+ * Test tags of the navigation buttons, exposed as resource ids for Maestro
+ * ([testTagged]). Selecting one by its text also matches its
+ * tooltip, which shows below it while it has keyboard focus, and the tap then
+ * lands there and does nothing. A screen opened after a hardware key press
+ * (Maestro's pressKey, on a device where touch mode is device-wide) gives this
+ * first button keyboard focus.
+ */
+const val NAVIGATE_UP_TAG = "navigate_up"
+const val OPEN_MENU_TAG = "open_navigation_menu"
+
+/**
+ * [tag] as this node's resource id. Set here rather than at the app root, where
+ * it added an empty full-screen node to every screen's accessibility tree: the
+ * buttons' nodes already exist, so only their id changes.
+ */
+private fun Modifier.testTagged(tag: String): Modifier =
+    semantics { testTagsAsResourceId = true }.testTag(tag)
+
 @Composable
 private fun NavigationButton(navigation: TopBarNavigation) {
     when (navigation) {
@@ -213,11 +235,13 @@ private fun NavigationButton(navigation: TopBarNavigation) {
             label = stringResource(R.string.ds_open_navigation_menu),
             icon = Icons.Filled.Menu,
             onClick = navigation.onClick,
+            modifier = Modifier.testTagged(OPEN_MENU_TAG),
         )
         is TopBarNavigation.Back -> TooltipIconButton(
             label = stringResource(R.string.ds_navigate_up),
             icon = Icons.AutoMirrored.Filled.ArrowBack,
             onClick = navigation.onClick,
+            modifier = Modifier.testTagged(NAVIGATE_UP_TAG),
         )
     }
 }

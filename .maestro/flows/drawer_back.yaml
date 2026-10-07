@@ -13,7 +13,9 @@ tags:
 - assertVisible: "Inbox"
 
 # --- From the inbox ---
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - assertVisible: "Spam & blocked"
 - back
 # The drawer slides shut; an immediate check catches it mid-animation.
@@ -23,10 +25,12 @@ tags:
 - assertVisible: "Search conversations"   # still in the app, on the inbox
 
 # --- From another page ---
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Settings"
 - assertVisible: "General"
-- tapOn: "Open navigation menu"
+- tapOn:
+    id: "open_navigation_menu"
 - assertVisible: "Spam & blocked"
 - back
 - extendedWaitUntil:

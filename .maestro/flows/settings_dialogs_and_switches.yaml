@@ -10,7 +10,9 @@ tags:
     permissions:
       all: allow
 - assertVisible: "Inbox"
-- tapOn: "Open navigation menu"
+# Menu by id: its tooltip also reads "Open navigation menu" (see OPEN_MENU_TAG).
+- tapOn:
+    id: "open_navigation_menu"
 - tapOn: "Settings"
 - assertVisible: "General"
 - assertVisible: "Spam protection"
@@ -31,7 +33,9 @@ tags:
 - assertNotVisible: "App language"
 # Settings with no storage yet are visible but disabled, never live-looking.
 - assertVisible: "Choose theme"
-- tapOn: "Navigate up"
+# Up by id: its tooltip also reads "Navigate up" (see NAVIGATE_UP_TAG).
+- tapOn:
+    id: "navigate_up"
 
 # --- Spam protection: the master switch round-trips ---
 - tapOn: "Spam protection"
@@ -41,7 +45,8 @@ tags:
 - tapOn:
     rightOf: "Spam protection"
 - assertVisible: "Blocked and allowed senders"
-- tapOn: "Navigate up"
+- tapOn:
+    id: "navigate_up"
 
 # --- Advanced: re-check entry point and the data dialog ---
 - tapOn: "Advanced"
@@ -50,7 +55,8 @@ tags:
 - assertVisible: ".*Messages stay in the system SMS store.*"
 - tapOn: "Got it"
 - assertNotVisible: "Got it"
-- tapOn: "Navigate up"
+- tapOn:
+    id: "navigate_up"
 
 # --- About ---
 - tapOn: "About"
@@ -58,7 +64,8 @@ tags:
 - tapOn: "Terms of service"
 - assertVisible: "Close"
 - tapOn: "Close"
-- tapOn: "Navigate up"
+- tapOn:
+    id: "navigate_up"
 - assertVisible: "General"
 
 # --- Boundary: Notifications leaves for system Settings.
