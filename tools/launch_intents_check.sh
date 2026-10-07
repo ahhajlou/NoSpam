@@ -9,7 +9,8 @@
 #      reopen it;
 #   2. SENDTO while the app is open on the inbox (onNewIntent);
 #   3. tapping a message notification while the app is in the background;
-#   4. tapping a message notification after the process was killed;
+#   4. tapping a message notification after the process was killed, before
+#      and after the notification was posted;
 #   5. text shared from another app (ACTION_SEND), app not running.
 #
 # A script rather than plain flows because Maestro can neither send an
@@ -92,6 +93,23 @@ sleep 1
 adbs shell am kill "$PKG"
 tap_notification "Notification tap check two"
 pass "notification tap opens its conversation (cold)"
+
+# The order case 4 misses: the SMS restarts the process there, but on a phone
+# the process usually dies after the notification is posted. The task survives,
+# and a tap that reused it got the saved back stack (the inbox) instead of the
+# conversation.
+echo "-- 4b: notification posted, then the process killed --"
+adbs shell input keyevent KEYCODE_HOME
+sleep 1
+text="Notification tap check three"
+adbs emu sms send "$NOTIF_ADDR" "$text" >/dev/null
+sleep 4
+adbs shell am kill "$PKG"
+sleep 1
+adbs shell cmd statusbar expand-notifications >/dev/null
+sleep 1
+flow _launch_notification_tap.yaml -e TEXT="$text"
+pass "notification tap opens its conversation after the process died"
 
 echo "-- 5: text shared from another app, cold start --"
 adbs shell am force-stop "$PKG"

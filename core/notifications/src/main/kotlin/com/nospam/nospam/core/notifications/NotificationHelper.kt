@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
+import androidx.core.app.TaskStackBuilder
 import androidx.core.graphics.drawable.IconCompat
 import com.nospam.nospam.core.model.TelephonyConstants
 import com.nospam.nospam.core.model.isAlphanumericSender
@@ -156,10 +157,17 @@ object NotificationHelper {
             putExtra(TelephonyConstants.EXTRA_THREAD_ID, threadId)
             putExtra("android.intent.extra.TEXT", messageBody)
         }
-        val contentPending = PendingIntent.getActivity(
-            context, notificationId(threadId), contentIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        // A tap starts a fresh task (NEW_TASK | CLEAR_TASK | TASK_ON_HOME), as
+        // Google Messages and AOSP Messaging do. Reusing the task broke after
+        // process death: the activity came back with its saved back stack (the
+        // inbox) and the conversation never opened. A fresh activity always
+        // takes the cold-start path, which starts on the conversation.
+        val contentPending = TaskStackBuilder.create(context)
+            .addNextIntent(contentIntent)
+            .getPendingIntent(
+                notificationId(threadId),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
         // Dynamic shortcut for Conversations bubble/shortcut
         try {

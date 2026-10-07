@@ -275,7 +275,14 @@ self-contained:
   any other opens directly on the inbox (`openOnInbox`): Back from a
   notification's conversation goes to the inbox, never to the conversation or
   page that was open before, as in Google Messages.
-  `MainActivity` is `singleTop` so a tap lands in
+  **A notification tap starts a fresh task** (`TaskStackBuilder`:
+  `NEW_TASK | CLEAR_TASK | TASK_ON_HOME`), as Google Messages and AOSP
+  Messaging do, so it always takes the cold-start path; Back goes to the
+  inbox, then home. Until 2026-10-07 it reused the task, and after the
+  process died (routine on Samsung) the activity came back with its saved
+  back stack, the inbox, and the conversation never opened
+  (`tools/launch_intents_check.sh` case 4b).
+  `MainActivity` is `singleTop` so another app's intent lands in
   `onNewIntent` rather than a second copy of the app, and reads its start
   intent only when `savedInstanceState` is null so rotation does not reopen it.
   Text shared from another app (`ACTION_SEND`, `text/plain`) is
