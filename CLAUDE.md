@@ -291,7 +291,9 @@ self-contained:
   `LaunchConversationActivity`, as in Google Messages and AOSP Messaging: it
   parses the request, passes only the parsed values on (`launchIntentFor`,
   §12) to a fresh `MainActivity` task (`NEW_TASK | CLEAR_TASK`), and
-  finishes. Back goes to the inbox, then to the app that asked. Text shared
+  finishes. It starts in a task of its own (`documentLaunchMode="always"`,
+  as AOSP's does): in the app's task, that task came to the front first and,
+  with the app running, its inbox showed for ~0.7s before the conversation. Back goes to the inbox, then to the app that asked. Text shared
   from another app (`ACTION_SEND`, `text/plain`) is `LaunchTarget.Share` and
   goes to `ShareActivity`, a `MainActivity` in a task of the share's own
   (`documentLaunchMode="always"`, as in Google Messages, AOSP Messaging and

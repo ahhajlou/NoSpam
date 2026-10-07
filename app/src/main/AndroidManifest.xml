@@ -54,9 +54,14 @@
         </activity>
 
         <!-- Another app's "send SMS to"; also what the SMS role requires.
-             Draws nothing: it opens the conversation in a fresh task. -->
+             Draws nothing: it opens the conversation in a fresh task. It
+             starts in a task of its own (documentLaunchMode, as AOSP
+             Messaging's LaunchConversationActivity does): started in the
+             app's task, that task came to the front first, and with the
+             app running the inbox showed for ~0.7s before the conversation. -->
         <activity
             android:name=".LaunchConversationActivity"
+            android:documentLaunchMode="always"
             android:exported="true"
             android:noHistory="true"
             android:theme="@android:style/Theme.NoDisplay">
