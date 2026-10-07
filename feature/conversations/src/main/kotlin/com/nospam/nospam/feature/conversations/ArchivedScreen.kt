@@ -2,6 +2,9 @@
 
 package com.nospam.nospam.feature.conversations
 
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -90,13 +93,18 @@ fun ArchivedScreen(
                 items(archived, key = { it.threadId.value }) { conv ->
                     val id = conv.threadId.value
                     // No swipe here: Unarchive is in the selection bar, and
-                    // only the inbox's rows swipe.
+                    // only the inbox's rows swipe. A sideways drag is taken and
+                    // dropped, as on an inbox row while selecting: Compose counts
+                    // a finger that stays inside a row as a press however far it
+                    // moves, so a slow swipe selected the row.
                     ConversationRow(
                         conv = conv,
                         selected = id in selection.ids,
                         onClick = { if (selection.isActive) selection.toggle(id) else onConversationClick(id) },
                         onLongClick = { selection.toggle(id) },
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier
+                            .animateItem()
+                            .draggable(rememberDraggableState { }, Orientation.Horizontal),
                     )
                 }
             }

@@ -51,6 +51,21 @@ class SpamScreenRobolectricTest {
         rule.onNodeWithText("Win A Free Cruise!").assertIsDisplayed()
     }
 
+    // See ArchivedScreenRobolectricTest: a slow swipe held past the long-press
+    // timeout used to select the row.
+    @Test fun `a slow drag across a row neither selects nor opens it`() {
+        val opened = mutableListOf<Long>()
+        rule.setContent { SpamScreen(title = "Spam & blocked", onConversationClick = { opened.add(it) }) }
+        // Checked after each drag: a second drag would toggle a selection the
+        // first one made back off, and hide it.
+        for (towardEnd in listOf(true, false)) {
+            rule.onNodeWithText("Win A Free Cruise!").performTouchInput { slowDragInside(towardEnd) }
+            rule.waitForIdle()
+            rule.onNodeWithText("1 selected").assertDoesNotExist()
+        }
+        assertTrue(opened.isEmpty())
+    }
+
     @Test fun `block asks for confirmation before blocking anything`() {
         val blocked = mutableListOf<String>()
         rule.setContent { SpamScreen(title = "Spam & blocked", onBlock = { blocked.addAll(it) }) }
