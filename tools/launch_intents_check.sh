@@ -54,9 +54,31 @@ pass() { echo "PASS: $1"; }
 # request after process death go wrong; the home screen in front does not.
 other_app_in_front() { adbs shell am start -W -a android.settings.SETTINGS >/dev/null; sleep 1; }
 
+TEST_ADDRS=("$NOTIF_ADDR" "+$NOTIF_ADDR" "+15557770001" "+15557770003" "+15557770004" "+15557770005" "+15557770006")
+
+delete_messages() { adbs shell "content delete --uri content://sms --where \"address='$1'\"" >/dev/null 2>&1 || true; }
+messages_left() {
+    adbs shell "content query --uri content://sms --projection _id --where \"address='$1'\"" 2>/dev/null \
+        | grep -c '^Row' || true
+}
+
+# Checks rather than trusts that the test messages are gone, retrying once, and
+# says what is left. It used to discard every error unchecked: on 2026-10-07, 21
+# messages from seven runs were found in the inbox, pushing the seeded rows of
+# tools/run-e2e.sh off screen, and nothing had said so. Runs that day cleaned up
+# fine, so why those deletes failed is not known.
 cleanup() {
-    for a in "$NOTIF_ADDR" "+$NOTIF_ADDR" "+15557770001" "+15557770003" "+15557770004" "+15557770005" "+15557770006"; do
-        adbs shell "content delete --uri content://sms --where \"address='$a'\"" >/dev/null 2>&1 || true
+    local a left
+    for a in "${TEST_ADDRS[@]}"; do delete_messages "$a"; done
+    for a in "${TEST_ADDRS[@]}"; do
+        left="$(messages_left "$a")"
+        if [ "${left:-0}" -gt 0 ]; then
+            delete_messages "$a"
+            left="$(messages_left "$a")"
+            if [ "${left:-0}" -gt 0 ]; then
+                echo "WARNING: cleanup left $left message(s) from $a" >&2
+            fi
+        fi
     done
     adbs shell cmd statusbar collapse >/dev/null 2>&1 || true
 }
