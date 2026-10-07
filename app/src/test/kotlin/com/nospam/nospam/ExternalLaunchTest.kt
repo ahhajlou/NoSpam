@@ -60,6 +60,17 @@ class ExternalLaunchTest {
         assertEquals(listOf(MainActivity::class.java.name), receivers(launcher, flags = 0))
     }
 
+    // Started in the app's own task, the trampoline brought that task to the
+    // front first, and with the app running its inbox showed for ~0.7s before
+    // the conversation. In a task of its own (as AOSP Messaging's is), the
+    // app's task only appears once it holds the conversation.
+    @Test fun `send SMS to starts in a task of its own`() {
+        val info = context.packageManager.getActivityInfo(
+            android.content.ComponentName(context, LaunchConversationActivity::class.java), 0,
+        )
+        assertEquals(android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS, info.documentLaunchMode)
+    }
+
     private fun launch(intent: Intent): Pair<LaunchConversationActivity, Intent?> {
         val activity = Robolectric.buildActivity(LaunchConversationActivity::class.java, intent).create().get()
         return activity to shadowOf(activity).nextStartedActivity
