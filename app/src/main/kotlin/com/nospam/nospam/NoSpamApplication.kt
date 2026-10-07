@@ -76,6 +76,10 @@ class NoSpamApplication : Application() {
         appScope.launch {
             BackfillProgressNotifier(this@NoSpamApplication, container.spamBackfill, appScope).start()
         }
+        // Conversation shortcuts published before they opened in a fresh task
+        // keep their old intent until the sender writes again; give them the
+        // flags. One binder call when nothing needs it.
+        appScope.launch { NotificationHelper.repairConversationShortcuts(this@NoSpamApplication) }
         // Warm classifier off main thread so first SMS doesn't pay 1.2 MB JSON load.
         appScope.launch {
             runCatching { container.classifier }
