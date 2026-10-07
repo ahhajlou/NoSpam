@@ -42,6 +42,28 @@ class ComponentLogicTest {
         }
     }
 
+    // One conversation, one color: the provider keeps 5557770001 and
+    // +15557770001 in one thread, and the inbox showed one pink while the
+    // conversation's title showed the other purple.
+    @Test fun `one number written different ways keeps one color`() {
+        val spellings = listOf(
+            listOf("5557770001", "+15557770001", "+1 555-777-0001"),
+            listOf("09121234567", "+989121234567", "0912 123 4567", "۰۹۱۲۱۲۳۴۵۶۷"),
+        )
+        for (same in spellings) {
+            val keys = same.map(::avatarColorKey).toSet()
+            assertEquals(same.toString(), 1, keys.size)
+        }
+        assertFalse(avatarColorKey("5557770001") == avatarColorKey("5557770002"))
+    }
+
+    @Test fun `sender IDs and short codes keep their own key`() {
+        assertEquals("NSTEST_PIN1", avatarColorKey("NSTEST_PIN1"))
+        assertEquals("MCI", avatarColorKey("MCI"))
+        assertEquals("1000", avatarColorKey("1000"))
+        assertEquals("", avatarColorKey(""))
+    }
+
     private fun action(label: String, withIcon: Boolean = true) =
         TopBarAction(label = label, icon = if (withIcon) Icons.Filled.Delete else null, onClick = {})
 

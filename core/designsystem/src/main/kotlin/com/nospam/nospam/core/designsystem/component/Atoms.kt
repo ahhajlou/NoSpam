@@ -33,8 +33,8 @@ import androidx.compose.ui.unit.dp
  * [LocalContactPhotoLoader]); otherwise, and while it loads, the first letter
  * of [name] when it has one, and a person icon otherwise — so a bare number
  * renders an icon, not "+". The color is derived
- * from [colorKey] (pass the normalised address), so one sender keeps one color
- * everywhere and across launches. With [selected] it flips to a check mark,
+ * from [colorKey], the address, through [avatarColorKey], so one sender keeps
+ * one color everywhere and across launches, however the number is written. With [selected] it flips to a check mark,
  * which is how selection mode marks a row.
  *
  * Decorative: its semantics are cleared, because the row beside it already
@@ -51,7 +51,7 @@ fun Avatar(
 ) {
     val photo = rememberContactPhoto(photoUri, with(LocalDensity.current) { size.roundToPx() })
     val palette = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) AvatarPaletteDark else AvatarPaletteLight
-    val (container, content) = palette[avatarPaletteIndex(colorKey, palette.size)]
+    val (container, content) = palette[avatarPaletteIndex(avatarColorKey(colorKey), palette.size)]
     val initial = avatarInitial(name)
     AnimatedContent(
         targetState = selected,
@@ -106,6 +106,24 @@ internal fun avatarInitial(name: String?): String? {
 /** Stable palette slot for [key]; `String.hashCode` is specified, so this survives restarts. */
 internal fun avatarPaletteIndex(key: String, paletteSize: Int): Int =
     Math.floorMod(key.hashCode(), paletteSize)
+
+/**
+ * What an avatar's color is chosen from, so one conversation has one color. A
+ * number is its last [MIN_MATCH] digits, the trailing digits Android groups a
+ * conversation by: "5557770001" and "+15557770001" are one thread in the
+ * provider, and colored by the whole text the inbox showed one pink and the
+ * conversation's title the other purple. Digits of any script count, so a
+ * number typed in Persian digits matches. Anything with a letter (a sender ID)
+ * is used as it is, as is text with no digits.
+ */
+internal fun avatarColorKey(address: String): String {
+    if (address.any { it.isLetter() }) return address
+    val digits = address.mapNotNull { c -> c.digitToIntOrNull()?.let { '0' + it } }
+    return if (digits.isEmpty()) address else digits.takeLast(MIN_MATCH).joinToString("")
+}
+
+/** Android's "min match": how many trailing digits tie a number to a thread. */
+private const val MIN_MATCH = 7
 
 // Container/on-container pairs at M3 container tones (90/10 light, 30/90 dark).
 // Deliberately independent of the color scheme: avatars identify senders, so
