@@ -3,9 +3,11 @@ tags:
   - launch
   - manual-only
 ---
-# Part 2 of tools/launch_intents_check.sh: a second "send SMS to" while the app
-# is already open on the inbox arrives through onNewIntent.
-- assertVisible: ".*5557770003.*"
-- assertVisible: "Second request"
+# Parts 2 and 2b of tools/launch_intents_check.sh: a "send SMS to" while the
+# app already has a task, open on the inbox or with its process killed. It
+# opens in a fresh task (LaunchConversationActivity); handed to the running
+# activity it was lost after process death, and the inbox showed instead.
+- assertVisible: ".*${ADDR}.*"
+- assertVisible: "${TEXT}"
 - tapOn: "Navigate up"
 - assertVisible: "Inbox"

@@ -70,6 +70,8 @@ fun NoSpamAppShell(
     photoLoader: ContactPhotoLoader? = null,
     launchTarget: LaunchTarget? = null,
     onLaunchTargetHandled: () -> Unit = {},
+    /** See [NoSpamNavHost]. */
+    onLeaveStart: (() -> Unit)? = null,
 ) {
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -152,6 +154,7 @@ fun NoSpamAppShell(
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                     launchTarget = launchTarget,
                     onLaunchTargetHandled = onLaunchTargetHandled,
+                    onLeaveStart = onLeaveStart,
                 )
             }
         }

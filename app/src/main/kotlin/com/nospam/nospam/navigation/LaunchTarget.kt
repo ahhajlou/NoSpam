@@ -2,7 +2,10 @@
 
 package com.nospam.nospam.navigation
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import com.nospam.nospam.core.model.TelephonyConstants
 
 /** Where an incoming intent asks the app to go. */
@@ -94,3 +97,23 @@ fun Intent.toLaunchTarget(): LaunchTarget? = runCatching {
 
 /** Extra most SMS-sending apps use for the message text. */
 private const val EXTRA_SMS_BODY = "sms_body"
+
+/**
+ * An intent to [activity] that [toLaunchTarget] reads back as [target]. Built
+ * from the parsed values alone, so nothing else from another app's intent
+ * reaches the activity (CLAUDE.md §12).
+ */
+fun launchIntentFor(context: Context, activity: Class<out Activity>, target: LaunchTarget): Intent =
+    when (target) {
+        is LaunchTarget.Thread -> Intent(Intent.ACTION_VIEW).apply {
+            target.address?.let { data = Uri.fromParts("sms", it, null) }
+            putExtra(TelephonyConstants.EXTRA_THREAD_ID, target.threadId)
+        }
+        is LaunchTarget.Compose -> Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", target.address, null)).apply {
+            target.body?.let { putExtra(EXTRA_SMS_BODY, it) }
+        }
+        is LaunchTarget.Share -> Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, target.text)
+        }
+    }.setClass(context, activity)

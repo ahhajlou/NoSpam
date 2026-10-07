@@ -265,7 +265,8 @@ self-contained:
 - A receiver for `WAP_PUSH_DELIVER_ACTION` requiring `BROADCAST_WAP_PUSH`.
 - `HeadlessSmsSendService` for `ACTION_RESPOND_VIA_MESSAGE`, requiring
   `SEND_RESPOND_VIA_MESSAGE`. Also the direct-reply target.
-- An activity handling `ACTION_SENDTO` for `sms:`/`smsto:`/`mms:`/`mmsto:`.
+- An activity handling `ACTION_SENDTO` for `sms:`/`smsto:`/`mms:`/`mmsto:`:
+  `LaunchConversationActivity`, which draws nothing.
   `parseLaunchIntent` (`:app` navigation) turns it, and a notification's
   `VIEW` + `thread_id`, into a `LaunchTarget`; `NoSpamNavHost` opens it once,
   after the onboarding gate. On a cold start the conversation is the start
@@ -282,14 +283,25 @@ self-contained:
   process died (routine on Samsung) the activity came back with its saved
   back stack, the inbox, and the conversation never opened
   (`tools/launch_intents_check.sh` case 4b).
-  `MainActivity` is `singleTop` so another app's intent lands in
-  `onNewIntent` rather than a second copy of the app, and reads its start
-  intent only when `savedInstanceState` is null so rotation does not reopen it.
-  Text shared from another app (`ACTION_SEND`, `text/plain`) is
-  `LaunchTarget.Share`: it opens the recipient picker on the inbox, and the
-  text goes into the compose box of the conversation picked. `EXTRA_TEXT` is
-  read as a CharSequence (styled shares), blank or over 5,000 characters is
-  ignored.
+  **Nothing another app sends reaches a running `MainActivity`**, which now
+  has only the launcher filter. Handed to one through `onNewIntent`, a request
+  was lost after process death whenever the sending app was in front: the
+  restored back stack won (cases 2b and 5b; from the home screen it got
+  through, which is why the old checks passed). "Send SMS to" goes to
+  `LaunchConversationActivity`, as in Google Messages and AOSP Messaging: it
+  parses the request, passes only the parsed values on (`launchIntentFor`,
+  §12) to a fresh `MainActivity` task (`NEW_TASK | CLEAR_TASK`), and
+  finishes. Back goes to the inbox, then to the app that asked. Text shared
+  from another app (`ACTION_SEND`, `text/plain`) is `LaunchTarget.Share` and
+  goes to `ShareActivity`, a `MainActivity` in a task of the share's own
+  (`documentLaunchMode="always"`, as in Google Messages, AOSP Messaging and
+  Signal): the recipient picker, then the conversation picked with the text
+  in its compose box, while the main task stays as it was. Leaving the picker
+  returns to the app that shared (`onLeaveStart`). `EXTRA_TEXT` is read as a
+  CharSequence (styled shares), blank or over 5,000 characters is ignored.
+  `MainActivity` stays `singleTop` so an explicit intent does not stack a
+  second copy, and reads its start intent only when `savedInstanceState` is
+  null so rotation does not reopen it.
   Device check: `tools/launch_intents_check.sh`.
 - Role request on API 29+ through `roleManager.createRequestRoleIntent(ROLE_SMS)`
   launched via the Activity Result API. There is no public intent action to

@@ -3,9 +3,10 @@ tags:
   - launch
   - manual-only
 ---
-# Part 5 of tools/launch_intents_check.sh: another app shared text to NoSpam
-# (`am start -a SEND -t text/plain --es android.intent.extra.TEXT ...`), which
-# Maestro cannot send itself. No launchApp: that would replace the intent.
+# Parts 5 and 5b of tools/launch_intents_check.sh: another app shared text to
+# NoSpam (`am start -a SEND -t text/plain --es android.intent.extra.TEXT ...`),
+# which Maestro cannot send itself. No launchApp: that would replace the intent.
+# The share opens in a task of its own (ShareActivity).
 # A share names no recipient, so it opens the recipient picker; the text waits
 # for the conversation the user picks.
 - assertVisible: "To:"
@@ -13,9 +14,13 @@ tags:
 - pressKey: Enter
 - assertVisible: "Shared from another app"
 - assertVisible: "Send message"
-# Up from the conversation returns to the picker, and up from the picker to the
-# inbox, even though the app started on the picker.
+# The keyboard from the picker is still closing; a tap aimed before the screen
+# settles can land below the Up arrow.
+- waitForAnimationToEnd
+# Up from the conversation returns to the picker, and up from the picker leaves
+# the share, back to the app that shared (here the shell, so the home screen).
 - tapOn: "Navigate up"
 - assertVisible: "To:"
 - tapOn: "Navigate up"
-- assertVisible: "Inbox"
+- assertNotVisible: "To:"
+- assertNotVisible: "Inbox"
