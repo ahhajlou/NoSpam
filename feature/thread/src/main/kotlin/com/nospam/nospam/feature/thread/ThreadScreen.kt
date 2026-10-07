@@ -240,7 +240,10 @@ fun ThreadScreen(
                         ThreadTitle(
                             title = title,
                             contactKnown = uiState.contactName != null,
-                            address = uiState.address,
+                            // The route's address until the thread loads, as for
+                            // the title: null drew the avatar in the empty key's
+                            // color (blue) for a frame, then switched.
+                            address = uiState.address ?: address,
                             photoUri = uiState.contactPhotoUri,
                         )
                     },
