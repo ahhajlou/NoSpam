@@ -12,6 +12,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.nospam.nospam.core.model.TelephonyConstants
 import com.nospam.nospam.core.model.isAlphanumericSender
@@ -30,6 +32,40 @@ object NotificationHelper {
     const val KEY_TEXT_REPLY = TelephonyConstants.KEY_TEXT_REPLY
     const val REQUEST_CODE_REPLY = 1001
     const val NOTIFICATION_ID_BACKFILL = 4001
+    private const val SHORTCUT_ID_PREFIX = "thread-"
+
+    /** A fresh task, as TaskStackBuilder gives the notification tap. */
+    private const val FRESH_TASK_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or
+        Intent.FLAG_ACTIVITY_CLEAR_TASK or
+        Intent.FLAG_ACTIVITY_TASK_ON_HOME
+
+    /**
+     * Gives conversation shortcuts published before they opened in a fresh task
+     * ([buildMessageNotification]) the flags they lack, pinned ones included.
+     * Such a shortcut otherwise keeps its old intent until its sender writes
+     * again, and after process death opens whatever conversation was on screen.
+     * Only the intent changes; updateShortcuts keeps every field left unset. One
+     * binder call when there is nothing to do; never throws. Off the main thread.
+     */
+    fun repairConversationShortcuts(context: Context) {
+        runCatching {
+            val matching = ShortcutManagerCompat.FLAG_MATCH_DYNAMIC or ShortcutManagerCompat.FLAG_MATCH_PINNED
+            val stale = ShortcutManagerCompat.getShortcuts(context, matching).filter {
+                it.id.startsWith(SHORTCUT_ID_PREFIX) && it.intent.flags and FRESH_TASK_FLAGS != FRESH_TASK_FLAGS
+            }
+            if (stale.isEmpty()) return
+            // Id, labels (build() requires one) and the repaired intent; the
+            // rest, the person included, is left as it is.
+            val repaired = stale.map { old ->
+                ShortcutInfoCompat.Builder(context, old.id)
+                    .setShortLabel(old.shortLabel)
+                    .apply { old.longLabel?.let(::setLongLabel) }
+                    .setIntent(Intent(old.intent).addFlags(FRESH_TASK_FLAGS))
+                    .build()
+            }
+            ShortcutManagerCompat.updateShortcuts(context, repaired)
+        }.onFailure { android.util.Log.w("NotificationHelper", "Shortcut repair failed", it) }
+    }
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -169,15 +205,21 @@ object NotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-        // Dynamic shortcut for Conversations bubble/shortcut
+        // Dynamic shortcut for Conversations bubble/shortcut. It opens in a fresh
+        // task too, with the flags TaskStackBuilder gives the tap above: the
+        // launcher starts a shortcut with NEW_TASK alone, and after process
+        // death Android then handed it to the restored activity, whose saved
+        // back stack won, so another conversation opened. Google Messages'
+        // conversation shortcuts carry the same flags.
         try {
-            val shortcut = androidx.core.content.pm.ShortcutInfoCompat.Builder(context, "thread-$threadId")
+            val shortcutIntent = Intent(contentIntent).addFlags(FRESH_TASK_FLAGS)
+            val shortcut = ShortcutInfoCompat.Builder(context, "$SHORTCUT_ID_PREFIX$threadId")
                 .setShortLabel(sender)
                 .setLongLabel(sender)
-                .setIntent(contentIntent)
+                .setIntent(shortcutIntent)
                 .setPerson(person)
                 .build()
-            androidx.core.content.pm.ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+            ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
         } catch (_: Exception) {}
 
         return NotificationCompat.Builder(context, channelId)
@@ -187,7 +229,7 @@ object NotificationHelper {
             .setContentIntent(contentPending)
             .setWhen(timestamp)
             .setShowWhen(true)
-            .setShortcutId("thread-$threadId")
+            .setShortcutId("$SHORTCUT_ID_PREFIX$threadId")
             // A sender ID cannot receive a reply, so it is not offered.
             .apply { if (!isAlphanumericSender(sender)) addAction(replyAction) }
             .setAutoCancel(true)
