@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
@@ -161,12 +162,29 @@ object NotificationHelper {
         subscriptionId: Int? = null,
         /** When the message was sent. Defaults to now for callers without one. */
         timestamp: Long = System.currentTimeMillis(),
+        /** The saved contact's name; the address is shown when there is none. */
+        senderName: String? = null,
+        /**
+         * The sender's avatar, already scaled down: the contact's photo, else
+         * the app's letter or person avatar. Without one, a conversation
+         * notification shows an empty circle.
+         */
+        senderAvatar: Bitmap? = null,
     ): android.app.Notification {
         // isSpam: a message that looks like spam but stays in the inbox, posted
         // on the low-importance channel and labelled so it reads as a warning.
         val channelId = if (isSpam) CHANNEL_ID_SPAM else CHANNEL_ID_MESSAGES
-        val person = Person.Builder().setName(sender).setKey(sender).build()
-        val style = NotificationCompat.MessagingStyle(person)
+        // Only what is shown changes with a contact. The key, the reply and the
+        // tap stay on the address: a reply has to reach the number, and the key
+        // must not change when the contact is renamed or deleted.
+        val title = senderName?.takeIf { it.isNotBlank() } ?: sender
+        val icon = senderAvatar?.let(IconCompat::createWithBitmap)
+        val person = Person.Builder().setName(title).setKey(sender).setIcon(icon).build()
+        // The device's owner, not the sender: Android files an inline reply
+        // under this person, and with the sender here a reply showed as written
+        // by the contact.
+        val user = Person.Builder().setName(context.getString(R.string.notification_you)).build()
+        val style = NotificationCompat.MessagingStyle(user)
             .addMessage(messageBody, timestamp, person)
 
         val replyIntent = Intent(TelephonyConstants.ACTION_RESPOND_VIA_MESSAGE).apply {
@@ -214,10 +232,17 @@ object NotificationHelper {
         try {
             val shortcutIntent = Intent(contentIntent).addFlags(FRESH_TASK_FLAGS)
             val shortcut = ShortcutInfoCompat.Builder(context, "$SHORTCUT_ID_PREFIX$threadId")
-                .setShortLabel(sender)
-                .setLongLabel(sender)
+                .setShortLabel(title)
+                .setLongLabel(title)
                 .setIntent(shortcutIntent)
                 .setPerson(person)
+                // Long-lived is what makes Android 11+ treat the notification as
+                // a conversation: the sender's avatar as its icon, the app's as a
+                // badge, as in Google Messages, and in the Conversations section.
+                .setLongLived(true)
+                // Android 11+ draws a conversation notification with its
+                // shortcut's icon, ahead of the person's.
+                .apply { icon?.let(::setIcon) }
                 .build()
             ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
         } catch (_: Exception) {}

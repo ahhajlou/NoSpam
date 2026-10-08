@@ -10,4 +10,6 @@
     <string name="backfill_progress">%1$d از %2$d پیام بررسی شد</string>
     <string name="backfill_cancel">لغو</string>
     <string name="notification_suspected_spam">هرزنامه مشکوک</string>
+    <!-- How a notification names the phone's owner, under an inline reply. -->
+    <string name="notification_you">شما</string>
 </resources>

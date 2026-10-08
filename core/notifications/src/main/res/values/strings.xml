@@ -9,4 +9,6 @@
     <string name="backfill_progress">%1$d of %2$d messages checked</string>
     <string name="backfill_cancel">Cancel</string>
     <string name="notification_suspected_spam">Suspected spam</string>
+    <!-- How a notification names the phone's owner, under an inline reply. -->
+    <string name="notification_you">You</string>
 </resources>

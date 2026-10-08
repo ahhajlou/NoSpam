@@ -173,6 +173,20 @@ and any importance they had lowered it to. A sender ID (letters in the address,
 `isAlphanumericSender`) gets no Reply action and no compose box: a reply cannot
 reach it. Numeric short codes stay replyable.
 
+**A notification shows the sender as the inbox does**: a saved contact's name
+and photo, else the inbox's letter or person avatar (`avatarBitmap`,
+core:designsystem), drawn by `AppSmsReceiver` from the contact `SmsIngressUseCase`
+already looked up. Until 2026-10-08 it showed the bare number. Only what is
+shown changes: the person key, the reply and the tap stay on the address. The
+photo load is capped at 1s and a failure falls back to the letter avatar,
+because the notification must never wait on it. The conversation shortcut is
+long-lived, which is what makes Android 11+ draw it as a conversation (the
+sender's avatar as the icon, the app's as a badge, as in Google Messages); a
+conversation notification without an avatar shows an empty circle, so one is
+always passed. MessagingStyle's user is a separate "You" person: Android files
+an inline reply under it, and with the sender there a reply read as the
+contact's.
+
 **Multi-select actions are one call with the whole selection**, never a loop
 of single calls from the UI. Each flag table (archived, pinned, starred, muted)
 takes the selection in one transaction and publishes once, so the inbox changes

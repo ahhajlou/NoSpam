@@ -8,17 +8,25 @@ import com.nospam.nospam.core.notifications.IncomingAlert
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.content.res.Resources
+import android.graphics.Bitmap
 import android.provider.Telephony
 import android.telephony.SubscriptionManager
 import android.util.Log
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.core.app.NotificationManagerCompat
 import com.nospam.nospam.NoSpamApplication
+import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
+import com.nospam.nospam.core.designsystem.component.avatarBitmap
+import com.nospam.nospam.core.designsystem.component.circleAvatarBitmap
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.notifications.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Single SMS_DELIVER entry point (see AndroidManifest). Classifies and routes
@@ -77,8 +85,16 @@ class AppSmsReceiver : BroadcastReceiver() {
                         notifySuspectedSpam = container.settingsRepository.notifySuspectedSpam.first(),
                     )
                     when (alert) {
-                        IncomingAlert.NOTIFY -> postNotification(context.applicationContext, result, subscriptionId, timestamp, suspected = false)
-                        IncomingAlert.NOTIFY_QUIET -> postNotification(context.applicationContext, result, subscriptionId, timestamp, suspected = true)
+                        IncomingAlert.NOTIFY, IncomingAlert.NOTIFY_QUIET -> {
+                            // Never at the cost of the notification itself.
+                            val avatar = runCatching { senderAvatar(context, container.contactPhotos, result) }
+                                .onFailure { Log.w(TAG, "Sender avatar failed", it) }
+                                .getOrNull()
+                            postNotification(
+                                context.applicationContext, result, subscriptionId, timestamp,
+                                suspected = alert == IncomingAlert.NOTIFY_QUIET, avatar = avatar,
+                            )
+                        }
                         IncomingAlert.IN_APP_SOUND -> container.messageSounds.playReceived()
                         IncomingAlert.NONE -> Unit
                     }
@@ -98,6 +114,7 @@ class AppSmsReceiver : BroadcastReceiver() {
         subscriptionId: Int?,
         timestamp: Long,
         suspected: Boolean,
+        avatar: Bitmap?,
     ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         val notification = NotificationHelper.buildMessageNotification(
@@ -108,6 +125,8 @@ class AppSmsReceiver : BroadcastReceiver() {
             isSpam = suspected,
             subscriptionId = subscriptionId,
             timestamp = timestamp,
+            senderName = result.contact?.displayName,
+            senderAvatar = avatar,
         )
         NotificationManagerCompat.from(context).notify(
             NotificationHelper.notificationId(result.threadId.value),
@@ -115,7 +134,34 @@ class AppSmsReceiver : BroadcastReceiver() {
         )
     }
 
+    /**
+     * The sender as the inbox draws them: the contact's photo, else the same
+     * letter or person avatar. The photo is bounded in time: it is decoration,
+     * so a slow contacts provider must not hold back the notification, which
+     * then goes out with the letter avatar.
+     */
+    private suspend fun senderAvatar(
+        context: Context,
+        photos: ContactPhotoLoader,
+        result: com.nospam.nospam.core.data.SmsIngressUseCase.Result,
+    ): Bitmap {
+        val sizePx = (AVATAR_SIZE_DP * context.resources.displayMetrics.density).toInt()
+        val photo = result.contact?.photoUri?.let { uri ->
+            withTimeoutOrNull(PHOTO_TIMEOUT_MS) {
+                runCatching { photos.load(uri, sizePx)?.asAndroidBitmap() }.getOrNull()
+            }
+        }
+        if (photo != null) return circleAvatarBitmap(photo, sizePx)
+        // The system's night mode, not the app's: SystemUI draws the notification.
+        val dark = (Resources.getSystem().configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        return avatarBitmap(context, result.contact?.displayName ?: result.sender, result.sender, sizePx, dark)
+    }
+
     companion object {
         private const val TAG = "AppSmsReceiver"
+        /** Larger than any notification draws it; the system scales it down. */
+        private const val AVATAR_SIZE_DP = 64
+        private const val PHOTO_TIMEOUT_MS = 1_000L
     }
 }

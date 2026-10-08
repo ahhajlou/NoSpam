@@ -385,6 +385,17 @@ The storage suites (nine `Sqlite*Dao` plus `SqliteNoSpamOpenHelper`, 44/44) and
 `core:telephony`'s were never affected and stay on the device — see CLAUDE.md §9
 for when a new instrumented test is the right call.
 
+## A replied-to notification stays until opened (found 2026-10-08) — verified, not yet fixed
+
+After an inline reply from a message notification the reply is sent, but the
+notification stays in the shade, flagged `LIFETIME_EXTENDED_BY_DIRECT_REPLY`,
+until it is swiped away or the conversation is opened. Reproduced on the API 37
+emulator on `main` (`1d2caeb`) and on `fix/notification-contact-name`, so it
+predates that branch. `HeadlessSmsSendService.cancelNotificationFor` calls
+`cancel()`, which Android 15+ ignores for a notification extended by a direct
+reply; the app has to post an update (or cancel it in a way the platform accepts)
+instead. Check what Google Messages does after a reply before choosing.
+
 ## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
 
 - [x] **Done 2026-10-03:** "Mark all as read" is in the inbox top bar, shown only while something is unread; it asks first with the count ("Mark 3 conversations as read?"), marks every unread inbox conversation through the bulk `setRead`, and clears their notifications (marking a selection read now clears them too). Original: **"Mark all as read"** — the drawer item was removed. Its `onClick` only

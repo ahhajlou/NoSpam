@@ -8,6 +8,7 @@ import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.NotificationDecision
+import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.PolicyInput
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.ThreadId
@@ -42,6 +43,12 @@ class SmsIngressUseCase(
         val messageId: Long?,
         val notificationDecision: NotificationDecision = if (isSpam) NotificationDecision.SILENT else NotificationDecision.NORMAL,
         val senderState: ThreadSpamState? = null,
+        /**
+         * The sender's saved contact, so the notification can show its name and
+         * photo without a second lookup. Null for a stranger, a blocked sender
+         * (not looked up) or when contacts could not be read.
+         */
+        val contact: Participant? = null,
     )
 
     suspend fun handle(message: RawMessage): Result {
@@ -87,7 +94,8 @@ class SmsIngressUseCase(
         // 2) Saved contacts bypass the classifier entirely: no verdict, no label,
         // no change to the sender's state, a normal notification (TODO.md, "Spam
         // routing — agreed model").
-        val isContact = runCatching { telephony.lookupContact(sender)?.displayName != null }.getOrDefault(false)
+        val contact = runCatching { telephony.lookupContact(sender) }.getOrNull()?.takeIf { it.displayName != null }
+        val isContact = contact != null
 
         // 3) Classify with timeout — failure degrades to "no verdict, leave unread".
         val verdict = if (isContact) null else runCatching {
@@ -213,6 +221,7 @@ class SmsIngressUseCase(
             messageId = messageId,
             notificationDecision = notificationDecision,
             senderState = newState,
+            contact = contact,
         )
     }
 
