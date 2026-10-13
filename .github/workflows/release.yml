@@ -125,11 +125,26 @@ jobs:
         # otherwise untested code: the tagged commit gets the unit suite here.
         # Release lint needs no separate task — `lint { checkReleaseBuilds = true }`
         # puts lintVitalRelease inside assembleRelease already.
-        run: >
-          ./gradlew
-          testDebugUnitTest :core:model:test :core:common:test
-          :app:assembleRelease
-          --stacktrace
+        #
+        # Gradle's test JVMs default to a 512 MB heap, separate from the daemon's
+        # -Xmx in gradle.properties. The Robolectric tests ran out of memory on
+        # the runner (v0.5.0, ShareIntentTest, OutOfMemoryError), so an init
+        # script in $RUNNER_TEMP raises it without touching the build files, and
+        # --max-workers bounds how many test JVMs run at once.
+        run: |
+          cat > "$RUNNER_TEMP/ci-tests.init.gradle" <<'EOF'
+          allprojects {
+              tasks.withType(Test).configureEach {
+                  maxHeapSize = "1536m"
+              }
+          }
+          EOF
+          ./gradlew \
+            --init-script "$RUNNER_TEMP/ci-tests.init.gradle" \
+            --max-workers=2 \
+            testDebugUnitTest :core:model:test :core:common:test \
+            :app:assembleRelease \
+            --stacktrace
 
       - name: Verify the APK is signed with our key
         id: verify
