@@ -132,6 +132,17 @@ verdict says a silent message is real, `AppSmsReceiver` announces it then, withi
 posted is never changed. Send retries and verdict pruning run after the
 notification.
 
+**Messages left without a verdict** (the process was killed mid-classification,
+or the classifier failed) are picked up by `SmsIngressUseCase.classifyMissed`, at
+app start and after each incoming SMS: received messages from the last 7 days
+with no verdict, routed as ingress would have, with nothing inserted or
+announced. Saved contacts have no verdict by design and are skipped. The window
+must stay inside the 30-day pruning of ham verdicts, or a pruned message would
+be counted again. Messages under 2 minutes old or still in ingress are left
+alone, one sweep runs at a time, and none runs alongside the history scan
+(`AppContainer.classifyMissedMessages`); any of those would count a message
+twice, which turns a suspected sender into Spam.
+
 **Outgoing lifecycle.** A message is inserted as `OUTBOX`, then handed to
 `SmsManager` with a `sentIntent` naming `SmsSentReceiver` (explicit component,
 immutable), which moves the row to `SENT` or `FAILED`. Without that callback

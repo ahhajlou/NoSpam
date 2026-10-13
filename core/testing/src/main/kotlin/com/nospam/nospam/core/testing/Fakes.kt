@@ -295,6 +295,20 @@ class FakeTelephonyDataSource(
     }
 }
 
+/**
+ * A model whose load blocks a thread until [release], as the real one does (a
+ * 1.9 MB JSON model plus 14 MB of word lists, through [DeferredSpamClassifier]):
+ * it cannot be canceled, so only a wait that really ends gets past it. The load
+ * gives up after 5s so a failing test does not hang.
+ */
+class BlockingModelLoad(loaded: SpamClassifier) {
+    val release = java.util.concurrent.CountDownLatch(1)
+    val classifier: SpamClassifier = com.nospam.nospam.core.ml.DeferredSpamClassifier(kotlinx.coroutines.Dispatchers.IO) {
+        release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+        loaded
+    }
+}
+
 object TestData {
     val sampleConversation = Conversation(
         threadId = ThreadId(1),

@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -47,6 +48,10 @@ class SmsIngressUseCase(
     private val spamStateWriter: SpamStateWriter = SpamStateWriter(db.senderStateDao),
     private val classifyBudgetMillis: Long = CLASSIFY_BUDGET_MS,
 ) {
+    /** Messages [handle] is still working on, late verdicts included: [classifyMissed] leaves them alone. */
+    private val inFlight: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private val sweepLock = Mutex()
+
     data class Result(
         val threadId: ThreadId,
         val isSpam: Boolean,
@@ -86,31 +91,25 @@ class SmsIngressUseCase(
             read = false,
             subscriptionId = message.subscriptionId,
         )
+        messageId?.let(inFlight::add)
+        var result: Result? = null
+        try {
+            return routeInserted(message, sender, messageId).also { result = it }
+        } finally {
+            // A late verdict releases the message itself once it is recorded.
+            if (result?.lateDecision == null) messageId?.let(inFlight::remove)
+        }
+    }
 
-        val normalized = context?.let { com.nospam.nospam.core.telephony.PhoneNumberNormalizer.normalize(it, sender) }
-            ?: sender.trim().uppercase()
-
-        // Check blocklist (app DB + system)
-        val isBlocked = runCatching {
-            val inApp = db.blocklistDao.findByAddress(normalized) != null ||
-                (normalized != sender.trim() && db.blocklistDao.findByAddress(sender.trim()) != null)
-            inApp || telephony.isSystemBlocked(sender)
-        }.getOrDefault(false)
+    private suspend fun routeInserted(message: RawMessage, sender: String, messageId: Long?): Result {
+        val normalized = normalize(sender)
+        val isBlocked = isBlocked(sender, normalized)
 
         val threadId = ThreadId(telephony.getOrCreateThreadId(sender))
         val isMuted = runCatching { db.mutedDao.isMuted(threadId.value) }.getOrDefault(false)
 
         if (isBlocked) {
-            if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
-            // Update sender state to BLOCKED — protected against user overrides under the writer lock.
-            spamStateWriter.upsertIfNotOverridden(normalized) { current ->
-                SenderStateEntity(normalized, ThreadSpamState.BLOCKED, isUserOverride = current?.isUserOverride ?: false, spamCount = (current?.spamCount ?: 0) + 1)
-            }
-            if (messageId != null) {
-                db.messageVerdictDao.insert(
-                    MessageVerdictEntity(messageId, threadId.value, normalized, isSpam = true, score = 1.0, createdAt = message.timestamp)
-                )
-            }
+            recordBlocked(messageId, threadId, normalized, message.timestamp)
             return Result(threadId, isSpam = true, score = 1.0, sender = sender, body = message.body, messageId = messageId, notificationDecision = NotificationDecision.NONE, senderState = ThreadSpamState.BLOCKED)
         }
 
@@ -142,8 +141,12 @@ class SmsIngressUseCase(
                 // Too slow, not failed: record the verdict when it lands, and hand its
                 // decision to the caller, which may announce a message kept silent here.
                 lateDecision = detachedScope().async {
-                    val late = runCatching { classification.await() }.getOrNull() ?: return@async null
-                    runCatching { record(late, messageId, threadId, normalized, isMuted, message.timestamp).notification }.getOrNull()
+                    try {
+                        val late = runCatching { classification.await() }.getOrNull() ?: return@async null
+                        runCatching { record(late, messageId, threadId, normalized, isMuted, message.timestamp).notification }.getOrNull()
+                    } finally {
+                        messageId?.let(inFlight::remove)
+                    }
                 }
             }
         }
@@ -164,6 +167,63 @@ class SmsIngressUseCase(
             contact = contact,
             lateDecision = lateDecision,
         )
+    }
+
+    /**
+     * Gives a verdict to recent received messages that have none: ingress was
+     * killed before recording one (an ANR on a cold start, or the system
+     * reclaiming the process before a late verdict landed), or the classifier
+     * failed. Each is routed as ingress would have routed it, except that
+     * nothing is inserted and nothing is announced: the message is minutes or
+     * days old. Saved contacts are skipped, since they have no verdict by design.
+     *
+     * Looks back [MISSED_WINDOW_MS] only. Ham verdicts are pruned after
+     * [SpamRepository.SPAM_RETENTION_DAYS], so an older message without one may
+     * well have been counted already, and counting it again would move its
+     * sender. Messages younger than [MISSED_GRACE_MS], or still in [handle],
+     * are left to ingress for the same reason. One sweep at a time; a sweep
+     * already running makes this return 0 at once.
+     *
+     * Not safe alongside the history scan, which counts the same messages: the
+     * caller keeps the two apart. Returns how many messages got a verdict.
+     */
+    suspend fun classifyMissed(now: Long = System.currentTimeMillis()): Int {
+        if (!sweepLock.tryLock()) return 0
+        try {
+            val missed = telephony.getInboxMessagesSince(now - MISSED_WINDOW_MS).filter {
+                it.date <= now - MISSED_GRACE_MS &&
+                    it.id.value !in inFlight &&
+                    runCatching { db.messageVerdictDao.getByMessageId(it.id.value) == null }.getOrDefault(false)
+            }
+            val isContact = HashMap<String, Boolean>()
+            var recorded = 0
+            for (m in missed) {
+                val sender = m.address
+                val normalized = normalize(sender)
+                if (isBlocked(sender, normalized)) {
+                    recordBlocked(m.id.value, m.threadId, normalized, m.date)
+                    recorded++
+                    continue
+                }
+                val contact = isContact.getOrPut(sender) {
+                    runCatching { telephony.lookupContact(sender) }.getOrNull()?.displayName != null
+                }
+                if (contact) continue
+                val verdict = try {
+                    classifier.classify(RawMessage(sender, m.body, m.date, m.subscriptionId))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    null
+                } ?: continue
+                val isMuted = runCatching { db.mutedDao.isMuted(m.threadId.value) }.getOrDefault(false)
+                record(verdict, m.id.value, m.threadId, normalized, isMuted, m.date)
+                recorded++
+            }
+            return recorded
+        } finally {
+            sweepLock.unlock()
+        }
     }
 
     /**
@@ -304,6 +364,31 @@ class SmsIngressUseCase(
     private suspend fun detachedScope(): CoroutineScope =
         CoroutineScope(currentCoroutineContext().minusKey(Job) + SupervisorJob())
 
+    private fun normalize(sender: String): String =
+        context?.let { com.nospam.nospam.core.telephony.PhoneNumberNormalizer.normalize(it, sender) }
+            ?: sender.trim().uppercase()
+
+    /** On the app's block list (by either key) or the system's. */
+    private suspend fun isBlocked(sender: String, normalized: String): Boolean = runCatching {
+        val inApp = db.blocklistDao.findByAddress(normalized) != null ||
+            (normalized != sender.trim() && db.blocklistDao.findByAddress(sender.trim()) != null)
+        inApp || telephony.isSystemBlocked(sender)
+    }.getOrDefault(false)
+
+    /** A blocked sender's message: read, counted as spam, sender kept BLOCKED. */
+    private suspend fun recordBlocked(messageId: Long?, threadId: ThreadId, normalized: String, timestamp: Long) {
+        if (messageId != null) runCatching { telephony.updateMessageRead(messageId, read = true) }
+        // Update sender state to BLOCKED — protected against user overrides under the writer lock.
+        spamStateWriter.upsertIfNotOverridden(normalized) { current ->
+            SenderStateEntity(normalized, ThreadSpamState.BLOCKED, isUserOverride = current?.isUserOverride ?: false, spamCount = (current?.spamCount ?: 0) + 1)
+        }
+        if (messageId != null) {
+            db.messageVerdictDao.insert(
+                MessageVerdictEntity(messageId, threadId.value, normalized, isSpam = true, score = 1.0, createdAt = timestamp)
+            )
+        }
+    }
+
     private fun SenderStateEntity.toModel(): SenderState =
         SenderState(normalizedAddress, state, spamCount, hamCount, isUserOverride, updatedAt, hasReplied)
 
@@ -317,5 +402,15 @@ class SmsIngressUseCase(
          * loads the model in ~540ms on a Galaxy A26 (TODO.md, "Cold start").
          */
         const val CLASSIFY_BUDGET_MS = 3_000L
+
+        /**
+         * How far back [classifyMissed] looks: well inside the pruning of ham
+         * verdicts ([SpamRepository.SPAM_RETENTION_DAYS]), so a message without a
+         * verdict there was never classified rather than pruned.
+         */
+        const val MISSED_WINDOW_MS = 7L * 24L * 60L * 60L * 1000L
+
+        /** Younger messages may still be in [handle]; ingress is not done with them. */
+        const val MISSED_GRACE_MS = 2L * 60L * 1000L
     }
 }

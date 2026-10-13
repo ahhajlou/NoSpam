@@ -11,18 +11,14 @@ import com.nospam.nospam.core.database.entity.BlocklistEntity
 import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
-import com.nospam.nospam.core.ml.DeferredSpamClassifier
-import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.NotificationDecision
 import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
+import com.nospam.nospam.core.testing.BlockingModelLoad
 import com.nospam.nospam.core.testing.FakeSpamClassifier
 import com.nospam.nospam.core.testing.FakeTelephonyDataSource
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -45,19 +41,6 @@ class SmsIngressUseCaseTest {
             val value = delegate.getByAddress(normalizedAddress)
             yield()
             return value
-        }
-    }
-
-    /**
-     * A model whose load blocks a thread until [release], as the real one does
-     * (a 1.9 MB JSON model plus 14 MB of word lists): it cannot be canceled,
-     * so only a wait that really ends at the budget gets past it.
-     */
-    private class BlockingLoad(loaded: SpamClassifier) {
-        val release = CountDownLatch(1)
-        val classifier = DeferredSpamClassifier(Dispatchers.IO) {
-            release.await(5, TimeUnit.SECONDS)
-            loaded
         }
     }
 
@@ -173,7 +156,7 @@ class SmsIngressUseCaseTest {
     @Test fun `a model still loading does not hold up the message, and its verdict is recorded later`() = runTest {
         val fake = telephony()
         val db = NoSpamDatabase.inMemory()
-        val load = BlockingLoad(FakeSpamClassifier.alwaysSpam(2.0))
+        val load = BlockingModelLoad(FakeSpamClassifier.alwaysSpam(2.0))
 
         // The load does not finish until released: the old timeout waited for it.
         val result = SmsIngressUseCase(fake, load.classifier, db).handle(RawMessage("+98912", "win prize now", 12345L))
@@ -195,7 +178,7 @@ class SmsIngressUseCaseTest {
         val fake = telephony()
         val db = NoSpamDatabase.inMemory()
         db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 11))
-        val load = BlockingLoad(FakeSpamClassifier.alwaysSpam(2.0))
+        val load = BlockingModelLoad(FakeSpamClassifier.alwaysSpam(2.0))
 
         val result = SmsIngressUseCase(fake, load.classifier, db).handle(RawMessage("+98912", "win prize now", 12345L))
 
@@ -212,7 +195,7 @@ class SmsIngressUseCaseTest {
     @Test fun `a real message from a sender in Spam is announced once its late verdict lands`() = runTest {
         val db = NoSpamDatabase.inMemory()
         db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 11))
-        val load = BlockingLoad(FakeSpamClassifier.alwaysHam(-2.0))
+        val load = BlockingModelLoad(FakeSpamClassifier.alwaysHam(-2.0))
 
         val result = SmsIngressUseCase(telephony(), load.classifier, db).handle(RawMessage("+98912", "your code is 1234", 12345L))
 

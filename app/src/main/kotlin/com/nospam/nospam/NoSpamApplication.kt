@@ -118,6 +118,10 @@ class NoSpamApplication : Application() {
             senderKeysReady.await()
             if (container.settingsRepository.isBackfillPending()) {
                 container.spamBackfill.ensureStarted()
+            } else {
+                // Messages an earlier process left without a verdict (killed while
+                // classifying). A resumed scan above covers them itself.
+                container.classifyMissedMessages()
             }
         }
         // Any completed scan (the resumed one or a Settings re-check) clears the

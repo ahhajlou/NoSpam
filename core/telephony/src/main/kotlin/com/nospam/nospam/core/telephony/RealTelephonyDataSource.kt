@@ -648,31 +648,40 @@ class RealTelephonyDataSource(
         } catch (_: Exception) { emptySet() }
     }
 
-    override suspend fun getAllMessages(): List<Message> = withContext(Dispatchers.IO) {
-        try {
-            val list = mutableListOf<Message>()
-            val projection = arrayOf(
-                Telephony.Sms._ID,
-                Telephony.Sms.THREAD_ID,
-                Telephony.Sms.ADDRESS,
-                Telephony.Sms.BODY,
-                Telephony.Sms.DATE,
-                Telephony.Sms.TYPE,
-                Telephony.Sms.READ
-            )
-            context.contentResolver.query(
-                Telephony.Sms.CONTENT_URI, projection, null, null, "${Telephony.Sms.DATE} ASC"
-            )?.use { cursor ->
-                while (cursor.moveToNext()) {
-                    list.add(TelephonyMapper.mapCursorToMessage(cursor))
+    override suspend fun getAllMessages(): List<Message> = queryMessages(null, null, "getAllMessages")
+
+    override suspend fun getInboxMessagesSince(sinceMillis: Long): List<Message> = queryMessages(
+        "${Telephony.Sms.TYPE} = ? AND ${Telephony.Sms.DATE} >= ?",
+        arrayOf(Telephony.Sms.MESSAGE_TYPE_INBOX.toString(), sinceMillis.toString()),
+        "getInboxMessagesSince",
+    )
+
+    private suspend fun queryMessages(selection: String?, args: Array<String>?, caller: String): List<Message> =
+        withContext(Dispatchers.IO) {
+            try {
+                val list = mutableListOf<Message>()
+                val projection = arrayOf(
+                    Telephony.Sms._ID,
+                    Telephony.Sms.THREAD_ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE,
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.READ
+                )
+                context.contentResolver.query(
+                    Telephony.Sms.CONTENT_URI, projection, selection, args, "${Telephony.Sms.DATE} ASC"
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        list.add(TelephonyMapper.mapCursorToMessage(cursor))
+                    }
                 }
+                list
+            } catch (e: Exception) {
+                Log.w(TAG, "$caller failed", e)
+                emptyList()
             }
-            list
-        } catch (e: Exception) {
-            Log.w(TAG, "getAllMessages failed", e)
-            emptyList()
         }
-    }
 
     @Suppress("DEPRECATION")
     override suspend fun getContacts(limit: Int, query: String?): List<com.nospam.nospam.core.model.ContactEntry> = withContext(Dispatchers.IO) {

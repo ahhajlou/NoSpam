@@ -90,6 +90,12 @@ interface TelephonyDataSource {
     suspend fun searchBodyMatch(query: String): Set<Long>
     suspend fun getContacts(limit: Int = 50, query: String? = null): List<com.nospam.nospam.core.model.ContactEntry>
     suspend fun getAllMessages(): List<com.nospam.nospam.core.model.Message>
+
+    /** Received messages dated [sinceMillis] or later, oldest first. */
+    suspend fun getInboxMessagesSince(sinceMillis: Long): List<com.nospam.nospam.core.model.Message> =
+        getAllMessages().filter {
+            it.type == com.nospam.nospam.core.model.MessageType.INBOX && it.date >= sinceMillis
+        }
     data class SimInfo(val subscriptionId: Int, val displayName: String, val number: String? = null)
 
     companion object {
