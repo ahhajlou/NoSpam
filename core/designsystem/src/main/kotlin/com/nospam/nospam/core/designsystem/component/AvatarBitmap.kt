@@ -39,7 +39,7 @@ fun avatarBitmap(context: Context, name: String?, colorKey: String, sizePx: Int,
             textAlign = Paint.Align.CENTER
             typeface = Typeface.DEFAULT
         }
-        // Centred on the glyph box, not the baseline.
+        // Centered on the glyph box, not the baseline.
         val baseline = half - (paint.descent() + paint.ascent()) / 2f
         canvas.drawText(initial, half, baseline, paint)
     } else {
@@ -60,7 +60,7 @@ fun avatarBitmap(context: Context, name: String?, colorKey: String, sizePx: Int,
 fun circleAvatarBitmap(photo: Bitmap, sizePx: Int): Bitmap {
     val bitmap = createBitmap(sizePx, sizePx)
     val scale = sizePx.toFloat() / minOf(photo.width, photo.height)
-    // Centre crop: scale the shorter side to fit, centre the longer one.
+    // Center crop: scale the shorter side to fit, center the longer one.
     val matrix = Matrix().apply {
         setScale(scale, scale)
         postTranslate((sizePx - photo.width * scale) / 2f, (sizePx - photo.height * scale) / 2f)
