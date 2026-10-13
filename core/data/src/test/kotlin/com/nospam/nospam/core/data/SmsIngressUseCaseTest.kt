@@ -3,11 +3,16 @@
 package com.nospam.nospam.core.data
 
 import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.database.dao.BlocklistDao
+import com.nospam.nospam.core.database.dao.InMemoryBlocklistDao
 import com.nospam.nospam.core.database.dao.InMemorySenderStateDao
 import com.nospam.nospam.core.database.dao.SenderStateDao
+import com.nospam.nospam.core.database.entity.BlocklistEntity
 import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
+import com.nospam.nospam.core.ml.DeferredSpamClassifier
+import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.model.NotificationDecision
 import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.RawMessage
@@ -15,8 +20,13 @@ import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.testing.FakeSpamClassifier
 import com.nospam.nospam.core.testing.FakeTelephonyDataSource
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import org.junit.Assert.*
@@ -36,6 +46,29 @@ class SmsIngressUseCaseTest {
             yield()
             return value
         }
+    }
+
+    /**
+     * A model whose load blocks a thread until [release], as the real one does
+     * (a 1.9 MB JSON model plus 14 MB of word lists): it cannot be canceled,
+     * so only a wait that really ends at the budget gets past it.
+     */
+    private class BlockingLoad(loaded: SpamClassifier) {
+        val release = CountDownLatch(1)
+        val classifier = DeferredSpamClassifier(Dispatchers.IO) {
+            release.await(5, TimeUnit.SECONDS)
+            loaded
+        }
+    }
+
+    /** Runs the test scheduler until [condition] holds, for work resumed from a real thread. */
+    private suspend fun TestScope.awaitReal(condition: suspend () -> Boolean) {
+        repeat(500) {
+            runCurrent()
+            if (condition()) return
+            Thread.sleep(10)
+        }
+        fail("condition not met within 5s")
     }
 
     private fun telephony(threadId: Long = 7L, contactName: String? = null) = FakeTelephonyDataSource().apply {
@@ -135,6 +168,105 @@ class SmsIngressUseCaseTest {
         assertFalse(result.isSpam)
         assertNull(db.spamVerdictDao.getByThread(7L))
         assertTrue(fake.updatedMessageReads.isEmpty())
+    }
+
+    @Test fun `a model still loading does not hold up the message, and its verdict is recorded later`() = runTest {
+        val fake = telephony()
+        val db = NoSpamDatabase.inMemory()
+        val load = BlockingLoad(FakeSpamClassifier.alwaysSpam(2.0))
+
+        // The load does not finish until released: the old timeout waited for it.
+        val result = SmsIngressUseCase(fake, load.classifier, db).handle(RawMessage("+98912", "win prize now", 12345L))
+
+        assertEquals(1L, result.messageId)
+        assertNull(result.senderState)
+        assertEquals(NotificationDecision.NORMAL, result.notificationDecision)
+        assertNull(db.messageVerdictDao.getByMessageId(1L))
+
+        load.release.countDown()
+        awaitReal { db.messageVerdictDao.getByMessageId(1L) != null }
+        assertTrue(db.messageVerdictDao.getByMessageId(1L)!!.isSpam)
+        assertEquals(ThreadSpamState.SUSPECTED, db.senderStateDao.getByAddress("+98912")!!.state)
+        // Suspected spam stays unread in the inbox, as when classified in time.
+        assertEquals(emptyList<Pair<Long, Boolean>>(), fake.updatedMessageReads)
+    }
+
+    @Test fun `a sender already in Spam stays silent while the model loads`() = runTest {
+        val fake = telephony()
+        val db = NoSpamDatabase.inMemory()
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 11))
+        val load = BlockingLoad(FakeSpamClassifier.alwaysSpam(2.0))
+
+        val result = SmsIngressUseCase(fake, load.classifier, db).handle(RawMessage("+98912", "win prize now", 12345L))
+
+        assertEquals(NotificationDecision.NONE, result.notificationDecision)
+        load.release.countDown()
+        awaitReal { result.lateDecision!!.isCompleted }
+        assertEquals(12, db.senderStateDao.getByAddress("+98912")!!.spamCount)
+        // In Spam once the verdict lands, so marked read like any message there.
+        assertEquals(listOf(1L to true), fake.updatedMessageReads)
+        // Still spam: nothing to announce late.
+        assertEquals(NotificationDecision.NONE, result.lateDecision!!.await())
+    }
+
+    @Test fun `a real message from a sender in Spam is announced once its late verdict lands`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 11))
+        val load = BlockingLoad(FakeSpamClassifier.alwaysHam(-2.0))
+
+        val result = SmsIngressUseCase(telephony(), load.classifier, db).handle(RawMessage("+98912", "your code is 1234", 12345L))
+
+        assertEquals(NotificationDecision.NONE, result.notificationDecision)
+        load.release.countDown()
+        awaitReal { result.lateDecision!!.isCompleted }
+        assertEquals(NotificationDecision.NORMAL, result.lateDecision!!.await())
+        assertEquals(ThreadSpamState.MIXED, db.senderStateDao.getByAddress("+98912")!!.state)
+    }
+
+    @Test fun `a verdict in time leaves nothing late`() = runTest {
+        val result = SmsIngressUseCase(telephony(), FakeSpamClassifier.alwaysHam(), NoSpamDatabase.inMemory())
+            .handle(RawMessage("+98912", "hello", 1L))
+
+        assertNull(result.lateDecision)
+    }
+
+    @Test fun `a failed classifier announces as the sender is routed`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 3))
+        val failing = FakeSpamClassifier(verdictFor = { throw RuntimeException("model fail") })
+
+        val result = SmsIngressUseCase(telephony(), failing, db).handle(RawMessage("+98912", "hello", 1L))
+
+        assertEquals(NotificationDecision.NONE, result.notificationDecision)
+        // Nothing counted without a verdict.
+        assertEquals(3, db.senderStateDao.getByAddress("+98912")!!.spamCount)
+    }
+
+    @Test fun `with spam protection off an unclassified message notifies`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 3))
+        val failing = FakeSpamClassifier(verdictFor = { throw RuntimeException("model fail") })
+
+        val result = SmsIngressUseCase(telephony(), failing, db, isSpamProtectionEnabled = { false })
+            .handle(RawMessage("+98912", "hello", 1L))
+
+        assertEquals(NotificationDecision.NORMAL, result.notificationDecision)
+    }
+
+    @Test fun `the message is stored before the block lists are read`() = runTest {
+        val fake = telephony()
+        var storedFirst = false
+        val blocklist = object : BlocklistDao by InMemoryBlocklistDao() {
+            override suspend fun findByAddress(address: String): BlocklistEntity? {
+                storedFirst = fake.insertedInbox.isNotEmpty()
+                return null
+            }
+        }
+
+        SmsIngressUseCase(fake, FakeSpamClassifier.alwaysHam(), NoSpamDatabase(blocklistDao = blocklist))
+            .handle(RawMessage("+98912", "hello", 1L))
+
+        assertTrue(storedFirst)
     }
 
     @Test fun `ham is inserted as unread`() = runTest {

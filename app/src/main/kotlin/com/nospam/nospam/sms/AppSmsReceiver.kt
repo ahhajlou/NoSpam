@@ -5,6 +5,8 @@ package com.nospam.nospam.sms
 import kotlinx.coroutines.flow.first
 import com.nospam.nospam.core.notifications.incomingAlert
 import com.nospam.nospam.core.notifications.IncomingAlert
+import com.nospam.nospam.core.notifications.LATE_ALERT_WINDOW_MS
+import com.nospam.nospam.core.notifications.lateAlert
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -20,6 +22,7 @@ import com.nospam.nospam.NoSpamApplication
 import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
 import com.nospam.nospam.core.designsystem.component.avatarBitmap
 import com.nospam.nospam.core.designsystem.component.circleAvatarBitmap
+import com.nospam.nospam.core.model.NotificationDecision
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.notifications.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +36,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * via [com.nospam.nospam.core.data.SmsIngressUseCase], then posts a
  * MessagingStyle notification for ham. Suspected spam that stays in the inbox
  * gets a quiet one on the low-importance channel only when the user turned
- * that on; spam routed to Spam never notifies.
+ * that on; spam routed to Spam never notifies. A message kept silent because
+ * its verdict was late is announced when the verdict lands, if it turned out
+ * real ([lateAlert]).
  */
 class AppSmsReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -58,13 +63,15 @@ class AppSmsReceiver : BroadcastReceiver() {
 
         val pending = goAsync()
         scope.launch {
+            val app = context.applicationContext as? NoSpamApplication
+            var result: com.nospam.nospam.core.data.SmsIngressUseCase.Result? = null
+            var atArrival = IncomingAlert.NONE
             try {
-                val app = context.applicationContext as? NoSpamApplication
                 if (app == null) {
                     Log.e(TAG, "NoSpamApplication missing")
                     return@launch
                 }
-                val result = app.container.smsIngress.handle(
+                val handled = app.container.smsIngress.handle(
                     RawMessage(
                         sender = sender,
                         body = body,
@@ -72,39 +79,76 @@ class AppSmsReceiver : BroadcastReceiver() {
                         subscriptionId = subscriptionId,
                     )
                 )
-                Log.d(TAG, "Prediction: ${if (result.isSpam) "spam" else "ham"} (Score: ${result.score}) state=${result.senderState} notif=${result.notificationDecision}")
+                result = handled
+                Log.d(TAG, "Prediction: ${if (handled.isSpam) "spam" else "ham"} (Score: ${handled.score}) state=${handled.senderState} notif=${handled.notificationDecision}")
+                if (handled.messageId != null) {
+                    atArrival = announce(context, app, handled, handled.notificationDecision, subscriptionId, timestamp)
+                }
+                // Housekeeping after the message is announced, never before it.
                 // An SMS just arrived, so there is service: send anything waiting for it.
                 runCatching { app.container.telephony.runSendRetries(serviceIsBack = true) }
-                if (result.messageId != null) {
-                    val container = app.container
-                    val alert = incomingAlert(
-                        decision = result.notificationDecision,
-                        threadId = result.threadId.value,
-                        visibleThreadId = container.visibleThread.value,
-                        soundsEnabled = container.settingsRepository.messageSounds.first(),
-                        notifySuspectedSpam = container.settingsRepository.notifySuspectedSpam.first(),
-                    )
-                    when (alert) {
-                        IncomingAlert.NOTIFY, IncomingAlert.NOTIFY_QUIET -> {
-                            // Never at the cost of the notification itself.
-                            val avatar = runCatching { senderAvatar(context, container.contactPhotos, result) }
-                                .onFailure { Log.w(TAG, "Sender avatar failed", it) }
-                                .getOrNull()
-                            postNotification(
-                                context.applicationContext, result, subscriptionId, timestamp,
-                                suspected = alert == IncomingAlert.NOTIFY_QUIET, avatar = avatar,
-                            )
-                        }
-                        IncomingAlert.IN_APP_SOUND -> container.messageSounds.playReceived()
-                        IncomingAlert.NONE -> Unit
-                    }
-                }
+                app.container.smsIngress.pruneExpiredVerdicts()
             } catch (e: Exception) {
                 Log.e(TAG, "SMS ingress failed", e)
             } finally {
                 pending.finish()
             }
+            // The verdict missed the budget: wait for it outside the broadcast, and
+            // announce a message kept silent that turned out to be real. Best effort:
+            // the process may be frozen or killed before it lands.
+            val handled = result ?: return@launch
+            val late = handled.lateDecision ?: return@launch
+            if (app == null || handled.messageId == null) return@launch
+            try {
+                val decision = withTimeoutOrNull(LATE_ALERT_WINDOW_MS) { late.await() } ?: return@launch
+                announce(context, app, handled, decision, subscriptionId, timestamp) { alert ->
+                    lateAlert(atArrival, alert, elapsedMillis = System.currentTimeMillis() - timestamp)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Late announcement failed", e)
+            }
         }
+    }
+
+    /**
+     * Announces [result] as [decision] asks: a notification, a quiet one, the
+     * in-app sound, or nothing. [gate] can turn the alert down, for a late one.
+     * Returns what was done.
+     */
+    private suspend fun announce(
+        context: Context,
+        app: NoSpamApplication,
+        result: com.nospam.nospam.core.data.SmsIngressUseCase.Result,
+        decision: NotificationDecision,
+        subscriptionId: Int?,
+        timestamp: Long,
+        gate: (IncomingAlert) -> IncomingAlert = { it },
+    ): IncomingAlert {
+        val container = app.container
+        val alert = gate(
+            incomingAlert(
+                decision = decision,
+                threadId = result.threadId.value,
+                visibleThreadId = container.visibleThread.value,
+                soundsEnabled = container.settingsRepository.messageSounds.first(),
+                notifySuspectedSpam = container.settingsRepository.notifySuspectedSpam.first(),
+            )
+        )
+        when (alert) {
+            IncomingAlert.NOTIFY, IncomingAlert.NOTIFY_QUIET -> {
+                // Never at the cost of the notification itself.
+                val avatar = runCatching { senderAvatar(context, container.contactPhotos, result) }
+                    .onFailure { Log.w(TAG, "Sender avatar failed", it) }
+                    .getOrNull()
+                postNotification(
+                    context.applicationContext, result, subscriptionId, timestamp,
+                    suspected = alert == IncomingAlert.NOTIFY_QUIET, avatar = avatar,
+                )
+            }
+            IncomingAlert.IN_APP_SOUND -> container.messageSounds.playReceived()
+            IncomingAlert.NONE -> Unit
+        }
+        return alert
     }
 
     /** [suspected]: spam that stays in the inbox, posted quietly and labeled. */

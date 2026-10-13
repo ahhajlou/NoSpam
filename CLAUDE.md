@@ -115,9 +115,22 @@ device-to-device transfer on Android 12+. The app's data is keyed by phone
 number, and subscription ids mean nothing on another phone.
 
 **Ingress ordering.** `SmsIngressUseCase` inserts the incoming message into the
-provider with `READ=0` *before* classifying, then updates read state and verdict
-afterwards. Classification is wrapped in `withTimeout(8_000)` so a slow model
-degrades to "unread, no verdict" rather than losing the message.
+provider with `READ=0` as its very first step, before number formatting, the
+database or the block lists, then updates read state and verdict afterwards.
+The system drops its own copy of the SMS once the delivery broadcasts complete,
+and an ANR completes them, so anything slow before the insert risks losing the
+message. Classification runs on its own and is waited for up to
+`CLASSIFY_BUDGET_MS` (3s): loading the model blocks a thread and cannot be
+canceled, and the old `withTimeout(8_000)` around it only returned once the load
+finished. On 2026-10-13, with a debug build on a Galaxy A26, cold-start loads
+took 8-10s: two spam messages were announced as normal ones and one receiver was
+killed for an ANR. A message without a verdict in time is announced as its
+sender is routed now (`ThreadSpamPolicy.decideUnclassified`: a sender in Spam or
+blocked stays silent), and the verdict is recorded when it arrives. If that late
+verdict says a silent message is real, `AppSmsReceiver` announces it then, within
+2 minutes of arrival (`lateAlert`, core:notifications); a notification already
+posted is never changed. Send retries and verdict pruning run after the
+notification.
 
 **Outgoing lifecycle.** A message is inserted as `OUTBOX`, then handed to
 `SmsManager` with a `sentIntent` naming `SmsSentReceiver` (explicit component,
