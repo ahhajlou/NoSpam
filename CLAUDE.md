@@ -190,9 +190,12 @@ which the switch, the receiver and the tests all read, so changing it is a
 one-line change. If its conversation is the one on screen (`AppContainer.visibleThread`,
 set by the thread screen while resumed) there is no notification, only the
 in-app received sound when message sounds are on (the default), as Google
-Messages does. Sounds are Android's own (`SystemMessageSoundPlayer`: default
-notification sound, a system confirmation tone for sent), nothing bundled, and
-silent unless the ringer is in normal mode.
+Messages does. The sent and received sounds are the app's own,
+`res/raw/message_sent.ogg` and `message_received.ogg` in core:notifications
+(`BundledMessageSoundPlayer`, a `SoundPool` at the notification volume), silent
+unless the ringer is in normal mode; Android has no stock "message sent" sound,
+which is why Google Messages ships its own too. Changing one is a file swap
+with `tools/message-sound.sh`: see `docs/SOUNDS.md`.
 
 Messages post on the `messages_v2` channel at HIGH importance, which is what
 makes them pop up on screen. The first channel, `messages`, was DEFAULT, and an
@@ -691,6 +694,7 @@ Standing rules, not a one-time fix list.
 
 - `TODO.md` — open work, and the agreed spam routing model. Read before
   touching `ThreadSpamPolicy`.
+- `docs/SOUNDS.md` — the in-app message sounds, and how to change one.
 - `docs/SIGNING.md` — release key: generating it, configuring it, CI secrets,
   and the safety rules. Read before touching the signing config or publishing
   a build.

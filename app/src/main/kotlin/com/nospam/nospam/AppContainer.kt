@@ -8,7 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import com.nospam.nospam.core.notifications.SystemMessageSoundPlayer
+import com.nospam.nospam.core.notifications.BundledMessageSoundPlayer
 import com.nospam.nospam.core.notifications.MessageSoundPlayer
 import android.content.Context
 import com.nospam.nospam.core.data.BlocklistRepository
@@ -50,7 +50,7 @@ class AppContainer(private val context: Context) {
     val telephony: TelephonyDataSource by lazy { RealTelephonyDataSource(appContext) }
 
     /** In-app message sounds (sent, and received in the conversation on screen). */
-    val messageSounds: MessageSoundPlayer by lazy { SystemMessageSoundPlayer(appContext) }
+    val messageSounds: MessageSoundPlayer by lazy { BundledMessageSoundPlayer(appContext) }
 
     /** Conversations filtered into Spam & blocked since the user last opened it. */
     val newSpamCount: Flow<Int> by lazy {

@@ -438,7 +438,8 @@ None at the moment. Record new ones here with the answer when given.
   absorbed while selecting). New flow `swipe_actions.yaml`. Note for flows: a
   swipe from the screen's left edge is Android's back gesture.
 - 2026-09-24 — P2.10 done, with three user decisions (2026-09-24): Android's own
-  sounds, nothing bundled; no notification for the conversation on screen, an
+  sounds, nothing bundled (superseded 2026-10-14: the app ships its own sounds,
+  see `docs/SOUNDS.md`); no notification for the conversation on screen, an
   in-app sound instead (as Google Messages); message sounds on by default. So,
   deviating from the plan: `SystemMessageSoundPlayer` plays the default
   notification sound for received and a `ToneGenerator` confirmation tone for

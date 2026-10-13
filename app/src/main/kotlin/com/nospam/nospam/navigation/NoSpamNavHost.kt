@@ -495,6 +495,8 @@ fun NoSpamNavHost(
                     val holder = container?.visibleThread
                     // Only clear it if no other conversation took over meanwhile.
                     if (visible) holder?.value = id else holder?.compareAndSet(id, null)
+                    // Loaded now, so the first send or arrival in this conversation is heard.
+                    if (visible) container?.messageSounds?.prepare()
                 },
                 onArchive = { id ->
                     scope.launch { container?.conversationsRepository?.archive(ThreadId(id)) }

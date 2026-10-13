@@ -10,6 +10,12 @@ class FakeMessageSoundPlayer : MessageSoundPlayer {
         private set
     var receivedCount = 0
         private set
+    var prepareCount = 0
+        private set
+
+    override fun prepare() {
+        prepareCount++
+    }
 
     override fun playSent() {
         sentCount++
