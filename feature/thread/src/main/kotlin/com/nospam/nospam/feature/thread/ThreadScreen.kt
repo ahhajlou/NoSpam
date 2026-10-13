@@ -118,6 +118,10 @@ fun ThreadScreen(
     // in-app sound instead of posting a notification.
     LifecycleResumeEffect(threadId) {
         onVisibilityChange(threadId, true)
+        // On every resume, not only on opening: returning to a conversation left
+        // open shows the message that arrived meanwhile, so its notification
+        // goes, as in Google Messages. It used to stay until swiped.
+        clearThreadNotification(context, threadId)
         onPauseOrDispose { onVisibilityChange(threadId, false) }
     }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -653,3 +657,13 @@ internal fun newestDeliveredId(messages: List<Message>): Long? =
         .filter { it.type.isOutgoing && it.deliveryStatus == DeliveryStatus.DELIVERED }
         .maxWithOrNull(compareBy<Message>({ it.date }, { it.id.value }))
         ?.id?.value
+
+/**
+ * Removes the conversation's message notification. The id must match
+ * `NotificationHelper.notificationId` (core:notifications, which this module
+ * does not depend on): the thread id's hashCode. `toInt()` agreed with it only
+ * for ids below 2^31.
+ */
+internal fun clearThreadNotification(context: android.content.Context, threadId: Long) {
+    runCatching { androidx.core.app.NotificationManagerCompat.from(context).cancel(threadId.hashCode()) }
+}

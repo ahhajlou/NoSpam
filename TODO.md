@@ -404,13 +404,16 @@ Not verified on the Galaxy A26 (Android 16 QPR2): the refactored code is in its
 framework, but the flag is missing from its `aconfig_flags.pb`, so whether it is
 on there is unknown. The fix is correct either way.
 
-## A conversation already open does not clear its notification (found 2026-10-13) — verified, not yet fixed
+## A conversation already open does not clear its notification (found 2026-10-13) — **fixed 2026-10-13 (`fix/open-conversation-clears-notification`)**
 
 `ThreadScreen` cancels the conversation's notification only when it is first
 composed (`LaunchedEffect` on the thread id). If a message arrives while that
 conversation is open in the background, returning to the app shows the
 conversation and the notification stays. Reproduced on the API 37 emulator,
-with or without a reply. Check what Google Messages does before fixing.
+with or without a reply. Google Messages clears it when the user returns
+(checked on the same emulator), and so does NoSpam now: `ThreadScreen` clears
+the notification on every resume, not only on opening. The message itself was
+already marked read on return; only the notification stayed.
 
 ## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
 
