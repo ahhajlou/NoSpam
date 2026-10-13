@@ -65,4 +65,11 @@ class TelephonyMapperTest {
         )
         assertNull(HeadlessSmsSendService.normalizeSubscriptionId(false, 3))
     }
+
+    @Test
+    fun `a reply's thread id comes from the notification only when it is a real id`() {
+        assertEquals(42L, HeadlessSmsSendService.threadIdExtra(42L))
+        assertNull(HeadlessSmsSendService.threadIdExtra(-1L))
+        assertNull(HeadlessSmsSendService.threadIdExtra(0L))
+    }
 }

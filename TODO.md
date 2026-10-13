@@ -385,16 +385,32 @@ The storage suites (nine `Sqlite*Dao` plus `SqliteNoSpamOpenHelper`, 44/44) and
 `core:telephony`'s were never affected and stay on the device — see CLAUDE.md §9
 for when a new instrumented test is the right call.
 
-## A replied-to notification stays until opened (found 2026-10-08) — verified, not yet fixed
+## A replied-to notification stays in the shade (found 2026-10-08) — **fixed 2026-10-13 (`fix/reply-notification-stays`)**
 
-After an inline reply from a message notification the reply is sent, but the
-notification stays in the shade, flagged `LIFETIME_EXTENDED_BY_DIRECT_REPLY`,
-until it is swiped away or the conversation is opened. Reproduced on the API 37
-emulator on `main` (`1d2caeb`) and on `fix/notification-contact-name`, so it
-predates that branch. `HeadlessSmsSendService.cancelNotificationFor` calls
-`cancel()`, which Android 15+ ignores for a notification extended by a direct
-reply; the app has to post an update (or cancel it in a way the platform accepts)
-instead. Check what Google Messages does after a reply before choosing.
+After an inline reply the reply was sent but the notification stayed until it
+was swiped away or tapped. Opening the conversation from the inbox did not clear
+it either (the 2026-10-08 note said it did; re-checked 2026-10-13, it did not).
+Cause, from the AOSP source and the API 37 emulator: with
+`android.app.lifetime_extension_refactor` (Android 15+) a direct reply marks the
+notification `FLAG_LIFETIME_EXTENDED_BY_DIRECT_REPLY`, and every `cancel()` from
+the app is refused (`notification_cancel_prevented` in the event log) until the
+app posts the notification again. Google Messages reposts it silently with the
+reply under "You" about 0.1s after the reply, keeps it after the shade closes,
+and clears it when the conversation is opened. NoSpam now does the same
+(`NotificationHelper.appendReply`, installed through `DirectReplyRegistry`).
+A new message after a reply always alerted normally; only removal was broken.
+
+Not verified on the Galaxy A26 (Android 16 QPR2): the refactored code is in its
+framework, but the flag is missing from its `aconfig_flags.pb`, so whether it is
+on there is unknown. The fix is correct either way.
+
+## A conversation already open does not clear its notification (found 2026-10-13) — verified, not yet fixed
+
+`ThreadScreen` cancels the conversation's notification only when it is first
+composed (`LaunchedEffect` on the thread id). If a message arrives while that
+conversation is open in the background, returning to the app shows the
+conversation and the notification stays. Reproduced on the API 37 emulator,
+with or without a reply. Check what Google Messages does before fixing.
 
 ## Removed in the cleanup pass (2026-09-15) — implement properly if wanted
 

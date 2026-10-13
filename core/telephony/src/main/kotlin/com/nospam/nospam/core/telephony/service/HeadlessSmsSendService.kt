@@ -12,6 +12,7 @@ import androidx.core.app.RemoteInput
 import com.nospam.nospam.core.model.TelephonyConstants
 import com.nospam.nospam.core.telephony.TelephonyMapper
 import com.nospam.nospam.core.model.MessageType
+import com.nospam.nospam.core.telephony.DirectReplyRegistry
 import com.nospam.nospam.core.telephony.SendOptionsRegistry
 import com.nospam.nospam.core.telephony.SmsSender
 
@@ -51,7 +52,7 @@ class HeadlessSmsSendService : Service() {
         }.getOrNull()
         try {
             SmsSender.send(this, address, text, subscriptionId, row, SendOptionsRegistry.provider.forSubscription(subscriptionId))
-            cancelNotificationFor(address)
+            threadIdFor(intent, address)?.let { DirectReplyRegistry.listener.onReplySent(this, it, text) }
         } catch (e: Exception) {
             Log.e(TAG, "Direct reply failed", e)
             if (row != null) SmsSender.setType(this, row, MessageType.FAILED)
@@ -59,14 +60,13 @@ class HeadlessSmsSendService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun cancelNotificationFor(address: String) {
-        val manager = getSystemService(android.app.NotificationManager::class.java) ?: return
-        // Thread id is the notification id used by AppSmsReceiver.
-        runCatching {
-            val threadId = Telephony.Threads.getOrCreateThreadId(this, address)
-            manager.cancel(threadId.toInt())
-        }
-    }
+    /**
+     * The conversation the reply belongs to: the notification names it, and
+     * the provider is asked only when it does not (a reply from another app).
+     */
+    private fun threadIdFor(intent: Intent, address: String): Long? =
+        threadIdExtra(intent.getLongExtra(TelephonyConstants.EXTRA_THREAD_ID, -1L))
+            ?: runCatching { Telephony.Threads.getOrCreateThreadId(this, address) }.getOrNull()
 
     @android.annotation.SuppressLint("MissingPermission")
     private fun validateSubscriptionId(subId: Int?): Int? {
@@ -92,6 +92,9 @@ class HeadlessSmsSendService : Service() {
             val text = remoteInputText ?: extraText ?: smsBody
             return text?.takeIf { it.isNotBlank() }
         }
+
+        /** A thread id from an extra, or null when it is missing or not a real id. */
+        fun threadIdExtra(raw: Long): Long? = raw.takeIf { it > 0 }
 
         fun normalizeSubscriptionId(hasExtra: Boolean, raw: Int): Int? =
             if (hasExtra && raw != SubscriptionManager.INVALID_SUBSCRIPTION_ID) raw else null
