@@ -136,10 +136,6 @@ class ThreadViewModel(
         contactPhotoUri: String? = null,
     ) {
         if (address != null) pendingAddress = address
-        // Cancel notification for this thread when user opens it (no core:notifications dep)
-        context?.let { ctx ->
-            runCatching { androidx.core.app.NotificationManagerCompat.from(ctx).cancel(id.toInt()) }
-        }
         // A forwarded message's body wins over any previously-saved draft for
         // this thread; skip the saved-draft load so it doesn't get overwritten.
         val drafts = this.drafts
