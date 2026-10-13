@@ -36,7 +36,7 @@ class SimNumberValidationTest {
         assertTrue(isValidSimNumber("+98 912 345 6789"))
     }
 
-    @Test fun `parenthesised area code with a hyphen is valid`() {
+    @Test fun `parenthesized area code with a hyphen is valid`() {
         assertTrue(isValidSimNumber("(555) 123-4567"))
     }
 
