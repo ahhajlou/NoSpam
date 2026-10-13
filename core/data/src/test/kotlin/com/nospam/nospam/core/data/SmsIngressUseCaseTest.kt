@@ -112,6 +112,15 @@ class SmsIngressUseCaseTest {
         assertEquals(emptyList<Pair<Long, Boolean>>(), fake.updatedMessageReads)
         assertNull(db.senderStateDao.getByAddress("+98912"))
         assertNull(db.messageVerdictDao.getByMessageId(1L))
+        // Returned for the notification, so it shows the name, not the number.
+        assertEquals("Bank Mellat", result.contact?.displayName)
+    }
+
+    @Test fun `a stranger's message carries no contact`() = runTest {
+        val result = SmsIngressUseCase(telephony(), FakeSpamClassifier.alwaysHam(), NoSpamDatabase.inMemory())
+            .handle(RawMessage("+98912", "hello", 12345L))
+
+        assertNull(result.contact)
     }
 
     @Test fun `classifier failure still persists message`() = runTest {

@@ -128,7 +128,7 @@ private const val MIN_MATCH = 7
 // Container/on-container pairs at M3 container tones (90/10 light, 30/90 dark).
 // Deliberately independent of the color scheme: avatars identify senders, so
 // they must not collapse to one hue under dynamic color.
-private val AvatarPaletteLight = listOf(
+internal val AvatarPaletteLight = listOf(
     Color(0xFFD8E2FF) to Color(0xFF001A41), // blue
     Color(0xFFC4EED0) to Color(0xFF00210E), // green
     Color(0xFFFFDBCB) to Color(0xFF341100), // orange
@@ -136,7 +136,7 @@ private val AvatarPaletteLight = listOf(
     Color(0xFFB2EBF2) to Color(0xFF001F24), // cyan
     Color(0xFFFFD9E2) to Color(0xFF3E001D), // pink
 )
-private val AvatarPaletteDark = listOf(
+internal val AvatarPaletteDark = listOf(
     Color(0xFF004493) to Color(0xFFD8E2FF),
     Color(0xFF0F5223) to Color(0xFFC4EED0),
     Color(0xFF773200) to Color(0xFFFFDBCB),
