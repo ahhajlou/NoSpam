@@ -73,6 +73,11 @@ domain types unit-testable without Robolectric.
 6. A new module states its tier. A debug-only module is wired with
    `debugImplementation` so its classes are absent from release, not merely
    unreachable.
+7. Write in American English everywhere: identifiers, comments, KDoc, docs,
+   test names, commit messages and PR text. That means behavior, color,
+   canceled, labeled, center, license (noun), gray, and the `-ize` forms
+   (normalize, initialize, serialize). Do not mix in British spellings, and do
+   not rename an identifier, resource or stored key just to change its spelling.
 
 ## 4. Data layer
 
