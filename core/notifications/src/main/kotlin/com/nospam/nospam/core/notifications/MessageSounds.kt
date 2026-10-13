@@ -115,3 +115,17 @@ fun incomingAlert(
     soundsEnabled -> IncomingAlert.IN_APP_SOUND
     else -> IncomingAlert.NONE
 }
+
+/** How long after a message arrives a late verdict may still announce it. */
+const val LATE_ALERT_WINDOW_MS = 2 * 60_000L
+
+/**
+ * What to do when a message's verdict arrives after the message was announced
+ * ([atArrival]), now that the verdict asks for [late]. It announces only a
+ * message that announced nothing on arrival, which is a message from a sender
+ * in Spam that turned out to be real, and only within [LATE_ALERT_WINDOW_MS]
+ * of its arrival ([elapsedMillis]): a heads-up for a message minutes old is
+ * noise. A notification already posted is never changed.
+ */
+fun lateAlert(atArrival: IncomingAlert, late: IncomingAlert, elapsedMillis: Long): IncomingAlert =
+    if (atArrival == IncomingAlert.NONE && elapsedMillis <= LATE_ALERT_WINDOW_MS) late else IncomingAlert.NONE

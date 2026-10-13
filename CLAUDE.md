@@ -126,8 +126,11 @@ finished. On 2026-10-13, with a debug build on a Galaxy A26, cold-start loads
 took 8-10s: two spam messages were announced as normal ones and one receiver was
 killed for an ANR. A message without a verdict in time is announced as its
 sender is routed now (`ThreadSpamPolicy.decideUnclassified`: a sender in Spam or
-blocked stays silent), and the verdict is recorded when it arrives. Send retries
-and verdict pruning run after the notification.
+blocked stays silent), and the verdict is recorded when it arrives. If that late
+verdict says a silent message is real, `AppSmsReceiver` announces it then, within
+2 minutes of arrival (`lateAlert`, core:notifications); a notification already
+posted is never changed. Send retries and verdict pruning run after the
+notification.
 
 **Outgoing lifecycle.** A message is inserted as `OUTBOX`, then handed to
 `SmsManager` with a `sentIntent` naming `SmsSentReceiver` (explicit component,

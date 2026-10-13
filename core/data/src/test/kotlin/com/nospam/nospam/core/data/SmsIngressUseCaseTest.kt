@@ -201,10 +201,33 @@ class SmsIngressUseCaseTest {
 
         assertEquals(NotificationDecision.NONE, result.notificationDecision)
         load.release.countDown()
-        awaitReal { db.messageVerdictDao.getByMessageId(1L) != null }
+        awaitReal { result.lateDecision!!.isCompleted }
         assertEquals(12, db.senderStateDao.getByAddress("+98912")!!.spamCount)
         // In Spam once the verdict lands, so marked read like any message there.
         assertEquals(listOf(1L to true), fake.updatedMessageReads)
+        // Still spam: nothing to announce late.
+        assertEquals(NotificationDecision.NONE, result.lateDecision!!.await())
+    }
+
+    @Test fun `a real message from a sender in Spam is announced once its late verdict lands`() = runTest {
+        val db = NoSpamDatabase.inMemory()
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 11))
+        val load = BlockingLoad(FakeSpamClassifier.alwaysHam(-2.0))
+
+        val result = SmsIngressUseCase(telephony(), load.classifier, db).handle(RawMessage("+98912", "your code is 1234", 12345L))
+
+        assertEquals(NotificationDecision.NONE, result.notificationDecision)
+        load.release.countDown()
+        awaitReal { result.lateDecision!!.isCompleted }
+        assertEquals(NotificationDecision.NORMAL, result.lateDecision!!.await())
+        assertEquals(ThreadSpamState.MIXED, db.senderStateDao.getByAddress("+98912")!!.state)
+    }
+
+    @Test fun `a verdict in time leaves nothing late`() = runTest {
+        val result = SmsIngressUseCase(telephony(), FakeSpamClassifier.alwaysHam(), NoSpamDatabase.inMemory())
+            .handle(RawMessage("+98912", "hello", 1L))
+
+        assertNull(result.lateDecision)
     }
 
     @Test fun `a failed classifier announces as the sender is routed`() = runTest {

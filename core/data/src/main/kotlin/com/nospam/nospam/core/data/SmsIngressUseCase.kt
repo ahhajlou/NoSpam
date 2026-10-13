@@ -25,7 +25,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -64,6 +63,12 @@ class SmsIngressUseCase(
          * (not looked up) or when contacts could not be read.
          */
         val contact: Participant? = null,
+        /**
+         * Set when the verdict missed the budget: completes with the decision the
+         * late verdict produced once it is recorded, or null if the classifier
+         * failed. The message was announced by [notificationDecision] meanwhile.
+         */
+        val lateDecision: Deferred<NotificationDecision?>? = null,
     )
 
     suspend fun handle(message: RawMessage): Result {
@@ -126,6 +131,7 @@ class SmsIngressUseCase(
 
         var notificationDecision: NotificationDecision
         var newState: ThreadSpamState? = null
+        var lateDecision: Deferred<NotificationDecision?>? = null
         if (verdict != null) {
             val policyOut = record(verdict, messageId, threadId, normalized, isMuted, message.timestamp)
             newState = policyOut.newState.state
@@ -133,11 +139,11 @@ class SmsIngressUseCase(
         } else {
             notificationDecision = if (isContact) NotificationDecision.NORMAL else unclassifiedDecision(normalized)
             if (classification != null && !classification.isCompleted) {
-                // Too slow, not failed: record the verdict when it lands. Nothing is
-                // announced again; the notification was decided above.
-                detachedScope().launch {
-                    val late = runCatching { classification.await() }.getOrNull() ?: return@launch
-                    runCatching { record(late, messageId, threadId, normalized, isMuted, message.timestamp) }
+                // Too slow, not failed: record the verdict when it lands, and hand its
+                // decision to the caller, which may announce a message kept silent here.
+                lateDecision = detachedScope().async {
+                    val late = runCatching { classification.await() }.getOrNull() ?: return@async null
+                    runCatching { record(late, messageId, threadId, normalized, isMuted, message.timestamp).notification }.getOrNull()
                 }
             }
         }
@@ -156,6 +162,7 @@ class SmsIngressUseCase(
             notificationDecision = notificationDecision,
             senderState = newState,
             contact = contact,
+            lateDecision = lateDecision,
         )
     }
 
