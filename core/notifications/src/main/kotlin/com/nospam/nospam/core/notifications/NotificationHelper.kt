@@ -2,17 +2,20 @@
 
 package com.nospam.nospam.core.notifications
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.app.TaskStackBuilder
+import androidx.core.content.ContextCompat
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -128,6 +131,46 @@ object NotificationHelper {
 
     fun cancelNotification(context: Context, threadId: Long) {
         androidx.core.app.NotificationManagerCompat.from(context).cancel(notificationId(threadId))
+    }
+
+    /**
+     * Reposts a conversation's notification with the user's inline [reply]
+     * added under "You", silently, as Google Messages does. Android 15+ marks a
+     * notification the user replied to and ignores cancel() from the app until
+     * the app posts it again, so canceling left it in the shade, and opening
+     * the conversation could not clear it either. Posting it again lifts that,
+     * after which every cancel works. Returns false, posting nothing, when the
+     * notification is gone (swiped away) or carries no conversation.
+     */
+    fun appendReply(
+        context: Context,
+        threadId: Long,
+        reply: String,
+        timestamp: Long = System.currentTimeMillis(),
+    ): Boolean {
+        // Without the permission there is no notification to update.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        val id = notificationId(threadId)
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        val current = runCatching { manager.activeNotifications }.getOrNull()
+            ?.firstOrNull { it.id == id && it.tag == null }?.notification ?: return false
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(current)
+            ?: return false
+        // A null person is the style's user, "You".
+        style.addMessage(reply, timestamp, null as Person?)
+        val updated = NotificationCompat.Builder(context, current)
+            .setStyle(style)
+            .setWhen(timestamp)
+            // It already alerted for the message; a reply must not alert again.
+            .setOnlyAlertOnce(true)
+            .build()
+        androidx.core.app.NotificationManagerCompat.from(context).notify(id, updated)
+        return true
     }
 
     /**

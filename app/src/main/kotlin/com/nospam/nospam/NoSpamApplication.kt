@@ -10,6 +10,8 @@ import androidx.appcompat.app.AppCompatDelegate
 import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.model.ThemeSetting
 import com.nospam.nospam.core.notifications.NotificationHelper
+import com.nospam.nospam.core.telephony.DirectReplyListener
+import com.nospam.nospam.core.telephony.DirectReplyRegistry
 import com.nospam.nospam.core.telephony.SendOptions
 import com.nospam.nospam.core.telephony.SendOptionsProvider
 import com.nospam.nospam.core.telephony.SendOptionsRegistry
@@ -70,6 +72,7 @@ class NoSpamApplication : Application() {
         container = AppContainer(this)
         applyAppearance()
         installSendOptions()
+        installDirectReply()
         NotificationHelper.createChannels(this)
         // Progress notification for the one-time history scan (silently no-ops
         // when notifications are denied on API 33+).
@@ -173,6 +176,17 @@ class NoSpamApplication : Application() {
             .stateIn(appScope, SharingStarted.Eagerly, emptySet())
         SendOptionsRegistry.provider = SendOptionsProvider { subscriptionId ->
             SendOptions(deliveryReport = subscriptionId != null && subscriptionId in reportSims.value)
+        }
+    }
+
+    /**
+     * A notification the user replied to is posted again with the reply, never
+     * canceled: Android 15+ ignores the cancel (see [NotificationHelper.appendReply]).
+     */
+    private fun installDirectReply() {
+        DirectReplyRegistry.listener = DirectReplyListener { context, threadId, text ->
+            runCatching { NotificationHelper.appendReply(context, threadId, text) }
+                .onFailure { Log.w("NoSpamApplication", "Could not update the replied notification", it) }
         }
     }
 

@@ -216,6 +216,15 @@ always passed. MessagingStyle's user is a separate "You" person: Android files
 an inline reply under it, and with the sender there a reply read as the
 contact's.
 
+**After an inline reply the notification is posted again, never canceled**
+(`NotificationHelper.appendReply`): silently, with the reply added under "You",
+as Google Messages does. On Android 15+ a direct reply marks the notification
+and every `cancel()` from the app is refused until the app posts it again, so
+the old cancel left it in the shade, and opening the conversation could not
+clear it either. `HeadlessSmsSendService` is in core:telephony and cannot reach
+core:notifications, so `:app` installs the repost in `DirectReplyRegistry` at
+startup, as it does `SendOptionsRegistry`.
+
 **Multi-select actions are one call with the whole selection**, never a loop
 of single calls from the UI. Each flag table (archived, pinned, starred, muted)
 takes the selection in one transaction and publishes once, so the inbox changes
