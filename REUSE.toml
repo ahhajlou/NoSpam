@@ -11,3 +11,12 @@ path = ["gradlew", "gradlew.bat", "gradle/wrapper/**"]
 precedence = "override"
 SPDX-FileCopyrightText = "Gradle Inc. and contributors"
 SPDX-License-Identifier = "Apache-2.0"
+
+# In-app message sounds (docs/SOUNDS.md). Kenney "Interface Sounds" 1.0,
+# https://kenney.nl/assets/interface-sounds: message_sent is drop_004,
+# message_received is glass_001, both leveled by tools/message-sound.sh.
+[[annotations]]
+path = ["core/notifications/src/main/res/raw/message_sent.ogg", "core/notifications/src/main/res/raw/message_received.ogg"]
+precedence = "override"
+SPDX-FileCopyrightText = "Kenney (www.kenney.nl)"
+SPDX-License-Identifier = "CC0-1.0"

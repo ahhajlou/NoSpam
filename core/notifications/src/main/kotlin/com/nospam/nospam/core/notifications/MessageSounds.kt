@@ -5,15 +5,21 @@ package com.nospam.nospam.core.notifications
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioManager
-import android.media.RingtoneManager
-import android.media.ToneGenerator
-import android.os.Handler
-import android.os.Looper
+import android.media.SoundPool
+import android.os.SystemClock
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.nospam.nospam.core.model.NotificationDecision
+import java.util.concurrent.Executor
 
 /** The in-app message sounds. Never throws; plays nothing when the phone is silenced. */
 interface MessageSoundPlayer {
+    /**
+     * Loads the sounds so the first one plays on time; called when a conversation
+     * opens. Only the first call does anything, and it does not block.
+     */
+    fun prepare()
+
     /** A message the user sent was handed to the radio. */
     fun playSent()
 
@@ -22,52 +28,103 @@ interface MessageSoundPlayer {
 }
 
 /**
- * [MessageSoundPlayer] from Android's own sounds, so nothing is bundled:
- * received is the phone's default notification sound; sent is a short system
- * confirmation tone, because Android has no stock "message sent" sound and its
- * click sound follows the separate "touch sounds" setting, which many phones
- * have off. Both stay quiet unless the ringer is in normal mode.
+ * [MessageSoundPlayer] for the app's own sounds, `res/raw/message_sent.ogg` and
+ * `res/raw/message_received.ogg`. To change a sound, replace its file with
+ * `tools/message-sound.sh` (docs/SOUNDS.md); nothing here names a particular sound.
+ *
+ * Android has no stock "message sent" sound, so messaging apps ship their own,
+ * as Google Messages does. They play through a [SoundPool], which decodes them
+ * once so they start without delay, at the notification volume, and only when
+ * the ringer is in normal mode. A burst of incoming messages plays one sound,
+ * not one each ([receivedSoundDue]).
  */
-class SystemMessageSoundPlayer(context: Context) : MessageSoundPlayer {
+class BundledMessageSoundPlayer(
+    context: Context,
+    private val loader: Executor = Executor { Thread(it, TAG).start() },
+    private val now: () -> Long = SystemClock::elapsedRealtime,
+) : MessageSoundPlayer {
     private val appContext = context.applicationContext
     private val audio = appContext.getSystemService(AudioManager::class.java)
-    private val main = Handler(Looper.getMainLooper())
 
-    private fun audible(): Boolean = audio?.ringerMode == AudioManager.RINGER_MODE_NORMAL
+    @VisibleForTesting
+    @Volatile
+    internal var pool: SoundPool? = null
+    @Volatile private var sentId = 0
+    @Volatile private var receivedId = 0
+    private var started = false
+    private var lastReceivedAt: Long? = null
 
-    override fun playSent() {
-        if (!audible()) return
-        try {
-            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, SENT_VOLUME)
-            tone.startTone(ToneGenerator.TONE_PROP_ACK, SENT_DURATION_MS)
-            main.postDelayed({ tone.release() }, SENT_DURATION_MS + RELEASE_MARGIN_MS)
-        } catch (e: Exception) {
-            Log.w(TAG, "Sent sound failed", e)
+    override fun prepare() {
+        synchronized(this) {
+            if (started) return
+            started = true
+        }
+        loader.execute {
+            try {
+                val sounds = SoundPool.Builder()
+                    .setMaxStreams(MAX_STREAMS)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .build()
+                sentId = sounds.load(appContext, R.raw.message_sent, 1)
+                receivedId = sounds.load(appContext, R.raw.message_received, 1)
+                pool = sounds
+            } catch (e: Exception) {
+                Log.w(TAG, "Loading message sounds failed", e)
+            }
         }
     }
 
+    override fun playSent() = play(sentId, SENT_VOLUME)
+
     override fun playReceived() {
-        if (!audible()) return
+        synchronized(this) {
+            val time = now()
+            if (!receivedSoundDue(time, lastReceivedAt)) return
+            lastReceivedAt = time
+        }
+        play(receivedId, RECEIVED_VOLUME)
+    }
+
+    private fun play(soundId: Int, volume: Float) {
+        // Not loaded yet (the first sound right after start): skip it rather than wait.
+        val sounds = pool ?: return prepare()
+        if (soundId == 0 || audio?.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
         try {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) ?: return
-            val ringtone = RingtoneManager.getRingtone(appContext, uri) ?: return
-            ringtone.audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            ringtone.play()
+            sounds.play(soundId, volume, volume, 1, 0, 1f)
         } catch (e: Exception) {
-            Log.w(TAG, "Received sound failed", e)
+            Log.w(TAG, "Message sound failed", e)
         }
     }
 
     private companion object {
         const val TAG = "MessageSounds"
-        const val SENT_VOLUME = 60
-        const val SENT_DURATION_MS = 150
-        const val RELEASE_MARGIN_MS = 100L
+        const val MAX_STREAMS = 2
+
+        /**
+         * Playback volume of each sound, 0 to 1, on top of the notification volume.
+         * The files are already leveled by tools/message-sound.sh, so these stay at
+         * 1 unless one sound should sit quieter than the other.
+         */
+        const val SENT_VOLUME = 1f
+        const val RECEIVED_VOLUME = 1f
     }
 }
+
+/** The shortest gap between two received sounds; closer messages play only the first. */
+const val RECEIVED_SOUND_GAP_MS = 2_000L
+
+/**
+ * Whether a message received at [now] plays its sound, given when the last
+ * received sound played ([lastPlayedAt], null if none). Times are from one
+ * monotonic clock.
+ */
+fun receivedSoundDue(now: Long, lastPlayedAt: Long?): Boolean =
+    lastPlayedAt == null || now - lastPlayedAt >= RECEIVED_SOUND_GAP_MS
 
 /** What to do about an incoming message. */
 enum class IncomingAlert {
