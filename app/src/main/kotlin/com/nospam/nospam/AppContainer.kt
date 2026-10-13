@@ -157,6 +157,19 @@ class AppContainer(private val context: Context) {
     }
 
     /**
+     * Gives a verdict to recent messages ingress left without one
+     * ([SmsIngressUseCase.classifyMissed]), in the background. Skipped while the
+     * history scan runs: it covers the same messages, and both would count them.
+     */
+    fun classifyMissedMessages() {
+        scope.launch {
+            if (spamBackfill.status.value is com.nospam.nospam.core.data.BackfillStatus.Running) return@launch
+            runCatching { smsIngress.classifyMissed() }
+                .onFailure { android.util.Log.w("AppContainer", "Classifying missed messages failed", it) }
+        }
+    }
+
+    /**
      * Onboarding is done: every required permission and the SMS role are held.
      * Runs here rather than in the onboarding screen's coroutine scope, which is
      * canceled as the screen leaves, and could stop the scan from starting.

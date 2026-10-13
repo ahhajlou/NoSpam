@@ -93,6 +93,8 @@ class AppSmsReceiver : BroadcastReceiver() {
             } finally {
                 pending.finish()
             }
+            // Earlier messages this process may have left without a verdict.
+            app?.container?.classifyMissedMessages()
             // The verdict missed the budget: wait for it outside the broadcast, and
             // announce a message kept silent that turned out to be real. Best effort:
             // the process may be frozen or killed before it lands.

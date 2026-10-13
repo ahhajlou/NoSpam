@@ -43,3 +43,6 @@ skills-lock.json
 # Release signing: passwords for the key, never committed. See
 # keystore.properties.template.
 keystore.properties
+
+# JVM crash dumps from test runs
+hs_err_pid*.log
