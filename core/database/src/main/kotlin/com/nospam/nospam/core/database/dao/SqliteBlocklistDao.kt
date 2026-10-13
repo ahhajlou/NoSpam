@@ -96,7 +96,7 @@ class SqliteBlocklistDao(
             put("reason", entry.reason)
             put("createdAt", entry.createdAt)
         }
-        // REPLACE on conflict to mimic in-memory behaviour (unique address)
+        // REPLACE on conflict to mimic in-memory behavior (unique address)
         val id = db.insertWithOnConflict("blocklist", null, values, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE)
         // insertWithOnConflict returns -1 when the row was not written; leave the
         // snapshot alone in that case rather than publishing a row that is not there.

@@ -177,7 +177,7 @@ class InboxSwipeRobolectricTest {
         assertEquals(listOf(listOf(2L)), cb.deleted)
     }
 
-    @Test fun `cancelling a delete swipe deletes nothing and keeps the row`() {
+    @Test fun `canceling a delete swipe deletes nothing and keeps the row`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(2, "Delete Contact")))
         val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
         val vm = ConversationsViewModel(

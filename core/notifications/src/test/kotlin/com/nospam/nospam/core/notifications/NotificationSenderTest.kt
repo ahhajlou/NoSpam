@@ -81,7 +81,7 @@ class NotificationSenderTest {
         assertNotNull(ReflectionHelpers.callInstanceMethod<Icon?>(stored, "getIcon"))
     }
 
-    @Test fun `the conversation shortcut is labelled with the contact's name`() {
+    @Test fun `the conversation shortcut is labeled with the contact's name`() {
         build(senderName = "Sara", threadId = 12L)
         assertEquals("Sara", shortcut(12L).shortLabel)
     }

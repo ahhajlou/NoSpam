@@ -41,7 +41,7 @@ interface PreferencesDataSource {
     /**
      * Applies [transform] to a copy of the file's contents and stores the
      * result: a key removed from the map is removed from the file. Edits to one
-     * file are serialised, so a read-then-write inside [transform] is atomic.
+     * file are serialized, so a read-then-write inside [transform] is atomic.
      *
      * @return the contents after the edit.
      * @throws IllegalArgumentException if [transform] stores an unsupported type.

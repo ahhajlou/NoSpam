@@ -16,7 +16,7 @@ import org.junit.Test
 /**
  * The `Sqlite*Dao` classes need `android.database` and cannot run off-device, so
  * the delta each one applies to its observable snapshot lives in `FlowDeltas` and
- * is covered here instead. Every case below states the SQL behaviour it pins.
+ * is covered here instead. Every case below states the SQL behavior it pins.
  */
 class FlowDeltasTest {
 
@@ -97,7 +97,7 @@ class FlowDeltasTest {
         val rows = listOf(
             verdict(1, isSpam = false, createdAt = 500),                    // old auto ham -> pruned
             verdict(2, isSpam = true, createdAt = 500),                     // old spam -> kept, it is the evidence
-            verdict(3, isSpam = false, createdAt = 500, userLabel = false), // user-labelled -> kept
+            verdict(3, isSpam = false, createdAt = 500, userLabel = false), // user-labeled -> kept
             verdict(4, isSpam = false, createdAt = 5_000),                  // recent ham -> kept
         )
 

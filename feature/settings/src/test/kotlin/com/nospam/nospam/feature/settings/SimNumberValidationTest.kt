@@ -36,7 +36,7 @@ class SimNumberValidationTest {
         assertTrue(isValidSimNumber("+98 912 345 6789"))
     }
 
-    @Test fun `parenthesised area code with a hyphen is valid`() {
+    @Test fun `parenthesized area code with a hyphen is valid`() {
         assertTrue(isValidSimNumber("(555) 123-4567"))
     }
 
@@ -47,7 +47,7 @@ class SimNumberValidationTest {
     @Test fun `a lone plus sign is invalid`() {
         // Not blank, and every character IS one of the allowed characters,
         // but this pins down that "not blank" alone is not the whole rule --
-        // included as a boundary case, not asserting a required behaviour
+        // included as a boundary case, not asserting a required behavior
         // beyond what the spec states (allowed characters, non-blank).
         assertTrue(isValidSimNumber("+"))
     }

@@ -17,7 +17,7 @@ A full replacement SMS/MMS messenger for Android.
 - On-device spam classification. No network, no server round-trip.
 - Kotlin, Jetpack Compose, Material 3.
 - English first, built for more languages, with full RTL support. Persian is the
-  first RTL target and the classifier ships Persian normalisation data.
+  first RTL target and the classifier ships Persian normalization data.
 
 ## 2. Modules
 
@@ -89,7 +89,7 @@ starred/pinned/muted/archived flags, and model metadata. Persistent
 `*Dao` interfaces. `NoSpamDatabase.persistent(context)` ships;
 `inMemory()` is test-only.
 
-DAOs never query in `<init>`. They expose a `MutableStateFlow` initialised
+DAOs never query in `<init>`. They expose a `MutableStateFlow` initialized
 lazily via `onStart { withContext(IO) { … } }` behind an `AtomicBoolean`, so
 building the DI container does not touch disk on the main thread.
 
@@ -126,7 +126,7 @@ paths (`RealTelephonyDataSource`, `HeadlessSmsSendService`) go through
 `SmsSender`. When this app is not the default SMS app the `OUTBOX` insert fails
 and the send proceeds without a row (the system stores that message itself).
 
-**Failed sends retry by themselves** (`SendRetry`, `SendRetryPolicy`, modelled on
+**Failed sends retry by themselves** (`SendRetry`, `SendRetryPolicy`, modeled on
 AOSP Messaging). "No service" and "radio off" move the row to the provider's
 `QUEUED` type ("Waiting for signal…") and it is resent after 5 s, doubling,
 until 20 minutes after the first failure, then `FAILED` for a manual retry,
@@ -200,7 +200,7 @@ because the provider recycles thread ids) and keeps `sender_state`. Block and
 unblock still go sender by sender inside the call: Android's own block list has
 no bulk form.
 
-**Address normalisation is the join key everywhere** (`PhoneNumberNormalizer`).
+**Address normalization is the join key everywhere** (`PhoneNumberNormalizer`).
 A number is read with libphonenumber (a dependency of `core:telephony`) in the
 SIM's country and written as E.164 **without** requiring it to be valid or of
 possible length; sender IDs (any letter) are the trimmed upper-cased text, and
@@ -235,7 +235,7 @@ in `TODO.md` under "Spam routing — agreed model". Read that before touching it
   `ThreadSpamPolicy.deriveState(spamCount, hamCount, hasReplied)`: no spam is
   CLEAN; spam from a sender that has sent ham or been replied to is MIXED; one
   spam message and nothing else is SUSPECTED (probation, in the inbox,
-  labelled, unread); two or more and nothing else is SPAM. Every path that
+     labeled, unread); two or more and nothing else is SPAM. Every path that
   rebuilds a state (ingress, history scan, a per-message correction, undoing
   "Not spam", a reply) goes through it, so the outcome does not depend on
   arrival order and ham always brings a sender back. The old ratio rule
@@ -264,7 +264,7 @@ in `TODO.md` under "Spam routing — agreed model". Read that before touching it
   keeps the sender's counts.
 
 What survives from before: two levels, immutable per-message `MessageVerdict`
-evidence plus a derived per-sender `SenderState`; keying on normalised address
+evidence plus a derived per-sender `SenderState`; keying on normalized address
 rather than `threadId`, because provider thread ids are recycled.
 
 ## 6. Default-SMS-app plumbing
@@ -394,7 +394,7 @@ uppercase. Lowercase silently fails with "Unknown role".
 - Anything with digits that the user reads as one unit — the SMS part counter,
   a SIM's number — goes through `isolateLtr` for the same reason.
 - Gregorian versus Jalali dates is still undecided in fact: `DateFormatter`
-  comments mention a flag that does not exist, and the behaviour is Gregorian
+  comments mention a flag that does not exist, and the behavior is Gregorian
   always. That is a silent default, which the i18n notes explicitly wanted to
   avoid.
 
@@ -511,14 +511,14 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 | Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, all run against a real `ContentResolver` (2026-09-24). Tests that write the provider take the SMS role through `SmsRoleRule` and two stub components in the test manifest, and hand it back (see `docs/TESTING.md` §2) |
 | End-to-end | `.maestro/flows` | 18 flows; 11 run by default (debug, destructive and manual-only tags are skipped), all 11 passing on 2026-09-24 |
 
-Tests are written against behaviour, not implementation. The shared fakes in
+Tests are written against behavior, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
 Turbine for Flow assertions. Coverage gate is a ratchet in the root
 `build.gradle.kts`; raise it, never lower it.
 
 **Compose UI tests run on the JVM through Robolectric, not on a device.** As of
 2026-09-20 there is no `androidTest` source set in any Compose module: the
-instrumented copies asserted the same behaviour as their JVM counterparts and
+instrumented copies asserted the same behavior as their JVM counterparts and
 were folded into them, and those modules' `androidTest` dependencies went with
 them. Instrumented tests are for what the JVM cannot tell the truth about —
 `core:database` against real SQLite, `core:telephony` against a real

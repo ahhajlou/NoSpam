@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config
  * working AppContainer (SQLite + a loaded classifier) reached through
  * `context.applicationContext as? NoSpamApplication`, which is deliberately
  * out of scope for this pass -- the guard clauses are the dispatch-routing
- * behaviour worth regression-protecting on their own.
+ * behavior worth regression-protecting on their own.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])

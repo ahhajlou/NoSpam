@@ -187,7 +187,7 @@ private fun TopLevelItem(
         selected = selected,
         onClick = onClick,
         // M3's default selected content is onSecondaryContainer, which in the
-        // Stitch light palette is a mid grey: 4.56:1 on the selected pill
+        // Stitch light palette is a mid gray: 4.56:1 on the selected pill
         // against 8.84:1 for every unselected row, so the current destination
         // was the *least* legible item in the drawer. onSurface keeps the pill
         // and restores the emphasis (13.3:1). Dark mode was already fine.

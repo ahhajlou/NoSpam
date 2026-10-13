@@ -27,18 +27,18 @@ reasoning is in `TODO.md`, "Spam routing — agreed model"):
    a normal notification. A conversation the filter moved before you saved the
    contact comes back to the inbox.
 4. **Someone who has sent you a normal message, or whom you have replied to** →
-   always stays in the **Inbox**. A message that looks like spam is labelled
+   always stays in the **Inbox**. A message that looks like spam is labeled
    `Suspected spam` and does not notify. Replying "STOP" to a sender you
    reported or blocked does not undo that.
 5. **A new sender whose first message looks like spam** → stays in the
-   **Inbox**, labelled **"Suspected spam"**, unread, no notification. One wrong
+   **Inbox**, labeled **"Suspected spam"**, unread, no notification. One wrong
    guess never hides a code you are waiting for.
 6. **A sender that has only ever sent spam, two or more messages** → **Spam &
    Blocked**, no notification, marked read.
 7. **Everything else** → Inbox, normal notification.
 
 **"Notify for suspected spam"** (same page, off by default) gives the messages
-in rules 4 and 5 that look like spam a quiet notification: no sound, labelled
+in rules 4 and 5 that look like spam a quiet notification: no sound, labeled
 "Suspected spam", on its own notification channel. It never changes which
 folder a message goes to. The default lives in one place,
 `SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM`.

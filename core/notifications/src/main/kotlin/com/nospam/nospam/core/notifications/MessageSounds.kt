@@ -75,7 +75,7 @@ enum class IncomingAlert {
     NOTIFY,
 
     /**
-     * Post a quiet notification on the low-importance spam channel, labelled
+     * Post a quiet notification on the low-importance spam channel, labeled
      * as suspected spam: a message that looks like spam but stays in the inbox,
      * when the user asked to be told about those.
      */

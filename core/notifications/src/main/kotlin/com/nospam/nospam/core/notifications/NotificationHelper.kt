@@ -172,7 +172,7 @@ object NotificationHelper {
         senderAvatar: Bitmap? = null,
     ): android.app.Notification {
         // isSpam: a message that looks like spam but stays in the inbox, posted
-        // on the low-importance channel and labelled so it reads as a warning.
+        // on the low-importance channel and labeled so it reads as a warning.
         val channelId = if (isSpam) CHANNEL_ID_SPAM else CHANNEL_ID_MESSAGES
         // Only what is shown changes with a contact. The key, the reply and the
         // tap stay on the address: a reply has to reach the number, and the key

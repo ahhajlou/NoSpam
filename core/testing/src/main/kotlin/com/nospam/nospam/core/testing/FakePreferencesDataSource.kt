@@ -13,7 +13,7 @@ import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 
 /**
- * In-memory preferences, one map per file. Edits are serialised like
+ * In-memory preferences, one map per file. Edits are serialized like
  * DataStore's. [failReads] and [failWrites] make the file behave as if it
  * could not be read or written, for testing the callers' fallbacks.
  */

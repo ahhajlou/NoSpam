@@ -44,7 +44,7 @@ class SettingsRepositoryTest {
         assertFalse(repo.isSpamProtectionEnabled())
     }
 
-    @Test fun `a pre-existing stored false is honoured`() = runTest {
+    @Test fun `a pre-existing stored false is honored`() = runTest {
         val fake = FakePreferencesDataSource(
             initial = mapOf(PreferenceFile.SETTINGS to mapOf("spam_protection_enabled" to false)),
         )

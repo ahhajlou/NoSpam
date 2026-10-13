@@ -87,7 +87,7 @@
 - [x] **5.6 Live inbox refresh (list was frozen until renavigate)** — Same `ContentObserver`-on-`Telephony.Sms.CONTENT_URI` mechanism as the legacy `HomeScreen.rememberSmsInbox`, relocated per architecture: `RealTelephonyDataSource.observeConversations()` is now `callbackFlow` (observer registered/unregistered in `awaitClose`) + `onStart` initial emit + `mapLatest { getConversations() }` to coalesce bursts; queries stay on IO, features stay Android-free, and `ConversationsRepository` combine propagates re-emissions untouched. Follow-up hardening from a device crash: conversations are grouped client-side from `Sms` rows (`TelephonyMapper.toConversation`) instead of `Threads.CONTENT_URI` (`snippet` column missing on some providers → `SQLiteException`), and query catches widened to `Exception`. *Verify:* `./gradlew build` green; `RepositoryTest.observeConversations re-emits on provider change` + `TelephonyMapperTest.toConversation groups by latest message`. Done 2026-09-05.
 - [x] **5.7 New-conversation address flow + long-press menus** — (1) Typing a number + enter did nothing and contact taps passed a meaningless `hashCode` as thread id: `NewConversationScreen` now takes `onAddressEntered`, resolves typed queries via pure `resolveRecipientAddress` (contact-name match → phone, else raw input) with IME-Done handling, and `NavHost` resolves `getOrCreateThreadId` then opens `ThreadRoute(threadId, address)`; `ThreadViewModel.loadThread(id, address)` carries the address so sending works with zero messages. (2) Long-press menus everywhere via shared `ConversationActionsDialog`: inbox (mark read/unread, archive, report spam, block/unblock, delete), archived (unarchive, delete), spam (not spam, block/unblock, delete) — backed by new `ArchivedDao` store, `markAsUnread`, `deleteConversation` (provider + verdict + archive cleanup), `setRead`/`archive`/`unarchive` repo ops; provider writes hardened to best-effort. Star/pin/mute deliberately omitted (no data model). *Verify:* `./gradlew build` + `:koverVerify` green, 67 JVM tests pass (resolver, archive repo/dao, live thread send); UI suites compile into test APKs (long-press dialog, IME-Done). Done 2026-09-05.
 - [x] **5.9 Sent bubble invisible until reopen** — The reload right after the sent-box write could miss the new row on some provider builds. `ThreadViewModel.onSend` now appends an optimistic SENT row (negative id, never collides) instantly, then reconciles: provider rows win, unconfirmed optimistic rows are kept, reopening still resets to pure provider data; send/insert failures log warnings. *Verify:* `./gradlew build` green; `sent bubble survives a stale provider reload` regression test (fake hides sent rows from queries). Done 2026-09-05.
-- [x] **5.10 Incoming messages invisible until reopen (proper fix)** — The thread screen did a one-shot `getMessages` while only the inbox had a provider observer. No polling/duct tape: `TelephonyDataSource.observeMessages(threadId)` reuses the same `ContentObserver`→`callbackFlow`→`mapLatest` pipeline as conversations (shared `observeSmsChanges`), `ThreadViewModel` collects it in a cancellable job (switching threads cancels the old collection), merges optimistic rows through the same reconciliation, and marks the thread read on open when unread is present (self-terminating: the update re-emits all-read). *Verify:* `./gradlew build` + `:koverVerify` green, zero warnings; `incoming message appears without reopening`, `opening thread with unread marks read once`, `all-read thread does not mark`. Done 2026-09-05.
+- [x] **5.10 Incoming messages invisible until reopen (proper fix)** — The thread screen did a one-shot `getMessages` while only the inbox had a provider observer. No polling/duct tape: `TelephonyDataSource.observeMessages(threadId)` reuses the same `ContentObserver`→`callbackFlow`→`mapLatest` pipeline as conversations (shared `observeSmsChanges`), `ThreadViewModel` collects it in a cancelable job (switching threads cancels the old collection), merges optimistic rows through the same reconciliation, and marks the thread read on open when unread is present (self-terminating: the update re-emits all-read). *Verify:* `./gradlew build` + `:koverVerify` green, zero warnings; `incoming message appears without reopening`, `opening thread with unread marks read once`, `all-read thread does not mark`. Done 2026-09-05.
 - [x] **5.8 Delete fix (menu Delete silently did nothing)** — `deleteConversation` targeted `Threads.CONTENT_URI`, a query-only UNION on most providers, and every provider-write catch swallowed the exception (hence a clean logcat). Now deletes message rows via `Telephony.Sms.CONTENT_URI` + `thread_id = ?` (thread vanishes once empty) with best-effort Threads-URI attempt, and all best-effort catches log a warning naming the likely cause (not default app). *Verify:* `./gradlew build` green; delete test now asserts the provider call. On device: long-press → Delete removes the thread; if it still fails, logcat shows the reason. Done 2026-09-05.
 
 ---
@@ -192,7 +192,7 @@ persisted even when the classifier throws; `./gradlew lint` green with
 
 **Gate:** `ThreadSpamPolicyTest` covers every row of the table below;
 emulator check: a sender that sends a bank OTP (ham) then a promo (spam)
-stays in the inbox with the promo silenced and labelled; a brand-new unknown
+stays in the inbox with the promo silenced and labeled; a brand-new unknown
 sender whose first message is spam lands directly in Spam with no
 notification; a "Not spam" correction survives the next incoming SMS from
 that sender.
@@ -380,7 +380,7 @@ the system default SMS app on the same seed data.
 
 - [x] **11.1 Force repository flows to IO (P0)** — `ConversationsRepository.observeConversations:65` `combine` + `mapLatest { adjustMixedSnippet }` runs on `viewModelScope` (Main) → N+1 Room/Telephony queries block UI. Initially added `.flowOn(Dispatchers.IO)` terminal (now hot-shared, so final `combine` is cheap; heavy telephony offloaded via inner `withContext(IO)`). *Key files:* `core/data/ConversationsRepository.kt`. *Verify:* trace shows `adjustMixedSnippet` off Main; logcat no `DiskReadViolation` in repository. Done 2026-09-08.
 - [x] **11.2 Eliminate date-formatting allocations in Compose (P0)** — `ConversationsScreen.kt:322` `formatTime` creates `SimpleDateFormat` + `Instant.atZone` per row per recomposition (269×). Replaced with `DateUtils.formatDateTime` (framework-optimized) wrapped in `remember(date)` per visible row (`~10` allocations, not 269) + `Calendar` year check. Do NOT use `companion object` `SimpleDateFormat` (not thread-safe). *Key files:* `feature/conversations/ConversationsScreen.kt`. *Verify:* profiler allocations down; no per-frame `SimpleDateFormat` creation. Done 2026-09-08.
-- [x] **11.3 Skeleton loading state (P1)** — `ConversationsUiState` shows empty text then 269-row layout in one frame → 2s freeze. Added `isLoading: Boolean = true` to state, set `false` in `ViewModel` combine, render `LazyColumn` with 8 grey `Box` placeholders (`SkeletonRow`) when `isLoading && empty`, else real list. Splits layout work per Google Messages pattern. *Key files:* `feature/conversations/ConversationsViewModel.kt`, `ConversationsScreen.kt`. *Verify:* first frame shows shimmer <16ms, `Skipped frames` gone. Done 2026-09-08.
+- [x] **11.3 Skeleton loading state (P1)** — `ConversationsUiState` shows empty text then 269-row layout in one frame → 2s freeze. Added `isLoading: Boolean = true` to state, set `false` in `ViewModel` combine, render `LazyColumn` with 8 gray `Box` placeholders (`SkeletonRow`) when `isLoading && empty`, else real list. Splits layout work per Google Messages pattern. *Key files:* `feature/conversations/ConversationsViewModel.kt`, `ConversationsScreen.kt`. *Verify:* first frame shows shimmer <16ms, `Skipped frames` gone. Done 2026-09-08.
 - [x] **11.4 Navigation re-query cache (P0 – follow-up 2026-09-08 21:41 logcat)** — Every `Inbox -> Settings -> Inbox` recreated `ConversationsViewModel` (NavBackStackEntry scope) and re-ran `getConversations()` → `inbox loaded: 269 in 3573ms` on every navigation, identical to cold start. Fixed via two layers: (1) `ConversationsRepository` hot cache: `sharedTelephony` (`telephony.observeConversations().distinctUntilChanged().mapLatest{adjust}`) + `sharedFlags` (7 DB flows) via `shareIn(CoroutineScope(Unconfined), Eagerly, replay=1)` so second collector replays instantly; `observeConversations` now `combine(sharedTelephony, sharedFlags)` cold but reuses hot upstream (no per-filter `shareIn` – keeps archive visibility synchronous). (2) `NoSpamNavHost` hoisted `ConversationsViewModel`/`ArchivedViewModel`/`SpamViewModel` to NavHost scope (`viewModel()` outside `composable<>`) so `StateFlow` with `WhileSubscribed(5s)` survives navigation; repository's 30s replay is fallback for >5s gaps. Added `externalScope` param for tests (`Unconfined` default). *Key files:* `ConversationsRepository.kt:22`, `NoSpamNavHost.kt:108`, `ConversationsViewModel.kt`. *Verify:* `core:data:testDebugUnitTest` green (11 tests); `adb logcat` on revisit: `inbox loaded` <50ms (replay), `Davey <200ms`, `Skipped 0`. Done 2026-09-08.
 
 ---
@@ -437,7 +437,7 @@ the system default SMS app on the same seed data.
 > 10. MMS: out of scope (SMS-only via existing `getAllMessages()`).
 > 11. Graduation: `MIXED → SPAM` only when `!protectFromSpam &&
 >     spamCount≥3 && total≥3 && ratio≥0.8` (§15 policy).
-> 12. Cancel between senders: partial progress persists, `Cancelled`
+> 12. Cancel between senders: partial progress persists, `Canceled`
 >     status emitted.
 
 **Gate:** `./gradlew :core:data:testDebugUnitTest` green with new
@@ -501,7 +501,7 @@ progress notification shows and dismisses.
          date ≥ now − 30d) → batch `insertAll` per sender.
       8. Emit `Running(processed, total)` after each sender.
       9. On completion: `Done`. On exception: `Failed`. On cancel:
-         `Cancelled`. Partial progress persists.
+         `Canceled`. Partial progress persists.
     - **No provider writes, no READ updates, no notifications.**
   - Refactor `SmsIngressUseCase.handle`: extract sender-state writes
     through `spamStateWriter` (behavior unchanged, just serialized).
@@ -581,7 +581,7 @@ progress notification shows and dismisses.
     message_verdict row.
   - `toggle_off_forces_clean` — spam-protection OFF → CLEAN.
   - `security_exception_aborts` — permission revoked → Failed status.
-  - `cancellation_between_senders` — partial progress, Cancelled.
+  - `cancellation_between_senders` — partial progress, Canceled.
   - `chronological_graduation` — MIXED → SPAM at ≥3 msgs, ≥0.8
     ratio, correctly ordered.
   Also update `FakeTelephonyDataSource` with `outboundAddresses`.

@@ -194,7 +194,7 @@ class SmsIngressUseCase(
             }
 
             // A message routed to Spam is marked read; one that stays in the inbox,
-            // labelled or not, stays unread so it can still be found. Muted keeps
+            // labeled or not, stays unread so it can still be found. Muted keeps
             // unread but silent.
             when (notificationDecision) {
                 NotificationDecision.NONE -> {

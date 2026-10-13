@@ -125,7 +125,7 @@ class NoSpamApplication : Application() {
         appScope.launch {
             container.spamBackfill.status
                 .dropWhile { it is BackfillStatus.Idle }
-                .first { it is BackfillStatus.Done || it is BackfillStatus.Cancelled || it is BackfillStatus.Failed }
+                .first { it is BackfillStatus.Done || it is BackfillStatus.Canceled || it is BackfillStatus.Failed }
             container.settingsRepository.setBackfillPending(false)
         }
     }

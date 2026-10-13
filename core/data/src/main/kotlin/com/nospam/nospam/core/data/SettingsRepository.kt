@@ -101,7 +101,7 @@ class SettingsRepository(private val prefs: PreferencesDataSource) {
      * Whether a message that looks like spam but stays in the inbox posts a
      * quiet notification: a new sender's first such message (SUSPECTED), or one
      * from a sender that has sent ham or been replied to (MIXED). Off: no
-     * notification, and the message stays unread and labelled. Saved contacts
+     * notification, and the message stays unread and labeled. Saved contacts
      * are never classified, so it never applies to them.
      *
      * It decides only whether a notification is posted, never which folder a

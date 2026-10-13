@@ -159,7 +159,7 @@ class AppContainer(private val context: Context) {
     /**
      * Onboarding is done: every required permission and the SMS role are held.
      * Runs here rather than in the onboarding screen's coroutine scope, which is
-     * cancelled as the screen leaves, and could stop the scan from starting.
+     * canceled as the screen leaves, and could stop the scan from starting.
      */
     fun onSetupComplete() {
         // The inbox list was first read before the permissions existed.

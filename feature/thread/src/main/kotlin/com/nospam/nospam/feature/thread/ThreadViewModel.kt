@@ -225,7 +225,7 @@ class ThreadViewModel(
                 syncSelectedSim()
             }
         }
-        // Per-message "Not spam"/"Report spam" on messages labelled suspected spam.
+        // Per-message "Not spam"/"Report spam" on messages labeled suspected spam.
         spamRepository?.let { repo ->
             _uiState.value = _uiState.value.copy(
                 onMarkNotSpam = { msgId -> viewModelScope.launch { repo.markMessageNotSpam(msgId) } },

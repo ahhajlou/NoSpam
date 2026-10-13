@@ -30,7 +30,7 @@ import org.robolectric.annotation.Config
  * the text field) is deliberately NOT covered here: a text field inside a
  * dialog window never reaches "displayed" under Robolectric's Compose host
  * (confirmed independent of animation timing, of `createAndroidComposeRule`
- * vs `createComposeRule`, and of `@GraphicsMode(NATIVE)`), so that behaviour
+ * vs `createComposeRule`, and of `@GraphicsMode(NATIVE)`), so that behavior
  * is covered on a real device instead, by `.maestro/flows/sim_number.yaml`.
  * The dialog's Save-enablement rule is still covered here at the unit level
  * -- see SimNumberValidationTest for `isValidSimNumber`.

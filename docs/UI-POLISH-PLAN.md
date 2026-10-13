@@ -200,7 +200,7 @@ Design decisions:
       the override and re-derives the state through `ThreadSpamPolicy`, keeping the
       counts; `TelephonyDataSource.getSystemBlockedNumbers()`; screen, ViewModel
       and route in `feature:settings`.
-      Spec: the list is app blocks plus system blocks, deduplicated by normalised
+      Spec: the list is app blocks plus system blocks, deduplicated by normalized
       address; unblock removes from both; rules survive thread deletion; removing
       a rule never deletes a thread. New flow `manage_senders.yaml`.
 - [x] P2.7 **Per-SIM: the user's own number, and the default SIM.**
@@ -223,7 +223,7 @@ Design decisions:
       directions follow the layout (RTL). Archived and Spam keep their fixed actions.
 - [x] P2.10 **Message sounds.** `MessageSoundPlayer` (SoundPool) in
       `core:notifications`, silent when the ringer is silent or on vibrate; bundled
-      sounds with licences in `REUSE.toml`; foreground only (`ProcessLifecycleOwner`),
+      sounds with licenses in `REUSE.toml`; foreground only (`ProcessLifecycleOwner`),
       background stays with the notification channel; the sent sound plays when a
       send is queued.
 - [x] P2.11 **Close-out.** Raise the coverage ratchet to the measured value, run
@@ -273,7 +273,7 @@ None at the moment. Record new ones here with the answer when given.
   background, and after the process was killed. Two script issues fixed on the
   way: Maestro needs `LANDSCAPE_LEFT`, and the emulator console strips a sender
   to its digits (`NSTEST_NOTIF1` arrived as `1`), so the check uses a numeric
-  sender. The same console behaviour probably undermines
+  sender. The same console behavior probably undermines
   `tools/persistence_check.sh`; recorded in TODO.md. E2E: 7 pass, and
   `archived_unarchive` failed first again. Diagnosed this time: the Archived page
   shows "Archive is empty" while loading, and the first load after an install
@@ -361,7 +361,7 @@ None at the moment. Record new ones here with the answer when given.
   that test, listing the intermediate states.
 - 2026-09-23 — P2.6 done. Settings → Spam protection → Blocked and allowed
   senders: a "Blocked" section (this app's blocklist plus Android's own block
-  list, so numbers blocked from the dialer show too, one entry per normalised
+  list, so numbers blocked from the dialer show too, one entry per normalized
   address) and a "Marked not spam" section, each row with the contact's name and
   photo where known and an Unblock / Remove button, no confirmation (both are
   one action to redo). `TelephonyDataSource.getSystemBlockedNumbers`,
@@ -391,7 +391,7 @@ None at the moment. Record new ones here with the answer when given.
   Tests: 51 black-box tests (Sonnet), then reshaped. The dialog cannot be tested
   under Robolectric: a text field inside a dialog window never idles, or with
   the clock paused never counts as displayed (bisected: the dialog without its
-  field is fine, a bare field hangs). So its behaviour is the new flow
+  field is fine, a bare field hangs). So its behavior is the new flow
   `sim_number.yaml` on the emulator, and the Save rule is a pure function with
   19 tests. The default-SIM rule is unit-tested only: the emulator has one SIM.
 - 2026-09-23 — P2.8 done. "Get SMS delivery reports" is live per SIM (off by
@@ -641,7 +641,7 @@ Order chosen so each step leaves the app building and usable.
       were wrong; everything else matched the design.
       - **The selected drawer item was the least legible row in the drawer.** M3's default
         selected content is `onSecondaryContainer`, which in the Stitch light palette is a
-        mid grey: 4.56:1 on the selected pill against 8.84:1 for every unselected row. Now
+         mid gray: 4.56:1 on the selected pill against 8.84:1 for every unselected row. Now
         `onSurface` (13.3:1), keeping the pill. Dark mode was already right.
       - **A disabled Send looked enabled.** The icon hard-set its tint to
         `onSurfaceVariant`, which overrode the button's disabled color with a
@@ -722,7 +722,7 @@ Order chosen so each step leaves the app building and usable.
   Build, 257 unit tests, kover, test APKs green.
 - 2026-09-17 — P1.3 verified: build, unit tests, kover, test APKs green; screenshots of selection mode
   (copied to ~/Desktop/__CLAUDE__/images/p13/ at the user's request); E2E 8 pass / 0 fail. Flows
-  updated: long_press_actions (selection bar, ⋮, multi-select, cancelled delete, back exits),
+  updated: long_press_actions (selection bar, ⋮, multi-select, canceled delete, back exits),
   spam_notspam_and_bulk (rewritten), persistence (star/mute via ⋮, Clear selection),
   _unblock_part1 (⋮ Block + confirm).
 - 2026-09-17 — P1.4 verified: build, 294 unit tests (incl. the new JVM Compose suites), kover

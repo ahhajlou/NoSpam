@@ -39,8 +39,8 @@
 - [x] **Done 2026-10-03 (`chore/small-fixes`).** `NoSpamDatabase.writeScanBatch` writes both in one SQLite transaction (both DAOs' locks, states then verdicts), and `SpamStateWriter.upsertAllIfNotOverridden(pending, write)` hands it the merged states. A crash between the two writes used to leave counts without verdicts, so the next scan counted those messages again, which under the count-based routing can hide a sender. Original: `flush()` writes `sender_state` then `message_verdict` in two transactions; wrap in a single transaction for atomicity
 
 ## Backfill — open decisions (analyze before coding)
-- [x] Decide startup policy — RESOLVED (single-shot flag): no launch-time scan; a `history_backfill_pending` DataStore flag is set on onboarding permission grant, lets an interrupted scan resume on the next cold start exactly once, and is cleared (app-side watcher) on any terminal status (Done/Cancelled/Failed). Ordinary launches re-read the flag only.
-- [] Decide resume strategy: cancelled scans restart from the beginning (idempotent via verdict-ID skip); a per-sender resume cursor would bound cost on large histories
+- [x] Decide startup policy — RESOLVED (single-shot flag): no launch-time scan; a `history_backfill_pending` DataStore flag is set on onboarding permission grant, lets an interrupted scan resume on the next cold start exactly once, and is cleared (app-side watcher) on any terminal status (Done/Canceled/Failed). Ordinary launches re-read the flag only.
+- [] Decide resume strategy: canceled scans restart from the beginning (idempotent via verdict-ID skip); a per-sender resume cursor would bound cost on large histories
 - [x] Gate launch-time scan on onboarding — folded into the startup-policy decision above: launch re-reads the flag only, and the flag is set only after permission is granted, so there is no SecurityException path
 
 ## Voluntary corpus contribution (`:feature:export`) — designed, not built
@@ -94,13 +94,13 @@ out of an account — so thresholding on a symmetric frequency is the wrong tool
 |---|---|---|---|
 | 1 | User explicitly blocked the sender | Spam | none |
 | 2 | User explicitly marked the sender not-spam | Inbox | normal |
-| 3 | Sender is a contact, or the user has ever sent to them | Inbox | normal for ham; silent + labelled for spam |
-| 4 | Sender has ever sent at least one ham message | Inbox | normal for ham; silent + labelled for spam |
-| 5 | Only ever spam, exactly one message so far (probation) | Inbox | silent, labelled "Suspected spam" |
+| 3 | Sender is a contact, or the user has ever sent to them | Inbox | normal for ham; silent + labeled for spam |
+| 4 | Sender has ever sent at least one ham message | Inbox | normal for ham; silent + labeled for spam |
+| 5 | Only ever spam, exactly one message so far (probation) | Inbox | silent, labeled "Suspected spam" |
 | 6 | Only ever spam, two or more | Spam | none |
 | 7 | No spam at all | Inbox | normal |
 
-Rows 3 and 4 are the existing MIXED behaviour and are already correct. Nothing
+Rows 3 and 4 are the existing MIXED behavior and are already correct. Nothing
 in this table hides a conversation that has ever produced a legitimate message.
 
 **Saved contacts bypass the classifier entirely.** No inference at ingress, no
@@ -152,7 +152,7 @@ it can only add a warning and never hide anything.
 
 - `ConversationsRepository.deleteConversation` already leaves `sender_state`
   intact while deleting the thread's verdict rows. That is the correct
-  behaviour and must stay.
+   behavior and must stay.
 - Because of that, the "has ever sent ham" test must read
   `sender_state.hamCount`, which survives deletion, and never derive from
   `message_verdict` rows, which are deleted with the thread. Getting this
@@ -164,7 +164,7 @@ conversation the new rules would never have hidden.
 
 - [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Remove the graduation constants and the ratio branch from `ThreadSpamPolicy`. The automatic state is now `ThreadSpamPolicy.deriveState(spamCount, hamCount, hasReplied)`, used by every path that rebuilds one.
 - [x] **Done 2026-10-02 (`feat/spam-routing-model`).** Add the probation state (row 5) — a first-ever message that classifies as
-  spam stays in the inbox, labelled, instead of being hidden. New state
+  spam stays in the inbox, labeled, instead of being hidden. New state
   `SUSPECTED`, with its own inbox badge; ingress no longer marks it read. The
   notification setting below covers it. **Amended
   2026-10-02:** keep it unread (today SILENT also marks read,
@@ -224,7 +224,7 @@ Worth having:
   **Scheduled: phase 2 step 6** (`docs/UI-POLISH-PLAN.md` §3).
 - [] **"Warn about suspicious messages from contacts"** (default OFF, and only
   if users ask for it). Contacts bypass the classifier by default, so this
-  toggle turns labelling on. Safe under the rule above because it can only add
+  toggle turns labeling on. Safe under the rule above because it can only add
   a warning, never hide a message. Not worth building speculatively.
   **Decided 2026-10-03: not now.** Designed (a setting, off by default, that runs
   contacts' messages through the classifier for the label only: never silenced,
@@ -236,7 +236,7 @@ Worth having:
   Applies to row 5 (probation): a message that classifies as spam but stays in
   the inbox. On: a quiet notification (low-importance channel, no sound,
   titled "Suspected spam"), so a misjudged OTP is still seen while the user is
-  waiting for it. Off: no notification, the message stays unread and labelled.
+  waiting for it. Off: no notification, the message stays unread and labeled.
   **Default OFF (decided 2026-10-02).** The default is a named constant,
   `SettingsRepository.DEFAULT_NOTIFY_SUSPECTED_SPAM = false`, documented where
   it is defined, so it can be flipped in one place; tests assert against the
@@ -277,7 +277,7 @@ not supported yet". There is no PDU parsing, no `downloadMultimediaMessage`, no
 MMS sending, no attachments. It was kept out of phase 2 on purpose: it needs its
 own architecture and a device on a carrier with a working MMSC to verify.
 
-Settings that depend on it stay **visible but disabled**, labelled as needing MMS
+Settings that depend on it stay **visible but disabled**, labeled as needing MMS
 support, until this lands: auto-download MMS, auto-download while roaming, and
 group messaging (which is sent as MMS). Scope when it starts:
 - [] Parse the WAP push notification indication, download through
@@ -468,10 +468,10 @@ the inbox, above the newest received message, and its preview reads
 `You: <draft text>` with a **"Draft"** label. Notably, `content://sms` has **no
 `type=3` (draft) rows** afterwards — Messages keeps drafts in its own database,
 not the system store. So the ordering and the label are the app's own doing, and
-we can match the behaviour without writing to the provider.
+we can match the behavior without writing to the provider.
 
 Agreed for a later phase:
-- [x] **Done 2026-10-03.** The row shows a "Draft" label (error colour) and the draft text instead of the last message. Original: Show a "Draft" marker and the draft text as the preview in the inbox row.
+- [x] **Done 2026-10-03.** The row shows a "Draft" label (error color) and the draft text instead of the last message. Original: Show a "Draft" marker and the draft text as the preview in the inbox row.
 - [x] **Done 2026-10-03.** `DraftRepository` records when each draft was saved (`draft_at_<id>`); the inbox dates a drafted conversation by the later of its last message and its draft. Drafts saved before this recorded nothing and keep their place. Original: Sort a conversation with a draft by when the draft was saved, so it rises
   to the top like Messages does. A half-written message is the conversation the
   user is most likely to return to.
@@ -572,8 +572,8 @@ fails:
   - [] README and release notes: put the same steps next to the GitHub download link so people see them before installing. Point `docs/` and the release workflow's notes text at one copy rather than restating it.
   - [] Later, not decided: F-Droid (main repo, or a self-hosted repo on GitHub Pages) is the cheapest way to remove the step altogether. Try a self-hosted repo install on a phone before promising it works. Google Play needs the default-SMS declaration form and a developer account; check that it is practical for the Iranian audience first.
 - [x] Failed sends: **fixed 2026-09-20; verified on the emulator** (an outgoing message is written as OUTBOX, sent with a sent-result callback, and moves to SENT or FAILED; a failed one shows "Not sent · Tap to retry"). Reproduced first on the emulator: with the radio off the old code stored the message as SENT, never delivered it and never retried, while Google Messages kept it queued ("Waiting to connect") and re-sent it by itself once the radio returned.
-- [x] **Done 2026-10-03:** automatic retry, modelled on AOSP Messaging. "No service" and "radio off" (which AOSP gives up on, Google Messages waits out) put the message in the provider's QUEUED type, shown as "Waiting for signal…", and `SendRetry` resends it after 5 s, doubling, within 20 minutes of the first failure, then marks it failed for a manual retry; other failures fail at once. It also resends at once when an SMS arrives, at app start, and (Android 12+, process alive) when the phone reports service. A send with no result after 5 minutes becomes failed, not "Sending…" forever. Verified on the emulator: sent with airplane mode on, shown waiting, went out 14 s after airplane mode was turned off. Original: Failed sends, still open: we do not retry automatically, only on tap. Also unverified: an OUTBOX row whose result never arrives (process killed and the radio never reports) would show "Sending…" forever
-- [x] **Fixed 2026-09-21; verified on the emulator.** The Threads fast path failed on both the API 37 emulator and the Samsung A26 (`no such column: message_count`, logged as "Threads query failed, falling back to message scan" on every launch), so every load took the uncached fallback, which reads only the 3000 newest SMS rows. Past that, older conversations vanished from the inbox: with 3564 messages the inbox showed 2 conversations; the control at 463 showed all. Fix: `tryThreadsQuery` reads `content://mms-sms/conversations?simple=true` (the threads table itself; all four columns present on both devices), and its "stop once every thread has its newest message" scan now counts only threads with `message_count > 0` (13 of 282 on the A26 are empty, which kept the scan from ever stopping early). **Kept deliberately:** the newest body/date still come from the `sms` table, not the Threads snippet/date. `8e32889` moved off those because the table can be stale, and it is truncated to whole seconds (`…342000` against the message's `…342899`). **Speed, measured on the emulator with a debug build, 4 cold launches each:** 462 messages, baseline 309-475ms (median ~372) against fixed 361-414ms (~390), equal within noise; 3564 messages, baseline 380-404ms showing 2 conversations against fixed 382-417ms showing all 13. The earlier 4-10s load was a different problem (Perfetto: number-normaliser binder calls, main-thread work, per-conversation contact lookups, `3b4f178`), untouched by this. Not yet measured on the Samsung with a release build (baseline there: 110-174ms, median ~132ms, fallback path). Repeatable check: `tools/seed.sh capflood` (needs root and NoSpam as default SMS app; the live provider DB is `/data/user/0/...`, `/data/user_de/0/...` is an unused stub) then the inbox must list `NSTEST_CAPOLD1`. **Still true:** a thread holding only MMS never matches the early-exit count, so it still costs a full walk of the SMS table; the fallback keeps its 3000-row cap for real provider failures
+- [x] **Done 2026-10-03:** automatic retry, modeled on AOSP Messaging. "No service" and "radio off" (which AOSP gives up on, Google Messages waits out) put the message in the provider's QUEUED type, shown as "Waiting for signal…", and `SendRetry` resends it after 5 s, doubling, within 20 minutes of the first failure, then marks it failed for a manual retry; other failures fail at once. It also resends at once when an SMS arrives, at app start, and (Android 12+, process alive) when the phone reports service. A send with no result after 5 minutes becomes failed, not "Sending…" forever. Verified on the emulator: sent with airplane mode on, shown waiting, went out 14 s after airplane mode was turned off. Original: Failed sends, still open: we do not retry automatically, only on tap. Also unverified: an OUTBOX row whose result never arrives (process killed and the radio never reports) would show "Sending…" forever
+- [x] **Fixed 2026-09-21; verified on the emulator.** The Threads fast path failed on both the API 37 emulator and the Samsung A26 (`no such column: message_count`, logged as "Threads query failed, falling back to message scan" on every launch), so every load took the uncached fallback, which reads only the 3000 newest SMS rows. Past that, older conversations vanished from the inbox: with 3564 messages the inbox showed 2 conversations; the control at 463 showed all. Fix: `tryThreadsQuery` reads `content://mms-sms/conversations?simple=true` (the threads table itself; all four columns present on both devices), and its "stop once every thread has its newest message" scan now counts only threads with `message_count > 0` (13 of 282 on the A26 are empty, which kept the scan from ever stopping early). **Kept deliberately:** the newest body/date still come from the `sms` table, not the Threads snippet/date. `8e32889` moved off those because the table can be stale, and it is truncated to whole seconds (`…342000` against the message's `…342899`). **Speed, measured on the emulator with a debug build, 4 cold launches each:** 462 messages, baseline 309-475ms (median ~372) against fixed 361-414ms (~390), equal within noise; 3564 messages, baseline 380-404ms showing 2 conversations against fixed 382-417ms showing all 13. The earlier 4-10s load was a different problem (Perfetto: number-normalizer binder calls, main-thread work, per-conversation contact lookups, `3b4f178`), untouched by this. Not yet measured on the Samsung with a release build (baseline there: 110-174ms, median ~132ms, fallback path). Repeatable check: `tools/seed.sh capflood` (needs root and NoSpam as default SMS app; the live provider DB is `/data/user/0/...`, `/data/user_de/0/...` is an unused stub) then the inbox must list `NSTEST_CAPOLD1`. **Still true:** a thread holding only MMS never matches the early-exit count, so it still costs a full walk of the SMS table; the fallback keeps its 3000-row cap for real provider failures
 - [x] **Not reproduced, no change made (2026-09-21).** `getOrCreateThreadId` returning `-1` (then `ThreadRoute(-1, …)` and a shared `draft_-1` key) could not be reproduced: the provider accepts even nonsense recipients (Google Messages' log shows it mapping one to a thread). It can only happen if the provider call itself throws. Left alone rather than guarded speculatively
 - [x] **Dual-SIM test report, fixed 2026-09-20** (`730e3ac`): a SIM 1 -> SIM 2 message made two conversations (correct: the provider keys threads by address, as Google Messages does), and (a) the received message sorted before its own sent row because incoming messages stored the carrier's whole-second timestamp instead of arrival time; (b) the sent text came back as a draft because sending never cleared the saved draft; (c) a thread holding only outgoing messages could not be replied to, because the other party was read only from incoming rows. Evidence: sent row `…890202` against received row `…890000`; afterwards the phone's provider held received rows with un-rounded arrival timestamps (`…647312`), which is the only after-fix observation on the phone. Not reproduced before the fix: (b), which rests on reading the code plus the after-fix check
 - [x] **Archived and Spam & blocked ordering and pins, matched to Google Messages (2026-09-21).** Checked on the emulator: Messages orders both pages newest message first, whatever order conversations were archived or blocked in (archived MIXED1, FA1, STAR1 newest-first, then PIN1 last: page read MIXED1, FA1, PIN1, STAR1; blocked SPAM1, BULK1, SPAM3: page read BULK1, UNBLOCK1, SPAM1, SPAM3), and it drops a conversation's pin both when archiving it and when blocking it (a pinned, then blocked, then unblocked conversation came back unpinned, and a pinned one sorted last on Spam & blocked). Ours had no sort of its own on either page and kept pins. Now `observeSpam()` and `observeArchived()` sort newest first themselves, `archive()` unpins, `markSenderSpam()` (the user's Report spam) unpins, and `BlocklistRepository.block()` unpins the sender's conversations (it looks them up through `TelephonyDataSource`, now passed in by `AppContainer`). Deliberately not done: automatic spam classification does not unpin, since Messages has no such path and a pin should not vanish from an automated decision; unblocking and un-archiving do not re-pin. Checked in our app on the emulator: a pinned conversation archived then un-archived returns in Recent with no pin. The block and Report spam paths are covered by unit tests only, not driven through our UI

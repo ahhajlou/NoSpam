@@ -29,7 +29,7 @@ sealed interface BackfillStatus {
     data object Idle : BackfillStatus
     data class Running(val processed: Int, val total: Int) : BackfillStatus
     data object Done : BackfillStatus
-    data object Cancelled : BackfillStatus
+    data object Canceled : BackfillStatus
     data object Failed : BackfillStatus
 }
 
@@ -63,7 +63,7 @@ class SpamBackfillUseCase(
     private val _status = MutableStateFlow<BackfillStatus>(BackfillStatus.Idle)
     val status: StateFlow<BackfillStatus> = _status.asStateFlow()
     private val started = AtomicBoolean(false)
-    @Volatile private var cancelled = false
+    @Volatile private var canceled = false
 
     /** Idempotent gap-fill start: no-op while a scan is already running or finished. */
     fun ensureStarted() = startWith(forceReclassify = false)
@@ -81,7 +81,7 @@ class SpamBackfillUseCase(
         // Clear any cancel that arrived while no scan was running (a tap on a
         // stale progress notification). Resetting only in the finally below
         // left the flag set, and the next scan aborted on its first batch.
-        cancelled = false
+        canceled = false
         scope.launch {
             try {
                 run(forceReclassify)
@@ -89,14 +89,14 @@ class SpamBackfillUseCase(
                 _status.value = BackfillStatus.Failed
             } finally {
                 started.set(false)
-                cancelled = false
+                canceled = false
             }
         }
     }
 
     /** Cancels between per-sender batches; ongoing writes finish atomically. */
     fun cancel() {
-        cancelled = true
+        canceled = true
     }
 
     private suspend fun run(forceReclassify: Boolean) {
@@ -150,8 +150,8 @@ class SpamBackfillUseCase(
         val now = System.currentTimeMillis()
 
         for ((key, messages) in bySender) {
-            if (cancelled) {
-                _status.value = BackfillStatus.Cancelled
+            if (canceled) {
+                _status.value = BackfillStatus.Canceled
                 return
             }
             // User overrides are never touched — skip the whole sender, votes too.
@@ -194,8 +194,8 @@ class SpamBackfillUseCase(
             var previousHam = 0
 
             for (m in messages) {
-                if (cancelled) {
-                    _status.value = BackfillStatus.Cancelled
+                if (canceled) {
+                    _status.value = BackfillStatus.Canceled
                     return
                 }
                 if (forceReclassify) {
@@ -302,7 +302,7 @@ class SpamBackfillUseCase(
     /**
      * Combines a forced rescan's fresh counts with the stored row. The row also
      * counts messages that are gone from the provider (deleted conversations, so
-     * that deleting cannot take protection away) and messages the user labelled,
+     * that deleting cannot take protection away) and messages the user labeled,
      * which the rescan skips, so it cannot simply replace the row. Adding the two
      * would count every re-checked message twice, and a sender with one suspected
      * message would reach two and be hidden.

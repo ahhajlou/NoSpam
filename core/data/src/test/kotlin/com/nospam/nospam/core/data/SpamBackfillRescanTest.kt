@@ -169,7 +169,7 @@ class SpamBackfillRescanTest {
         assertTrue(!db.messageVerdictDao.getByMessageId(1)!!.isSpam)
     }
 
-    @Test fun `rescanAll can be cancelled mid re-evaluation and stays fail-open`() = runTest {
+    @Test fun `rescanAll can be canceled mid re-evaluation and stays fail-open`() = runTest {
         val db = NoSpamDatabase.inMemory()
         val telephony = FakeTelephonyDataSource().apply {
             allMessages.addAll(listOf(inbox(1, "+98912", "spam a", recentAgo(300)), inbox(2, "+98999", "spam b", recentAgo(200))))
@@ -188,7 +188,7 @@ class SpamBackfillRescanTest {
         backfill.rescanAll()
         advanceUntilIdle()
 
-        assertEquals(BackfillStatus.Cancelled, backfill.status.value)
+        assertEquals(BackfillStatus.Canceled, backfill.status.value)
         // Fail-open: the aborted pass writes nothing.
         assertNull(db.senderStateDao.getByAddress("+98912"))
         assertNull(db.senderStateDao.getByAddress("+98999"))

@@ -28,7 +28,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Behaviour tests for ThreadViewModel per feature-thread.md, driven through
+ * Behavior tests for ThreadViewModel per feature-thread.md, driven through
  * the shared FakeTelephonyDataSource (extended in core:testing with
  * markedReadThreadIds/sentMessages tracking this suite needed) rather than a
  * hand-rolled local fake.

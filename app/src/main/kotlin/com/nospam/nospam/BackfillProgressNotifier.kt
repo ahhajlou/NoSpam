@@ -42,7 +42,7 @@ class BackfillProgressNotifier(
             is BackfillStatus.Running -> show(status.processed, status.total)
             BackfillStatus.Idle -> Unit
             BackfillStatus.Done,
-            BackfillStatus.Cancelled,
+            BackfillStatus.Canceled,
             BackfillStatus.Failed,
             -> notificationManagerCompat.cancel(NotificationHelper.NOTIFICATION_ID_BACKFILL)
         }

@@ -76,7 +76,7 @@ internal fun List<MessageVerdictEntity>.withoutMessage(messageId: Long): List<Me
 /**
  * `DELETE FROM message_verdict WHERE userLabel IS NULL AND isSpam = 0 AND createdAt < ?`
  *
- * Auto-classified ham only: a user-labelled row, or any spam row, is retained
+ * Auto-classified ham only: a user-labeled row, or any spam row, is retained
  * regardless of age, because spam rows are the per-message evidence behind the
  * "Suspected spam" marker (CLAUDE.md §15).
  */

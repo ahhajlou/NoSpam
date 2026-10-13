@@ -83,9 +83,9 @@ class ThreadSpamPolicyTest {
         assertEquals(NotificationDecision.NORMAL, out.notification)
     }
 
-    // Row 3: replied-to senders are classified and labelled, never hidden
+    // Row 3: replied-to senders are classified and labeled, never hidden
 
-    @Test fun `spam from a replied-to sender is labelled in the inbox, never hidden`() {
+    @Test fun `spam from a replied-to sender is labeled in the inbox, never hidden`() {
         val out = replay(true, true, true, hasOutbound = true)
         assertEquals(ThreadSpamState.MIXED, out.newState.state)
         assertEquals(NotificationDecision.SILENT, out.notification)

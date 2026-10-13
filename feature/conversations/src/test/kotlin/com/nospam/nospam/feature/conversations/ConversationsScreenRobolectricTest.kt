@@ -32,7 +32,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * The same screen behaviour as ConversationsScreenTest, but on the JVM:
+ * The same screen behavior as ConversationsScreenTest, but on the JVM:
  * Compose instrumented tests cannot run on this project's API 37 emulator
  * (TODO.md, Espresso reflects into a removed platform method).
  */

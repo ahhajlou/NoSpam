@@ -63,7 +63,7 @@ class LaunchNavigationTest {
         assertEquals(listOf(ThreadRoute::class, NewConversationRoute::class), nav.screens())
     }
 
-    @Test fun `the conversation on screen is recognised by its thread id`() {
+    @Test fun `the conversation on screen is recognized by its thread id`() {
         val nav = navController(start = ConversationsRoute)
         nav.navigate(ThreadRoute(5L, "+15550005"))
         val entry = nav.currentBackStackEntry!!

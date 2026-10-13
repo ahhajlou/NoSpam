@@ -22,7 +22,7 @@ import org.junit.Test
  * Plain-JUnit tests for SettingsViewModel's SIM number state (`uiState.sims`,
  * `uiState.enteredNumbers`, `SettingsUiState.numberOf`, `setSimNumber`),
  * written from the spec in the task prompt independently of the
- * implementation. Compose-facing behaviour is covered separately in
+ * implementation. Compose-facing behavior is covered separately in
  * SimNumberRobolectricTest.
  */
 class SettingsViewModelSimTest {

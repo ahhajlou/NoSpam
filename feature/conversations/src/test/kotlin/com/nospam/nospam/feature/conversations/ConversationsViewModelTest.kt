@@ -28,12 +28,12 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Behaviour tests for ConversationsViewModel per feature-conversations.md,
+ * Behavior tests for ConversationsViewModel per feature-conversations.md,
  * driven entirely through an injected fake (FakeTelephonyDataSource +
  * ConversationsRepository backed by an in-memory database) rather than the
  * ViewModel's hardcoded preview data — see Wave 2A task brief: the previous
  * suite asserted on preview literals ("Alice Smith" etc.), which is asserting
- * on incidental copy rather than behaviour.
+ * on incidental copy rather than behavior.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ConversationsViewModelTest {

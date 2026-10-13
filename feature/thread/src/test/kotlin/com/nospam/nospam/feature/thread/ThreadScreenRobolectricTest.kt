@@ -28,7 +28,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Thread screen behaviour on the JVM: Compose instrumented tests cannot run on
+ * Thread screen behavior on the JVM: Compose instrumented tests cannot run on
  * this project's API 37 emulator (TODO.md — Espresso reflects into a removed
  * platform method), so the same assertions run through Robolectric here.
  *

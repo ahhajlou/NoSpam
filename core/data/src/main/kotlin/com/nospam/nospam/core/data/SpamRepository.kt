@@ -89,7 +89,7 @@ class SpamRepository(
             .distinctUntilChanged()
     }
 
-    /** Senders the user marked "Not spam", most recent first, as normalised addresses. */
+    /** Senders the user marked "Not spam", most recent first, as normalized addresses. */
     fun observeAllowedSenders(): Flow<List<String>> = db.senderStateDao.observeAll().map { states ->
         states
             .filter { it.state == ThreadSpamState.TRUSTED && it.isUserOverride }

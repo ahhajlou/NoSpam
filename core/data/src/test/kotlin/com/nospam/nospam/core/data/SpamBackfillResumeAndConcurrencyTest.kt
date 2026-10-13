@@ -129,7 +129,7 @@ class SpamBackfillResumeAndConcurrencyTest {
         backfill.ensureStarted()
         advanceUntilIdle()
 
-        assertEquals(BackfillStatus.Cancelled, backfill.status.value)
+        assertEquals(BackfillStatus.Canceled, backfill.status.value)
         // Neither sender was persisted (fail-open).
         assertNull(db.senderStateDao.getByAddress("+98912"))
         assertNull(db.senderStateDao.getByAddress("+98999"))
