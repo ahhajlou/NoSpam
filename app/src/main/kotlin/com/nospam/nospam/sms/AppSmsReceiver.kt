@@ -73,8 +73,6 @@ class AppSmsReceiver : BroadcastReceiver() {
                     )
                 )
                 Log.d(TAG, "Prediction: ${if (result.isSpam) "spam" else "ham"} (Score: ${result.score}) state=${result.senderState} notif=${result.notificationDecision}")
-                // An SMS just arrived, so there is service: send anything waiting for it.
-                runCatching { app.container.telephony.runSendRetries(serviceIsBack = true) }
                 if (result.messageId != null) {
                     val container = app.container
                     val alert = incomingAlert(
@@ -99,6 +97,10 @@ class AppSmsReceiver : BroadcastReceiver() {
                         IncomingAlert.NONE -> Unit
                     }
                 }
+                // Housekeeping after the message is announced, never before it.
+                // An SMS just arrived, so there is service: send anything waiting for it.
+                runCatching { app.container.telephony.runSendRetries(serviceIsBack = true) }
+                app.container.smsIngress.pruneExpiredVerdicts()
             } catch (e: Exception) {
                 Log.e(TAG, "SMS ingress failed", e)
             } finally {

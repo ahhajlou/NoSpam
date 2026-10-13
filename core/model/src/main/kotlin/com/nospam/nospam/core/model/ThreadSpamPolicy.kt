@@ -129,6 +129,19 @@ object ThreadSpamPolicy {
         return PolicyOutput(newState, notification)
     }
 
+    /**
+     * How to announce a message that has no verdict yet (the classifier was too
+     * slow or failed): as its sender is routed now, without counting it. A
+     * sender in Spam, by the filter or by the user's report, or blocked, stays
+     * silent; anything else notifies, since missing a real message is worse
+     * than one unlabeled notification. Saved contacts and spam protection off
+     * are handled by the caller, as for a classified message.
+     */
+    fun decideUnclassified(prev: SenderState?): NotificationDecision = when (prev?.state) {
+        ThreadSpamState.SPAM, ThreadSpamState.BLOCKED -> NotificationDecision.NONE
+        else -> NotificationDecision.NORMAL
+    }
+
     // Helper for callers that need to preserve normalizedAddress from prev or input
     fun decideWithAddress(normalizedAddress: String, input: PolicyInput): PolicyOutput {
         val out = decide(input)

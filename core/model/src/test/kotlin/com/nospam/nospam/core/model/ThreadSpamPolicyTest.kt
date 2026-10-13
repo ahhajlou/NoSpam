@@ -192,4 +192,19 @@ class ThreadSpamPolicyTest {
         assertEquals(ThreadSpamState.MIXED, ThreadSpamPolicy.deriveState(5, 1, false))
         assertEquals(ThreadSpamState.MIXED, ThreadSpamPolicy.deriveState(5, 0, true))
     }
+
+    // No verdict in time: announced as the sender is routed now
+
+    @Test fun `unclassified from a sender in Spam is silent`() {
+        assertEquals(NotificationDecision.NONE, ThreadSpamPolicy.decideUnclassified(senderState(ThreadSpamState.SPAM, spam = 11)))
+        assertEquals(NotificationDecision.NONE, ThreadSpamPolicy.decideUnclassified(senderState(ThreadSpamState.SPAM, spam = 1, override = true)))
+        assertEquals(NotificationDecision.NONE, ThreadSpamPolicy.decideUnclassified(senderState(ThreadSpamState.BLOCKED)))
+    }
+
+    @Test fun `unclassified from any other sender notifies`() {
+        assertEquals(NotificationDecision.NORMAL, ThreadSpamPolicy.decideUnclassified(null))
+        for (state in listOf(ThreadSpamState.CLEAN, ThreadSpamState.SUSPECTED, ThreadSpamState.MIXED, ThreadSpamState.TRUSTED)) {
+            assertEquals(state.name, NotificationDecision.NORMAL, ThreadSpamPolicy.decideUnclassified(senderState(state, spam = 1)))
+        }
+    }
 }
