@@ -384,32 +384,32 @@ immutable holder object swapped atomically.
 **New.** `core/data/.../SpamBackfillUseCase.kt:63-64` and `startWith`.
 
 ```kotlin
-@Volatile private var cancelled = false
+@Volatile private var canceled = false
 
-fun cancel() { cancelled = true }
+fun cancel() { canceled = true }
 
 private fun startWith(forceReclassify: Boolean) {
     if (!started.compareAndSet(false, true)) return
     scope.launch {
         try { run(forceReclassify) }
         ...
-        finally { started.set(false); cancelled = false }   // only reset here
+        finally { started.set(false); canceled = false }   // only reset here
     }
 }
 ```
 
-`cancelled` is reset in the `finally` of a scan that actually ran. It is never
+`canceled` is reset in the `finally` of a scan that actually ran. It is never
 reset when a scan *starts*.
 
 **Failure scenario.** The user taps Cancel on a backfill progress notification
 that is stale, or `BackfillCancelReceiver` fires after the scan already finished.
-`cancelled` is now `true` with nothing running, and nothing will clear it. The
+`canceled` is now `true` with nothing running, and nothing will clear it. The
 next `ensureStarted()` or `rescanAll()` enters the per-sender loop, hits
-`if (cancelled)` on the first iteration, and immediately reports `Cancelled`. The
+`if (canceled)` on the first iteration, and immediately reports `Canceled`. The
 user asks for a rescan from Settings and silently gets nothing. A cold restart is
 the only recovery, since the flag is in-memory.
 
-**Fix shape.** Set `cancelled = false` immediately after the successful
+**Fix shape.** Set `canceled = false` immediately after the successful
 `compareAndSet`, before `scope.launch`.
 
 ---

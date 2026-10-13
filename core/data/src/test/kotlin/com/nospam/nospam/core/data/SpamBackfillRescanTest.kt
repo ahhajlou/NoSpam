@@ -188,7 +188,7 @@ class SpamBackfillRescanTest {
         backfill.rescanAll()
         advanceUntilIdle()
 
-        assertEquals(BackfillStatus.Cancelled, backfill.status.value)
+        assertEquals(BackfillStatus.Canceled, backfill.status.value)
         // Fail-open: the aborted pass writes nothing.
         assertNull(db.senderStateDao.getByAddress("+98912"))
         assertNull(db.senderStateDao.getByAddress("+98999"))

@@ -39,7 +39,7 @@
 - [x] **Done 2026-10-03 (`chore/small-fixes`).** `NoSpamDatabase.writeScanBatch` writes both in one SQLite transaction (both DAOs' locks, states then verdicts), and `SpamStateWriter.upsertAllIfNotOverridden(pending, write)` hands it the merged states. A crash between the two writes used to leave counts without verdicts, so the next scan counted those messages again, which under the count-based routing can hide a sender. Original: `flush()` writes `sender_state` then `message_verdict` in two transactions; wrap in a single transaction for atomicity
 
 ## Backfill — open decisions (analyze before coding)
-- [x] Decide startup policy — RESOLVED (single-shot flag): no launch-time scan; a `history_backfill_pending` DataStore flag is set on onboarding permission grant, lets an interrupted scan resume on the next cold start exactly once, and is cleared (app-side watcher) on any terminal status (Done/Cancelled/Failed). Ordinary launches re-read the flag only.
+- [x] Decide startup policy — RESOLVED (single-shot flag): no launch-time scan; a `history_backfill_pending` DataStore flag is set on onboarding permission grant, lets an interrupted scan resume on the next cold start exactly once, and is cleared (app-side watcher) on any terminal status (Done/Canceled/Failed). Ordinary launches re-read the flag only.
 - [] Decide resume strategy: canceled scans restart from the beginning (idempotent via verdict-ID skip); a per-sender resume cursor would bound cost on large histories
 - [x] Gate launch-time scan on onboarding — folded into the startup-policy decision above: launch re-reads the flag only, and the flag is set only after permission is granted, so there is no SecurityException path
 

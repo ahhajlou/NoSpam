@@ -437,7 +437,7 @@ the system default SMS app on the same seed data.
 > 10. MMS: out of scope (SMS-only via existing `getAllMessages()`).
 > 11. Graduation: `MIXED → SPAM` only when `!protectFromSpam &&
 >     spamCount≥3 && total≥3 && ratio≥0.8` (§15 policy).
-> 12. Cancel between senders: partial progress persists, `Cancelled`
+> 12. Cancel between senders: partial progress persists, `Canceled`
 >     status emitted.
 
 **Gate:** `./gradlew :core:data:testDebugUnitTest` green with new
@@ -501,7 +501,7 @@ progress notification shows and dismisses.
          date ≥ now − 30d) → batch `insertAll` per sender.
       8. Emit `Running(processed, total)` after each sender.
       9. On completion: `Done`. On exception: `Failed`. On cancel:
-         `Cancelled`. Partial progress persists.
+         `Canceled`. Partial progress persists.
     - **No provider writes, no READ updates, no notifications.**
   - Refactor `SmsIngressUseCase.handle`: extract sender-state writes
     through `spamStateWriter` (behavior unchanged, just serialized).
@@ -581,7 +581,7 @@ progress notification shows and dismisses.
     message_verdict row.
   - `toggle_off_forces_clean` — spam-protection OFF → CLEAN.
   - `security_exception_aborts` — permission revoked → Failed status.
-  - `cancellation_between_senders` — partial progress, Cancelled.
+  - `cancellation_between_senders` — partial progress, Canceled.
   - `chronological_graduation` — MIXED → SPAM at ≥3 msgs, ≥0.8
     ratio, correctly ordered.
   Also update `FakeTelephonyDataSource` with `outboundAddresses`.
