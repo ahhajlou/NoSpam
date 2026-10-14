@@ -74,7 +74,7 @@ adb logcat | grep AppSmsReceiver   # "Prediction: ham/spam (Score: …) state=�
 | `feature:thread` | 113 | `ThreadViewModel`, SMS segment counting, emoji insertion + the thread and new-conversation screens |
 | `feature:settings` | 106 | `SettingsViewModel`, `SpamSettingsViewModel`, `GeneralSettingsViewModel` + the settings pages and dialogs |
 | `feature:onboarding` | 12 | The permission list and the onboarding screen |
-| `feature:export`, `feature:mldebug` | 21 | Debug-only features; absent from release |
+| `feature:export`, `feature:mldebug` | 21 | Developer tools in the drawer |
 | `:app` | 69 | `AppContainer` wiring, `AppSmsReceiver`, and launch-intent parsing (`SENDTO`, notification taps) |
 
 **Compose screens are tested here, not on a device.** Suites use
@@ -150,7 +150,6 @@ Eight of the twelve flows run by default. The runner skips three tags:
 
 | Tag | Flows | Why it is opt-in |
 |---|---|---|
-| `debug` | `debug_tools` | Needs a debug-only feature module |
 | `destructive` | `settings_recheck` | Rewrites global classifier state |
 | `manual-only` | `_unblock_part1_block`, `_unblock_part2_deliver_and_unblock` | Driven by `tools/persistence_check.sh`, which injects an SMS between the parts; reseeding between them guarantees part 2 fails |
 
@@ -232,6 +231,7 @@ Honest list of what has no test, from the merged report:
 - `SqliteNoSpamOpenHelper.onUpgrade`: nothing exercises an upgrade from an
   older schema. The suite covers a fresh create at version 4 only, so a
   migration bug would ship silently.
-- `feature:export` and `feature:mldebug` — debug-only, not in release builds.
+- `feature:export` and `feature:mldebug` — developer tools, covered only by
+  their 21 unit tests and the `debug_tools` flow.
 - Fonts are `FontFamily.Default` placeholders (`Type.kt`), so nothing asserts
   the real Inter / Hanken Grotesk / Vazirmatn metrics yet.

@@ -10,4 +10,7 @@
         <item quantity="one">%d new</item>
         <item quantity="other">%d new</item>
     </plurals>
+    <!-- Developer tools in the drawer (:feature:export, :feature:mldebug). -->
+    <string name="drawer_export">Export SMS</string>
+    <string name="drawer_mldebug">Classifier test</string>
 </resources>

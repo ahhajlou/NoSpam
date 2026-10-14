@@ -48,11 +48,11 @@ role=$(adb shell cmd role get-role-holders android.app.role.SMS 2>/dev/null | tr
 pass=0; fail=0; failed_flows=""
 for flow in .maestro/flows/*.yaml; do
     name=$(basename "$flow" .yaml)
-    # Tagged flows are opt-in: `debug` needs a debug-only feature module,
-    # `destructive` rewrites global classifier state, and `manual-only` flows
-    # are driven by tools/persistence_check.sh, which injects SMS between their
-    # parts — reseeding between them here guaranteed part 2 failed.
-    grep -qE "^\s+- (debug|destructive|manual-only)$" "$flow" && { echo "-- skip $name (tagged)"; continue; }
+    # Tagged flows are opt-in: `destructive` rewrites global classifier state,
+    # and `manual-only` flows are driven by tools/persistence_check.sh, which
+    # injects SMS between their parts — reseeding between them here guaranteed
+    # part 2 failed.
+    grep -qE "^\s+- (destructive|manual-only)$" "$flow" && { echo "-- skip $name (tagged)"; continue; }
     # tools/permission_gate_check.sh revokes permissions to assert the onboarding
     # gate and restores them at the end; if it was interrupted, every flow here
     # would strand on onboarding. Re-granting is cheap insurance against that.

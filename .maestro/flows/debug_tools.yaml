@@ -1,11 +1,6 @@
 appId: com.nospam.nospam
-tags:
-  - debug
 ---
-# feature:export and feature:mldebug are debugImplementation-only (see
-# docs/ARCHITECTURE-REVIEW.md A-1): they exist in the drawer of a debug build
-# only, never release. Tagged `debug` so a release-shaped run can exclude this
-# flow with --exclude-tags=debug.
+# The developer tools in the drawer: feature:export and feature:mldebug.
 - launchApp:
     clearState: false
     permissions:

@@ -128,8 +128,7 @@ fun NoSpamAppShell(
                                 destination.isOn(ArchivedRoute::class)) { go(ArchivedRoute) }
                             TopLevelItem(R.string.drawer_spam_blocked, Icons.Filled.Report, Icons.Outlined.Report,
                                 destination.isOn(SpamRoute::class), count = newSpamCount) { go(SpamRoute) }
-                            // Developer tools. Empty in release: the feature modules are
-                            // debugImplementation, so nothing to show and nothing linked.
+                            // Developer tools.
                             if (debugTools.isNotEmpty()) {
                                 HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 8.dp))
                             }

@@ -10,4 +10,6 @@
         <item quantity="one">%d مورد جدید</item>
         <item quantity="other">%d مورد جدید</item>
     </plurals>
+    <string name="drawer_export">خروجی پیامک‌ها</string>
+    <string name="drawer_mldebug">آزمایش طبقه‌بند</string>
 </resources>

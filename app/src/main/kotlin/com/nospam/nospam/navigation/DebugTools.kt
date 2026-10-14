@@ -23,7 +23,7 @@ import kotlinx.serialization.Serializable
 @Serializable object ExportRoute
 @Serializable object MlDebugRoute
 
-/** Debug builds surface both developer tools in the drawer. */
+/** The developer tools in the drawer, in every build. */
 val debugTools: List<DebugTool> = listOf(
     DebugTool(
         labelRes = R.string.drawer_export,
