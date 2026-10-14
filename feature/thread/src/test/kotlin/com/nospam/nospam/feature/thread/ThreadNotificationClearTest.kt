@@ -46,6 +46,19 @@ class ThreadNotificationClearTest {
         manager.notify(id.hashCode(), n)
     }
 
+    /** A conversation's notification in the messages group, and the group's summary. */
+    private fun postGroupedFor(id: Long) {
+        val n = Notification.Builder(context, "test").setSmallIcon(android.R.drawable.sym_def_app_icon)
+            .setGroup("incoming_messages").build()
+        manager.notify(id.hashCode(), n)
+    }
+
+    private fun postSummary() {
+        val n = Notification.Builder(context, "test").setSmallIcon(android.R.drawable.sym_def_app_icon)
+            .setGroup("incoming_messages").setGroupSummary(true).build()
+        manager.notify("messages_summary", 0, n)
+    }
+
     private fun activeIds() = manager.activeNotifications.map { it.id }
 
     private fun showConversation() {
@@ -81,6 +94,21 @@ class ThreadNotificationClearTest {
         val big = 3_000_000_000L
         postFor(big)
         clearThreadNotification(context, big)
+        assertTrue(activeIds().isEmpty())
+    }
+
+    @Test fun `the group summary stays while another conversation is notified`() {
+        postGroupedFor(threadId)
+        postGroupedFor(threadId + 1)
+        postSummary()
+        clearThreadNotification(context, threadId)
+        assertEquals(listOf("messages_summary", null), manager.activeNotifications.map { it.tag }.sortedBy { it == null })
+    }
+
+    @Test fun `the group summary goes with the last conversation`() {
+        postGroupedFor(threadId)
+        postSummary()
+        clearThreadNotification(context, threadId)
         assertTrue(activeIds().isEmpty())
     }
 }

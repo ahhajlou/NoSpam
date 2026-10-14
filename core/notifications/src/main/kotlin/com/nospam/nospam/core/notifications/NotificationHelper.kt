@@ -38,6 +38,18 @@ object NotificationHelper {
     const val NOTIFICATION_ID_BACKFILL = 4001
     private const val SHORTCUT_ID_PREFIX = "thread-"
 
+    /** Every message notification joins this group; see [buildMessageSummary]. */
+    const val GROUP_KEY_MESSAGES = "incoming_messages"
+
+    /**
+     * The summary is posted under this tag. Thread notifications use no tag and
+     * an id derived from the thread id, so a thread id can equal any fixed id
+     * but never a tagged one.
+     */
+    const val TAG_MESSAGES_SUMMARY = "messages_summary"
+    private const val NOTIFICATION_ID_MESSAGES_SUMMARY = 0
+    private const val REQUEST_CODE_SUMMARY = 1002
+
     /** A fresh task, as TaskStackBuilder gives the notification tap. */
     private const val FRESH_TASK_FLAGS = Intent.FLAG_ACTIVITY_NEW_TASK or
         Intent.FLAG_ACTIVITY_CLEAR_TASK or
@@ -131,6 +143,24 @@ object NotificationHelper {
 
     fun cancelNotification(context: Context, threadId: Long) {
         androidx.core.app.NotificationManagerCompat.from(context).cancel(notificationId(threadId))
+        cancelMessageSummaryIfEmpty(context, except = notificationId(threadId))
+    }
+
+    /**
+     * Android removes a summary when the user swipes its last child away but not
+     * when the app cancels it, which would leave an empty card in the shade.
+     * [except] is an id being canceled right now, in case the system has not
+     * dropped it from the active list yet. The thread screen
+     * (`clearThreadNotification`, feature:thread) repeats this with the same key
+     * and tag, since it cannot reach this module.
+     */
+    fun cancelMessageSummaryIfEmpty(context: Context, except: Int? = null) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        val active = runCatching { manager.activeNotifications }.getOrNull() ?: return
+        val hasChild = active.any {
+            it.tag == null && it.id != except && it.notification.group == GROUP_KEY_MESSAGES
+        }
+        if (!hasChild) manager.cancel(TAG_MESSAGES_SUMMARY, NOTIFICATION_ID_MESSAGES_SUMMARY)
     }
 
     /**
@@ -301,7 +331,59 @@ object NotificationHelper {
             // A sender ID cannot receive a reply, so it is not offered.
             .apply { if (!isAlphanumericSender(sender)) addAction(replyAction) }
             .setAutoCancel(true)
-            .apply { if (isSpam) setSubText(context.getString(R.string.notification_suspected_spam)) }
+            .apply {
+                if (isSpam) {
+                    setSubText(context.getString(R.string.notification_suspected_spam))
+                } else {
+                    // Suspected spam stays out: it is quiet, on its own channel,
+                    // and a summary of the messages channel must not absorb it.
+                    setGroup(GROUP_KEY_MESSAGES)
+                    setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+                }
+            }
             .build()
+    }
+
+    /**
+     * The group's summary, as Google Messages posts it: no text of its own, so
+     * the shade draws the collapsed card from the conversations inside it, with
+     * a count to expand. Android hides a summary that has fewer than two
+     * children. Only the children alert; the summary never does.
+     *
+     * Post it with [notifyMessageSummary], never under a thread's id. Tapping it
+     * opens the inbox, in a fresh task like a conversation's tap.
+     */
+    fun buildMessageSummary(context: Context): android.app.Notification {
+        val inboxIntent = Intent(Intent.ACTION_MAIN).apply {
+            setClassName(context.packageName, "com.nospam.nospam.MainActivity")
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val inboxPending = TaskStackBuilder.create(context)
+            .addNextIntent(inboxIntent)
+            .getPendingIntent(
+                REQUEST_CODE_SUMMARY,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        return NotificationCompat.Builder(context, CHANNEL_ID_MESSAGES)
+            .setSmallIcon(R.drawable.ic_stat_message)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setGroup(GROUP_KEY_MESSAGES)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(inboxPending)
+            .setAutoCancel(true)
+            .build()
+    }
+
+    fun notifyMessageSummary(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        androidx.core.app.NotificationManagerCompat.from(context)
+            .notify(TAG_MESSAGES_SUMMARY, NOTIFICATION_ID_MESSAGES_SUMMARY, buildMessageSummary(context))
     }
 }

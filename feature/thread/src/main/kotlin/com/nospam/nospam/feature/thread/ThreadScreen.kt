@@ -666,4 +666,14 @@ internal fun newestDeliveredId(messages: List<Message>): Long? =
  */
 internal fun clearThreadNotification(context: android.content.Context, threadId: Long) {
     runCatching { androidx.core.app.NotificationManagerCompat.from(context).cancel(threadId.hashCode()) }
+    // The group summary goes with the last conversation: Android removes it
+    // only for a swipe, not for this cancel. Same key and tag as
+    // `NotificationHelper.cancelMessageSummaryIfEmpty` (core:notifications).
+    runCatching {
+        val manager = context.getSystemService(android.app.NotificationManager::class.java) ?: return@runCatching
+        val hasChild = manager.activeNotifications.any {
+            it.tag == null && it.id != threadId.hashCode() && it.notification.group == "incoming_messages"
+        }
+        if (!hasChild) manager.cancel("messages_summary", 0)
+    }
 }

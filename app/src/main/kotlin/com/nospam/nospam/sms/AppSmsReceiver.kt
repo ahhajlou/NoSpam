@@ -178,6 +178,8 @@ class AppSmsReceiver : BroadcastReceiver() {
             NotificationHelper.notificationId(result.threadId.value),
             notification,
         )
+        // Suspected spam is not in the group, so it has no summary.
+        if (!suspected) NotificationHelper.notifyMessageSummary(context)
     }
 
     /**
