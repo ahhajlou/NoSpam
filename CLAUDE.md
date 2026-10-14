@@ -31,7 +31,7 @@ matters more than the count:
 | Aggregator | `core:data` | The repository layer. Depends on leaf plus every capability module it needs. |
 | Test support | `core:testing` | Fakes. Depends on leaf plus the capability modules whose interfaces it implements. Never on a production classpath. |
 | Shipping feature | `feature:conversations`, `feature:thread`, `feature:settings`, `feature:onboarding` | One navigable area each. |
-| Debug-only feature | `feature:export`, `feature:mldebug` | Wired with `debugImplementation`; absent from release builds. |
+| Developer tool | `feature:export`, `feature:mldebug` | Drawer entries below the folders, in every build. Debug-only until 2026-10-14; the phone in daily use runs a release build, which `run-as` cannot read, so exporting messages and checking the classifier have to work there. |
 | App | `:app` | Shell, navigation, DI container, SMS receivers. |
 | Tooling | `:baselineprofile` | Not architecture. Generates the startup profile. |
 

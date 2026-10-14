@@ -6,13 +6,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavHostController
 
 /**
- * A developer-only destination surfaced in the navigation drawer.
+ * A developer tool surfaced in the navigation drawer, below the folders.
  *
- * The list of these is variant-specific: `src/debug` supplies the real tools,
- * `src/release` supplies an empty list, and the corresponding feature modules
- * are wired with `debugImplementation` so a release build cannot link them at
- * all. Gating on `BuildConfig.DEBUG` alone would not be enough — the classes
- * have to be absent from the release classpath, not merely unreachable.
+ * Release builds carry them too since 2026-10-14: the phone in daily use runs a
+ * release build, which `run-as` cannot read, so exporting messages for the
+ * training data and checking the classifier have to work there.
  */
 class DebugTool(
     val labelRes: Int,

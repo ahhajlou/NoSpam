@@ -46,10 +46,11 @@
 ## Voluntary corpus contribution (`:feature:export`) — designed, not built
 
 `:feature:export` exists because volunteers should be able to contribute real
-Persian SMS to the training set; there is no corpus to buy. It is currently
-`debugImplementation` and out of release builds, because what exists today is
-shaped like a debug tool rather than a consent flow. It comes back to release
-when the items below are done, not before.
+Persian SMS to the training set; there is no corpus to buy. What exists today is
+shaped like a developer tool rather than a consent flow. Since 2026-10-14 it is
+in release builds anyway, as a developer tool in the drawer: the phone in daily
+use runs a release build, and the next training set is built from its messages.
+The items below are still required before it is offered to volunteers.
 
 - [] **Export preprocessed text, not raw text.** `TfidfPreprocessor` already
   masks URLs, digits and Persian numerals before scoring. Running the same
@@ -73,7 +74,8 @@ when the items below are done, not before.
   `Settings.Secure.ANDROID_ID` (`REVIEW.md` L-2).
 
 `:feature:mldebug` is a different case and needs no such plan: it is a
-classifier console for development and stays debug-only permanently.
+classifier console for development, in the drawer of every build since
+2026-10-14.
 
 ## Spam routing — agreed model (2026-09-15), supersedes the ratio rule
 
