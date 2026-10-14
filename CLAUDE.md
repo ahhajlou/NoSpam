@@ -219,6 +219,18 @@ always passed. MessagingStyle's user is a separate "You" person: Android files
 an inline reply under it, and with the sender there a reply read as the
 contact's.
 
+**Message notifications are one group** (`GROUP_KEY_MESSAGES`), as in Google
+Messages: each conversation's notification is a child that alerts
+(`GROUP_ALERT_CHILDREN`), and `AppSmsReceiver` posts a text-free summary after
+it (`notifyMessageSummary`), so the shade shows one card that expands. Grouping
+exists from API 24; minSdk is 26. The summary is posted under a tag
+(`TAG_MESSAGES_SUMMARY`) because a thread id can equal any fixed id. Android
+removes a summary when the user swipes its last child away but not when the app
+cancels it, so `cancelNotification` and `clearThreadNotification` cancel it once
+no child is left; a new cancel path must do the same. Suspected spam stays out
+of the group (its own channel, quiet). `dumpsys notification` does not list the
+summary reliably; check the shade.
+
 **After an inline reply the notification is posted again, never canceled**
 (`NotificationHelper.appendReply`): silently, with the reply added under "You",
 as Google Messages does. On Android 15+ a direct reply marks the notification
