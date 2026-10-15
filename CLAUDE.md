@@ -657,8 +657,9 @@ source, rules file, manifest, the lock file or `core/ml/build.gradle.kts`
 changes. Requirements: rustup
 (the core's `rust-toolchain.toml` pins Rust and the Android targets),
 `cargo install cargo-ndk --locked`, and the NDK `ndkVersion` in
-`core/ml/build.gradle.kts` names (28.2.13676358, AGP 9.4's default; r28 and
-later align libraries for 16 KB pages); CI installs the same. The JNI is
+`core/ml/build.gradle.kts` names (29.0.14206865, preinstalled on GitHub's
+ubuntu-24.04 runner; r28 and later align libraries for 16 KB pages); CI
+installs it when the runner lacks it. The JNI is
 hand-written: `NativeCore`'s package and class are encoded in the Rust function
 names, so renaming it means renaming those in the crate. The design and its
 reasons: `third_party/persian-sms-spam/docs/preprocessing-core-plan.md`.
