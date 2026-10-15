@@ -52,8 +52,9 @@ in release builds anyway, as a developer tool in the drawer: the phone in daily
 use runs a release build, and the next training set is built from its messages.
 The items below are still required before it is offered to volunteers.
 
-- [] **Export preprocessed text, not raw text.** `TfidfPreprocessor` already
-  masks URLs, digits and Persian numerals before scoring. Running the same
+- [] **Export preprocessed text, not raw text.** The Rust core's anonymizer
+  (`NativeCore.stages`, first stage) already masks passwords, codes, national
+  IDs, card, IBAN and account numbers, phone numbers and emails before scoring. Running the same
   masking on export costs the model nothing and stops the corpus carrying phone
   numbers, OTP codes and account numbers. Cheapest and largest risk reduction —
   do this one first, even standalone.
