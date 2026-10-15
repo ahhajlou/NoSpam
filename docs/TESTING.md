@@ -231,7 +231,9 @@ compiles the release graph a second time.
 `.github/workflows/android.yml` — JDK 25 + Android SDK, then the Rust core's
 toolchain (rustup installs what the submodule's `rust-toolchain.toml` pins, the
 NDK named in `core/ml/build.gradle.kts`, cargo-ndk; crates and the core's build
-directory are cached), then one Gradle invocation:
+directory are cached), then one Gradle invocation, with the test JVMs' heap
+raised to 1536 MB and at most two workers (an init script, as in `release.yml`;
+the Robolectric tests ran out of the default 512 MB on the runner):
 debug assemble + `testDebugUnitTest` + `lintDebug`, the two JVM modules' `test`,
 `:app:compileReleaseKotlin` and `:baselineprofile:compileNonMinifiedReleaseKotlin`
 as a release-path compile check, the three instrumented modules'
