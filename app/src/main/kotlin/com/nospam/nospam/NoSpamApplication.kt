@@ -83,7 +83,8 @@ class NoSpamApplication : Application() {
         // keep their old intent until the sender writes again; give them the
         // flags. One binder call when nothing needs it.
         appScope.launch { NotificationHelper.repairConversationShortcuts(this@NoSpamApplication) }
-        // Warm classifier off main thread so first SMS doesn't pay 1.2 MB JSON load.
+        // Warm the classifier off the main thread so the first SMS doesn't pay for
+        // loading the model.
         appScope.launch {
             runCatching { container.classifier }
         }

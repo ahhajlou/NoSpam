@@ -74,7 +74,8 @@ class AppContainer(private val context: Context) {
     val draftRepository: DraftRepository by lazy { DraftRepository(preferences) }
 
     /**
-     * Lazily loaded off the main thread (1.2 MB JSON). Callers must invoke
+     * Lazily loaded off the main thread: parses the 2.7 MB `spam_model.json`
+     * and loads the Rust core. Callers must invoke
      * from a background coroutine — [sms.AppSmsReceiver] uses goAsync + IO.
      */
     val classifier: SpamClassifier by lazy {
