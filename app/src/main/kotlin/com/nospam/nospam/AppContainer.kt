@@ -5,6 +5,7 @@ package com.nospam.nospam
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -42,8 +43,20 @@ import com.nospam.nospam.ui.ContactPhotoCache
 class AppContainer(private val context: Context) {
     private val appContext: Context = context.applicationContext
 
-    /** For work that must outlive the screen that started it. */
+    /**
+     * For work that must outlive the screen that started it, and for
+     * [conversationsRepository]'s shared flows.
+     */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Stops [scope]'s work and waits for it. Tests only: the app's container
+     * lives as long as the process. Without it, a test's repository kept loading
+     * from SQLite after the test, from a Robolectric sandbox no longer bound to
+     * its native library (UnsatisfiedLinkError in CI, 2026-10-15).
+     */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun stop() = scope.coroutineContext[kotlinx.coroutines.Job]!!.cancelAndJoin()
 
     val database: NoSpamDatabase by lazy { NoSpamDatabase.persistent(appContext) }
 
@@ -119,6 +132,9 @@ class AppContainer(private val context: Context) {
         ConversationsRepository(
             telephony,
             database,
+            // The container's scope rather than one of its own (the same IO
+            // scope), so stop() can end the repository's flows too.
+            externalScope = scope,
             normalizer = { PhoneNumberNormalizer.normalize(appContext, it) },
             drafts = draftRepository.observeDrafts(),
         )
