@@ -163,9 +163,11 @@ fun MlDebugScreen(
                         }
                         Spacer(Modifier.width(12.dp))
                         Text(
+                            // Isolated, or a right-to-left layout moves the minus
+                            // sign to the end ("1.6675-").
                             text = stringResource(
                                 R.string.mldebug_score,
-                                String.format(Locale.US, "%.4f", result.score)
+                                isolateLtr(String.format(Locale.US, "%.4f", result.score))
                             ),
                             style = MaterialTheme.typography.bodyLarge
                         )
