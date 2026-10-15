@@ -128,12 +128,28 @@ abstract class CargoBuild @Inject constructor(private val execOps: ExecOperation
         val out = outputDir.get().asFile
         out.deleteRecursively()
         out.mkdirs()
+        // rustc writes the absolute path of every source file into the library, for
+        // panic messages: crates under CARGO_HOME, the workspace, the build directory.
+        // Fixed names instead make the library the same on every machine (a
+        // reproducible build) and keep local paths, user names included, out of the
+        // APK. CARGO_ENCODED_RUSTFLAGS survives spaces in paths; it replaces any
+        // RUSTFLAGS from the environment.
+        val cargoHome = System.getenv("CARGO_HOME") ?: "${System.getProperty("user.home")}/.cargo"
+        val remaps = listOf(
+            cargoHome to "/cargo",
+            workspaceDir.path to "/core",
+            targetDir.get().asFile.path to "/target",
+        )
         execOps.exec {
             workingDir = workspaceDir
             executable = cargo.get()
             args(arguments.get().map { it.replace("{out}", out.path) })
             environment(cargoEnvironment.get())
             environment("CARGO_TARGET_DIR", targetDir.get().asFile.path)
+            environment(
+                "CARGO_ENCODED_RUSTFLAGS",
+                remaps.joinToString("\u001f") { (from, to) -> "--remap-path-prefix=$from=$to" },
+            )
             ndkDirectory.orNull?.let { environment("ANDROID_NDK_HOME", it.asFile.path) }
         }
         hostLibrary.orNull?.let { name ->

@@ -654,7 +654,11 @@ Gradle, for the JVM tests. Both are release builds with LTO for every variant
 (`cargoProfile`: 13% smaller than cargo's default, same speed, measured
 2026-10-15), share `build/rust/target`, and stay up to date until a Rust
 source, rules file, manifest, the lock file or `core/ml/build.gradle.kts`
-changes. Requirements: rustup
+changes. The libraries are reproducible: the cargo tasks map the build
+machine's paths (`CARGO_HOME`, the workspace, the build directory) to fixed
+names, which rustc would otherwise write into them for panic messages, so the
+same source gives the same file on any machine and the APK carries no local
+paths. Requirements: rustup
 (the core's `rust-toolchain.toml` pins Rust and the Android targets),
 `cargo install cargo-ndk --locked`, and the NDK `ndkVersion` in
 `core/ml/build.gradle.kts` names (29.0.14206865, preinstalled on GitHub's
