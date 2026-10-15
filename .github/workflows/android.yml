@@ -110,17 +110,33 @@ jobs:
       # Compose suites moved to the JVM, so assembling their test APKs
       # compiled nothing. core:database's ten suites were never in this list.
       # core:ml has one since 2026-10-15: the Rust core's parity on a device.
+      # Gradle's test JVMs get 512 MB of heap, separate from the daemon's -Xmx in
+      # gradle.properties, and the Robolectric tests run out of it on the runner:
+      # :app's ContactPhotoCacheTest failed with OutOfMemoryError on 2026-10-15,
+      # as ShareIntentTest did for release.yml at v0.5.0. Same fix as release.yml:
+      # an init script in $RUNNER_TEMP raises it without touching the build
+      # files, and --max-workers bounds how many test JVMs run at once.
       - name: Build, compile device-test suites, and check coverage ratchet
-        run: >
-          ./gradlew assembleDebug testDebugUnitTest lintDebug
-          :core:model:test :core:common:test
-          :app:compileReleaseKotlin
-          :baselineprofile:compileNonMinifiedReleaseKotlin
-          :core:telephony:assembleDebugAndroidTest
-          :core:database:assembleDebugAndroidTest
-          :core:ml:assembleDebugAndroidTest
-          :koverXmlReportCi :koverHtmlReportCi :koverVerifyCi
-          --stacktrace
+        run: |
+          cat > "$RUNNER_TEMP/ci-tests.init.gradle" <<'EOF'
+          allprojects {
+              tasks.withType(Test).configureEach {
+                  maxHeapSize = "1536m"
+              }
+          }
+          EOF
+          ./gradlew \
+            --init-script "$RUNNER_TEMP/ci-tests.init.gradle" \
+            --max-workers=2 \
+            assembleDebug testDebugUnitTest lintDebug \
+            :core:model:test :core:common:test \
+            :app:compileReleaseKotlin \
+            :baselineprofile:compileNonMinifiedReleaseKotlin \
+            :core:telephony:assembleDebugAndroidTest \
+            :core:database:assembleDebugAndroidTest \
+            :core:ml:assembleDebugAndroidTest \
+            :koverXmlReportCi :koverHtmlReportCi :koverVerifyCi \
+            --stacktrace
 
       - name: Upload merged coverage report
         if: always()
