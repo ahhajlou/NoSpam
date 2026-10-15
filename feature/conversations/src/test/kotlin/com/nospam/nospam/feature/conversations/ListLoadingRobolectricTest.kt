@@ -53,6 +53,9 @@ class ListLoadingRobolectricTest {
     private val scheduler = TestCoroutineScheduler()
     private val mainDispatcher = StandardTestDispatcher(scheduler)
 
+    // Stops each test's repository flows after the test; see RepositoryScopeRule.
+    @get:Rule val repositoryScope = RepositoryScopeRule()
+
     @Before fun setUp() { Dispatchers.setMain(mainDispatcher) }
     @After fun tearDown() { Dispatchers.resetMain() }
 
@@ -89,7 +92,7 @@ class ListLoadingRobolectricTest {
     @Test
     fun `archived screen shows no empty state while loading, then the empty state once loaded empty`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(1, "+98911", "hi")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ArchivedViewModel(repo)
 
         rule.setContent { ArchivedScreen(title = "Archived", viewModel = vm) }
@@ -106,7 +109,7 @@ class ListLoadingRobolectricTest {
     @Test
     fun `archived screen shows the archived row once loaded with items`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(1, "+98911", "Archived row snippet")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         runBlocking { repo.archive(ThreadId(1)) }
         val vm = ArchivedViewModel(repo)
 
@@ -127,7 +130,7 @@ class ListLoadingRobolectricTest {
     @Test
     fun `spam screen shows no empty state while loading, then the empty state once loaded empty`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(1, "+98911", "hi")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = SpamViewModel(repo)
 
         rule.setContent { SpamScreen(title = "Spam & blocked", viewModel = vm) }
@@ -145,7 +148,7 @@ class ListLoadingRobolectricTest {
     fun `spam screen shows the flagged row once loaded with items`() {
         val db = NoSpamDatabase.inMemory()
         val telephony = FakeTelephonyDataSource(listOf(conv(1, "+98911", "Spam row snippet")))
-        val repo = ConversationsRepository(telephony, db)
+        val repo = ConversationsRepository(telephony, db, repositoryScope.scope)
         runBlocking {
             db.senderStateDao.upsert(SenderStateEntity(normalizedAddress = "+98911", state = ThreadSpamState.SPAM))
         }
