@@ -158,6 +158,7 @@ abstract class CargoBuild @Inject constructor(private val execOps: ExecOperation
     }
 }
 
+// The ABIs here are also :app's abiFilters: keep the two lists the same.
 val cargoNdkBuild = tasks.register<CargoBuild>("cargoNdkBuild") {
     description = "Builds the Rust core (libspam_core_jni.so) for each Android ABI."
     sources.from(rustSources)

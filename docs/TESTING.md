@@ -260,8 +260,8 @@ Honest list of what has no test, from the merged report:
   migration bug would ship silently.
 - `feature:export` and `feature:mldebug` — developer tools, covered only by
   their 22 unit tests and the `debug_tools` flow.
-- No 32-bit x86 build of the Rust core. The APK's `lib/x86` holds only two
-  small androidx libraries, so on a 32-bit x86 device the classifier cannot
-  load. Such devices with Android 8+ (minSdk 26) are close to nonexistent.
+- No 32-bit x86 build of the Rust core, so the APK ships no x86 folder at all
+  (`abiFilters` in `:app`): a 32-bit x86 device cannot install the app. Such
+  devices with Android 8+ (minSdk 26) are close to nonexistent.
 - Fonts are `FontFamily.Default` placeholders (`Type.kt`), so nothing asserts
   the real Inter / Hanken Grotesk / Vazirmatn metrics yet.
