@@ -49,6 +49,12 @@ android {
         version = release(37)
     }
 
+    // The NDK that strips the native libraries this APK packages (gradle/
+    // libs.versions.toml, shared with core:ml). Without it AGP falls back to its
+    // default NDK, 28.2, which GitHub's runner does not have: CI then packaged
+    // every library unstripped ("Unable to strip"), 1.3 MB more in the APK.
+    ndkVersion = libs.versions.ndk.get()
+
     defaultConfig {
         applicationId = "com.nospam.nospam"
         minSdk = 26

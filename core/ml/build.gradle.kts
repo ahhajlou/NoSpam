@@ -12,11 +12,9 @@ plugins {
 android {
     namespace = "com.nospam.nospam.core.ml"
     compileSdk = 37
-    // The NDK cargo-ndk links the Rust core with. 29.0 is preinstalled on GitHub's
-    // ubuntu-24.04 runner (image 20261004), so CI does not download 2 GB per run; its
-    // install step stays as the fallback for an image without it. r28 and later
-    // align native libraries for 16 KB pages.
-    ndkVersion = "29.0.14206865"
+    // The NDK cargo-ndk links the Rust core with (gradle/libs.versions.toml, shared
+    // with :app). r28 and later align native libraries for 16 KB pages.
+    ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
         minSdk = 26

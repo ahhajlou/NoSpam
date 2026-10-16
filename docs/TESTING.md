@@ -39,7 +39,7 @@ Turbine for Flow assertions.
   minSdk 26).
 - **Rust and the NDK** for `core:ml`'s native library, which the JVM tests load
   too: rustup, `cargo install cargo-ndk --locked`, the NDK version in
-  `core/ml/build.gradle.kts`, and the submodule checked out
+  `gradle/libs.versions.toml` (`ndk`), and the submodule checked out
   (`git submodule update --init`). See the README's "Build".
 - **A device or emulator** for the instrumented suites, the Maestro flows and
   the manual scripts. The Compose UI tests do not need one.
@@ -230,7 +230,7 @@ compiles the release graph a second time.
 
 `.github/workflows/android.yml` — JDK 25 + Android SDK, then the Rust core's
 toolchain (rustup installs what the submodule's `rust-toolchain.toml` pins, the
-NDK named in `core/ml/build.gradle.kts`, cargo-ndk; crates and the core's build
+NDK named in `gradle/libs.versions.toml`, cargo-ndk; crates and the core's build
 directory are cached), then one Gradle invocation, with the test JVMs' heap
 raised to 1536 MB and at most two workers (an init script, as in `release.yml`;
 the Robolectric tests ran out of the default 512 MB on the runner):

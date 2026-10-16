@@ -79,12 +79,13 @@ jobs:
         working-directory: third_party/persian-sms-spam/core
         run: rustup toolchain install
 
-      # One source for the version: the ndkVersion line in core:ml's build file.
+      # One source for the version: `ndk` in gradle/libs.versions.toml, which
+      # core:ml and :app both read.
       - name: Install the NDK core:ml pins
         run: |
-          NDK="$(sed -n 's/^ *ndkVersion = "\(.*\)"$/\1/p' core/ml/build.gradle.kts)"
+          NDK="$(sed -n 's/^ndk = "\(.*\)"$/\1/p' gradle/libs.versions.toml)"
           if [ -z "$NDK" ]; then
-            echo "::error::could not read ndkVersion from core/ml/build.gradle.kts"
+            echo "::error::could not read the ndk version from gradle/libs.versions.toml"
             exit 1
           fi
           sdkmanager --install "ndk;$NDK"
