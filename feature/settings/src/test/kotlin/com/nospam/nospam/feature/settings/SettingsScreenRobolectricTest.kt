@@ -13,6 +13,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.junit.Assert.assertEquals
@@ -120,5 +122,18 @@ class SettingsScreenRobolectricTest {
         rule.onNodeWithText("Terms of service").performClick()
         rule.waitForIdle()
         rule.onNodeWithText("Close").assertIsDisplayed()
+    }
+
+    @Test fun `about opens the open-source licenses with hazm's notice`() {
+        rule.setContent { AboutSettingsScreen() }
+        rule.onNodeWithText("Open-source licenses").performClick()
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithText("Copyright (c) 2013 Alireza Nourian", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.onNodeWithText("derived from hazm", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Close").performClick()
+        rule.waitForIdle()
+        rule.onAllNodesWithText("Alireza Nourian", substring = true).assertCountEquals(0)
     }
 }

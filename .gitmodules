@@ -1,0 +1,3 @@
+[submodule "third_party/persian-sms-spam"]
+	path = third_party/persian-sms-spam
+	url = https://github.com/ahhajlou/persian-sms-spam.git

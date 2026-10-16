@@ -2,8 +2,9 @@
 
 package com.nospam.nospam.feature.mldebug
 
-import com.nospam.nospam.core.ml.HazmNormalizer
+import com.nospam.nospam.core.ml.NativeCore
 import com.nospam.nospam.core.ml.SpamClassifier
+import com.nospam.nospam.core.ml.TfidfSpamClassifier
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.SpamLabel
 import com.nospam.nospam.core.model.SpamVerdict
@@ -47,10 +48,7 @@ class MlDebugViewModelTest {
 
     @Test
     fun `classify populates full pipeline trace`() = runTest(dispatcher) {
-        // Real hazm resources from the sibling core:ml module (test working dir is
-        // the feature module dir, so ../../core/ml resolves from this module).
-        val normalizer = HazmNormalizer.fromFiles(File("../../core/ml/src/main/assets"))
-        val vm = MlDebugViewModel(TestClassifier { SpamVerdict(SpamLabel.SPAM, 1.5) }, dispatcher, normalizer)
+        val vm = MlDebugViewModel(TestClassifier { SpamVerdict(SpamLabel.SPAM, 1.5) }, dispatcher)
         vm.onInputChanged("You won! Claim your https://example.com prize now")
         advanceUntilIdle()
 
@@ -62,10 +60,32 @@ class MlDebugViewModelTest {
         assertNull(state.error)
         val result = checkNotNull(state.result)
         assertEquals("You won! Claim your https://example.com prize now", result.input)
-        // URL tokenized, digits normalized by the hazm preprocessor
-        assertTrue("URLTOKEN" in result.normalized)
+        // The Rust core masked the URL in its URL step and kept it masked.
+        assertTrue("https://" in result.stages.anonymized)
+        assertTrue("URLTOKEN" in result.stages.urlsMasked)
+        assertTrue("URLTOKEN" in result.stages.normalized)
+        assertEquals(NativeCore.ngrams(result.input).size, result.ngramCount)
         assertEquals(1.5, result.score, 0.0)
         assertTrue(result.isSpam)
+        // Not the TF-IDF model, so there is no model pipeline to show.
+        assertNull(result.pipeline)
+        assertNull(result.coreGitSha)
+    }
+
+    @Test
+    fun `the real model shows its pipeline and core commit`() = runTest(dispatcher) {
+        // The model from the sibling core:ml module (test working dir is the feature
+        // module dir, so ../../core/ml resolves from this module).
+        val classifier = TfidfSpamClassifier.fromJson(File("../../core/ml/src/main/assets/spam_model.json").readText())
+        val vm = MlDebugViewModel(classifier, dispatcher)
+        vm.onInputChanged("سلام، فردا میبینمت")
+        vm.classify()
+        advanceUntilIdle()
+
+        val result = checkNotNull(vm.uiState.value.result)
+        assertEquals(NativeCore.pipeline(), result.pipeline)
+        assertEquals(classifier.coreGitSha, result.coreGitSha)
+        assertEquals(40, result.coreGitSha?.length)
     }
 
     @Test

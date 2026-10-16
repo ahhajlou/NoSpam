@@ -57,6 +57,14 @@ android {
         versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The ABIs core:ml builds the Rust core for (its cargoNdkBuild task): keep
+        // the two lists the same. Without this filter the APK also had a lib/x86
+        // folder (two small androidx libraries), and a 32-bit x86 device would have
+        // installed the app with no spam filter rather than refusing it.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
     androidResources {
         localeFilters += listOf("en", "fa")
@@ -89,9 +97,12 @@ android {
             )
         }
     }
-    // ABI splits disabled: the app has negligible native code, so split APKs
-    // end up nearly the same size as the universal APK — splitting just adds
-    // download/manifest complexity with no size benefit.
+    // ABI splits disabled: one universal APK, which is what the release workflow
+    // signs, verifies and publishes. Since 2026-10-15 that has a cost: the Rust
+    // core (core:ml) adds 6.5 MB of native libraries, arm64-v8a 2.3 MB,
+    // armeabi-v7a 1.6 MB and x86_64 2.6 MB, stored uncompressed (minSdk 26), and
+    // a phone uses one of them. Splitting, or compressed jniLibs
+    // (packaging.jniLibs.useLegacyPackaging), would cut most of it.
     // splits {
     //     abi {
     //         isEnable = true
