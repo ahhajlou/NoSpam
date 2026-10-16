@@ -231,7 +231,9 @@ compiles the release graph a second time.
 `.github/workflows/android.yml` — JDK 25 + Android SDK, then the Rust core's
 toolchain (rustup installs what the submodule's `rust-toolchain.toml` pins, the
 NDK named in `core/ml/build.gradle.kts`, cargo-ndk; crates and the core's build
-directory are cached), then one Gradle invocation:
+directory are cached), then one Gradle invocation, with the test JVMs' heap
+raised to 1536 MB and at most two workers (an init script, as in `release.yml`;
+the Robolectric tests ran out of the default 512 MB on the runner):
 debug assemble + `testDebugUnitTest` + `lintDebug`, the two JVM modules' `test`,
 `:app:compileReleaseKotlin` and `:baselineprofile:compileNonMinifiedReleaseKotlin`
 as a release-path compile check, the three instrumented modules'
@@ -260,8 +262,8 @@ Honest list of what has no test, from the merged report:
   migration bug would ship silently.
 - `feature:export` and `feature:mldebug` — developer tools, covered only by
   their 22 unit tests and the `debug_tools` flow.
-- No 32-bit x86 build of the Rust core. The APK's `lib/x86` holds only two
-  small androidx libraries, so on a 32-bit x86 device the classifier cannot
-  load. Such devices with Android 8+ (minSdk 26) are close to nonexistent.
+- No 32-bit x86 build of the Rust core, so the APK ships no x86 folder at all
+  (`abiFilters` in `:app`): a 32-bit x86 device cannot install the app. Such
+  devices with Android 8+ (minSdk 26) are close to nonexistent.
 - Fonts are `FontFamily.Default` placeholders (`Type.kt`), so nothing asserts
   the real Inter / Hanken Grotesk / Vazirmatn metrics yet.

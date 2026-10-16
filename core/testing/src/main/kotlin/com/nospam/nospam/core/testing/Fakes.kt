@@ -296,8 +296,8 @@ class FakeTelephonyDataSource(
 }
 
 /**
- * A model whose load blocks a thread until [release], as the real one does (a
- * 1.9 MB JSON model plus 14 MB of word lists, through [DeferredSpamClassifier]):
+ * A model whose load blocks a thread until [release], as the real one does
+ * (parsing `spam_model.json`, through [DeferredSpamClassifier]):
  * it cannot be canceled, so only a wait that really ends gets past it. The load
  * gives up after 5s so a failing test does not hang.
  */

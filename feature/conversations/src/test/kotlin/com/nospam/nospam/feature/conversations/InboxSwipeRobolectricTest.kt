@@ -54,6 +54,9 @@ class InboxSwipeRobolectricTest {
     private val scheduler = TestCoroutineScheduler()
     private val mainDispatcher = StandardTestDispatcher(scheduler)
 
+    // Stops each test's repository flows after the test; see RepositoryScopeRule.
+    @get:Rule val repositoryScope = RepositoryScopeRule()
+
     @Before fun setUp() { Dispatchers.setMain(mainDispatcher) }
     @After fun tearDown() { Dispatchers.resetMain() }
 
@@ -87,7 +90,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `an archive swipe calls onArchive and shows an undoable snackbar`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(1, "Archive Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.ARCHIVE, left = SwipeAction.ARCHIVE)),
@@ -118,7 +121,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `after undo, the conversation reappearing does not get archived again`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(1, "Archive Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.ARCHIVE, left = SwipeAction.ARCHIVE)),
@@ -153,7 +156,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `a delete swipe asks for confirmation before deleting anything`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(2, "Delete Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.DELETE, left = SwipeAction.ARCHIVE)),
@@ -179,7 +182,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `canceling a delete swipe deletes nothing and keeps the row`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(2, "Delete Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.DELETE, left = SwipeAction.ARCHIVE)),
@@ -206,7 +209,7 @@ class InboxSwipeRobolectricTest {
         val telephony = FakeTelephonyDataSource(
             listOf(conv(3, "Unread Contact", read = false), conv(4, "Read Contact", read = true)),
         )
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.TOGGLE_READ, left = SwipeAction.TOGGLE_READ)),
@@ -232,7 +235,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `a NONE swipe direction does nothing`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(5, "None Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.NONE, left = SwipeAction.ARCHIVE)),
@@ -261,7 +264,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `while selection mode is active, swiping does nothing`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(1, "Archive Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.ARCHIVE, left = SwipeAction.ARCHIVE)),
@@ -288,7 +291,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `a physical left swipe uses the LEFT setting, independent of the right setting`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(7, "Left Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.ARCHIVE, left = SwipeAction.DELETE)),
@@ -309,7 +312,7 @@ class InboxSwipeRobolectricTest {
 
     @Test fun `in RTL, a physical right swipe still triggers the RIGHT setting`() {
         val telephony = FakeTelephonyDataSource(listOf(conv(6, "RTL Contact")))
-        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory())
+        val repo = ConversationsRepository(telephony, NoSpamDatabase.inMemory(), repositoryScope.scope)
         val vm = ConversationsViewModel(
             repository = repo,
             swipeActions = MutableStateFlow(SwipeActions(right = SwipeAction.DELETE, left = SwipeAction.ARCHIVE)),

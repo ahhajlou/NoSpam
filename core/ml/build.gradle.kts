@@ -12,9 +12,11 @@ plugins {
 android {
     namespace = "com.nospam.nospam.core.ml"
     compileSdk = 37
-    // The NDK cargo-ndk links the Rust core with: AGP 9.4's default. r28 and later
-    // align native libraries for 16 KB pages. CI installs the version named here.
-    ndkVersion = "28.2.13676358"
+    // The NDK cargo-ndk links the Rust core with. 29.0 is preinstalled on GitHub's
+    // ubuntu-24.04 runner (image 20261004), so CI does not download 2 GB per run; its
+    // install step stays as the fallback for an image without it. r28 and later
+    // align native libraries for 16 KB pages.
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         minSdk = 26
@@ -126,12 +128,28 @@ abstract class CargoBuild @Inject constructor(private val execOps: ExecOperation
         val out = outputDir.get().asFile
         out.deleteRecursively()
         out.mkdirs()
+        // rustc writes the absolute path of every source file into the library, for
+        // panic messages: crates under CARGO_HOME, the workspace, the build directory.
+        // Fixed names instead make the library the same on every machine (a
+        // reproducible build) and keep local paths, user names included, out of the
+        // APK. CARGO_ENCODED_RUSTFLAGS survives spaces in paths; it replaces any
+        // RUSTFLAGS from the environment.
+        val cargoHome = System.getenv("CARGO_HOME") ?: "${System.getProperty("user.home")}/.cargo"
+        val remaps = listOf(
+            cargoHome to "/cargo",
+            workspaceDir.path to "/core",
+            targetDir.get().asFile.path to "/target",
+        )
         execOps.exec {
             workingDir = workspaceDir
             executable = cargo.get()
             args(arguments.get().map { it.replace("{out}", out.path) })
             environment(cargoEnvironment.get())
             environment("CARGO_TARGET_DIR", targetDir.get().asFile.path)
+            environment(
+                "CARGO_ENCODED_RUSTFLAGS",
+                remaps.joinToString("\u001f") { (from, to) -> "--remap-path-prefix=$from=$to" },
+            )
             ndkDirectory.orNull?.let { environment("ANDROID_NDK_HOME", it.asFile.path) }
         }
         hostLibrary.orNull?.let { name ->
@@ -140,6 +158,7 @@ abstract class CargoBuild @Inject constructor(private val execOps: ExecOperation
     }
 }
 
+// The ABIs here are also :app's abiFilters: keep the two lists the same.
 val cargoNdkBuild = tasks.register<CargoBuild>("cargoNdkBuild") {
     description = "Builds the Rust core (libspam_core_jni.so) for each Android ABI."
     sources.from(rustSources)

@@ -57,6 +57,14 @@ android {
         versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The ABIs core:ml builds the Rust core for (its cargoNdkBuild task): keep
+        // the two lists the same. Without this filter the APK also had a lib/x86
+        // folder (two small androidx libraries), and a 32-bit x86 device would have
+        // installed the app with no spam filter rather than refusing it.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
     androidResources {
         localeFilters += listOf("en", "fa")

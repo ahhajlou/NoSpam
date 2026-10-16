@@ -567,7 +567,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 | Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, all run against a real `ContentResolver` (2026-09-24). Tests that write the provider take the SMS role through `SmsRoleRule` and two stub components in the test manifest, and hand it back (see `docs/TESTING.md` §2) |
 | Instrumented, ml | `core/ml/src/androidTest` | 1 test: the Rust core's fixture parity, 512 cases, on the device's build of the core. Passing for all three ABIs the APK ships (2026-10-15): arm64-v8a and armeabi-v7a (forced 32-bit) on a Galaxy A26 with Android 16; x86_64 on a 16 KB-page emulator with Android 17. Run before each release (`docs/TESTING.md` §2) |
-| End-to-end | `.maestro/flows` | 18 flows; 11 run by default (debug, destructive and manual-only tags are skipped), all 11 passing on 2026-09-24 |
+| End-to-end | `.maestro/flows` | 20 flows; 13 run by default (destructive and manual-only tags are skipped), all 13 passing on 2026-10-15 on the API 37 emulator |
 
 Tests are written against behavior, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
@@ -654,11 +654,16 @@ Gradle, for the JVM tests. Both are release builds with LTO for every variant
 (`cargoProfile`: 13% smaller than cargo's default, same speed, measured
 2026-10-15), share `build/rust/target`, and stay up to date until a Rust
 source, rules file, manifest, the lock file or `core/ml/build.gradle.kts`
-changes. Requirements: rustup
+changes. The libraries are reproducible: the cargo tasks map the build
+machine's paths (`CARGO_HOME`, the workspace, the build directory) to fixed
+names, which rustc would otherwise write into them for panic messages, so the
+same source gives the same file on any machine and the APK carries no local
+paths. Requirements: rustup
 (the core's `rust-toolchain.toml` pins Rust and the Android targets),
 `cargo install cargo-ndk --locked`, and the NDK `ndkVersion` in
-`core/ml/build.gradle.kts` names (28.2.13676358, AGP 9.4's default; r28 and
-later align libraries for 16 KB pages); CI installs the same. The JNI is
+`core/ml/build.gradle.kts` names (29.0.14206865, preinstalled on GitHub's
+ubuntu-24.04 runner; r28 and later align libraries for 16 KB pages); CI
+installs it when the runner lacks it. The JNI is
 hand-written: `NativeCore`'s package and class are encoded in the Rust function
 names, so renaming it means renaming those in the crate. The design and its
 reasons: `third_party/persian-sms-spam/docs/preprocessing-core-plan.md`.

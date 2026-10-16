@@ -89,7 +89,18 @@ sms_insert() {
 }
 
 sms_delete_address() {
-    adbs shell "content delete --uri content://sms --where \"address='${1}'\"" >/dev/null 2>&1 || true
+    local where="address='${1}'"
+    # One conversation holds a number in several spellings: the seed writes
+    # +15551110001, the app's replies are stored as 5551110001 and
+    # `adb emu sms send` as 15551110001. Deleting only the seeded spelling left
+    # the rest, so replies from earlier runs piled up in the contact's thread
+    # and moved it to the top of the inbox, where persistence.yaml's downward
+    # scroll could no longer reach it (2026-10-15). Numbers match on their last
+    # 10 digits, as Android groups them; sender IDs (NSTEST_*) stay exact.
+    if [[ "$1" =~ ^\+?[0-9]{10,}$ ]]; then
+        where="address LIKE '%${1: -10}'"
+    fi
+    adbs shell "content delete --uri content://sms --where \"${where}\"" >/dev/null 2>&1 || true
 }
 
 thread_id_for() {

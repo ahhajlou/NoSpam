@@ -4,6 +4,8 @@ package com.nospam.nospam
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -36,8 +38,16 @@ class AppContainerTest {
     private val context: Context
         get() = ApplicationProvider.getApplicationContext()
 
+    // Every container a test builds, stopped after it: conversationsRepository
+    // starts loading from the database as soon as it exists.
+    private val containers = mutableListOf<AppContainer>()
+
+    private fun container() = AppContainer(context).also { containers += it }
+
+    @After fun stopContainers() = runBlocking { containers.forEach { it.stop() } }
+
     @Test fun `every asset-independent collaborator resolves without throwing`() {
-        val container = AppContainer(context)
+        val container = container()
 
         container.database
         container.telephony
@@ -48,22 +58,22 @@ class AppContainerTest {
     }
 
     @Test fun `database is a singleton across accesses`() {
-        val container = AppContainer(context)
+        val container = container()
         assertSame(container.database, container.database)
     }
 
     @Test fun `telephony is a singleton across accesses`() {
-        val container = AppContainer(context)
+        val container = container()
         assertSame(container.telephony, container.telephony)
     }
 
     @Test fun `spamStateWriter is a singleton across accesses`() {
-        val container = AppContainer(context)
+        val container = container()
         assertSame(container.spamStateWriter, container.spamStateWriter)
     }
 
     @Test fun `blocklistRepository, conversationsRepository and exportRepository are each singletons`() {
-        val container = AppContainer(context)
+        val container = container()
         assertSame(container.blocklistRepository, container.blocklistRepository)
         assertSame(container.conversationsRepository, container.conversationsRepository)
         assertSame(container.exportRepository, container.exportRepository)
@@ -73,8 +83,8 @@ class AppContainerTest {
         // AppContainer takes a Context per instance (e.g. tests could
         // construct their own) -- confirms the singleton is per-container,
         // not accidentally process-global like SpamPreferences' DataStore.
-        val first = AppContainer(context)
-        val second = AppContainer(context)
+        val first = container()
+        val second = container()
         assertNotSame(first.database, second.database)
     }
 }
