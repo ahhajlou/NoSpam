@@ -28,23 +28,7 @@ android {
     }
 }
 
-// The view model traces messages through NativeCore, so the JVM tests load the host build
-// of the Rust core, which core:ml makes and shares as its `nativeCoreHost` variant.
-val nativeCoreHost = configurations.dependencyScope("nativeCoreHost")
-val nativeCoreHostFiles = configurations.resolvable("nativeCoreHostFiles") {
-    extendsFrom(nativeCoreHost.get())
-    attributes { attribute(Usage.USAGE_ATTRIBUTE, objects.named("nospam-native-core-host")) }
-}
-
-tasks.withType<Test>().configureEach {
-    val hostDir = nativeCoreHostFiles.get()
-    inputs.files(hostDir).withPropertyName("nativeCoreHost").withPathSensitivity(PathSensitivity.RELATIVE)
-    jvmArgumentProviders.add { listOf("-Djava.library.path=${hostDir.singleFile.path}") }
-    jvmArgs("--enable-native-access=ALL-UNNAMED") // JEP 472, as in core:ml
-}
-
 dependencies {
-    nativeCoreHost(project(":core:ml"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
     implementation(project(":core:common"))

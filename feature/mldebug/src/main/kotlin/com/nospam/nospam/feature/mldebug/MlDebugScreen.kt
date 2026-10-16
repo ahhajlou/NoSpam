@@ -35,10 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nospam.nospam.core.designsystem.component.isolateLtr
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
 import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -163,11 +161,9 @@ fun MlDebugScreen(
                         }
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            // Isolated, or a right-to-left layout moves the minus
-                            // sign to the end ("1.6675-").
                             text = stringResource(
                                 R.string.mldebug_score,
-                                isolateLtr(String.format(Locale.US, "%.4f", result.score))
+                                String.format(Locale.US, "%.4f", result.score)
                             ),
                             style = MaterialTheme.typography.bodyLarge
                         )
@@ -175,54 +171,15 @@ fun MlDebugScreen(
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider()
                     Spacer(Modifier.height(12.dp))
-                    // Stage outputs are message text in any language: their direction
-                    // follows their content, not the layout.
-                    TraceRow(
-                        label = stringResource(R.string.mldebug_stage_anonymized),
-                        value = result.stages.anonymized,
-                        textDirection = TextDirection.Content
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    TraceRow(
-                        label = stringResource(R.string.mldebug_stage_urls),
-                        value = result.stages.urlsMasked,
-                        textDirection = TextDirection.Content
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    TraceRow(
-                        label = stringResource(R.string.mldebug_stage_numbers),
-                        value = result.stages.numbersMasked,
-                        textDirection = TextDirection.Content
-                    )
-                    Spacer(Modifier.height(8.dp))
                     TraceRow(
                         label = stringResource(R.string.mldebug_normalized),
-                        value = result.stages.normalized,
-                        textDirection = TextDirection.Content
+                        value = result.normalized
                     )
                     Spacer(Modifier.height(8.dp))
                     TraceRow(
                         label = stringResource(R.string.mldebug_ngrams),
                         value = result.ngramCount.toString()
                     )
-                    result.pipeline?.let { pipeline ->
-                        Spacer(Modifier.height(8.dp))
-                        TraceRow(
-                            label = stringResource(R.string.mldebug_pipeline),
-                            value = stringResource(
-                                R.string.mldebug_pipeline_value,
-                                pipeline.version,
-                                pipeline.normalizer
-                            )
-                        )
-                    }
-                    result.coreGitSha?.let { sha ->
-                        Spacer(Modifier.height(8.dp))
-                        TraceRow(
-                            label = stringResource(R.string.mldebug_core_commit),
-                            value = isolateLtr(sha)
-                        )
-                    }
                 }
             }
         }
@@ -230,14 +187,10 @@ fun MlDebugScreen(
 }
 
 @Composable
-private fun TraceRow(label: String, value: String, textDirection: TextDirection = TextDirection.Unspecified) {
+private fun TraceRow(label: String, value: String) {
     Column {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium.copy(textDirection = textDirection),
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 

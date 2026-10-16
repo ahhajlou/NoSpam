@@ -398,10 +398,8 @@ class SmsIngressUseCase(
     companion object {
         /**
          * How long [handle] waits for a verdict. The whole broadcast has 10s,
-         * shared on a cold start with the app's own startup, and a cold model
-         * load can take longer than this budget: 8-10s in a debug build on a
-         * Galaxy A26 (2026-10-13, with the hazm word lists the Rust core has
-         * since replaced).
+         * shared on a cold start with the app's own startup; a release build
+         * loads the model in ~540ms on a Galaxy A26 (TODO.md, "Cold start").
          */
         const val CLASSIFY_BUDGET_MS = 3_000L
 

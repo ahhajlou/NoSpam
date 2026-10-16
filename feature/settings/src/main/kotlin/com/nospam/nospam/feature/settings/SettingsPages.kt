@@ -17,10 +17,6 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -441,7 +437,6 @@ fun AboutSettingsScreen(
 ) {
     val context = LocalContext.current
     var showTermsDialog by rememberSaveable { mutableStateOf(false) }
-    var showLicensesDialog by rememberSaveable { mutableStateOf(false) }
 
     SettingsScaffold(
         title = stringResource(R.string.section_about),
@@ -457,15 +452,7 @@ fun AboutSettingsScreen(
                 title = stringResource(R.string.about_terms),
                 onClick = { showTermsDialog = true },
             )
-            SettingsItem(
-                title = stringResource(R.string.about_licenses),
-                onClick = { showLicensesDialog = true },
-            )
         }
-    }
-
-    if (showLicensesDialog) {
-        LicensesDialog(onDismiss = { showLicensesDialog = false })
     }
 
     if (showTermsDialog) {
@@ -478,39 +465,6 @@ fun AboutSettingsScreen(
             },
         )
     }
-}
-
-/**
- * Notices the licenses of code compiled into the app ask to be shown. hazm's MIT notice:
- * the spam filter's Rust core compiles in normalization rules derived from hazm
- * (persian-sms-spam's `core/spam-core/rules/hazm.json`). `res/raw/hazm_license.txt` is
- * that repository's `HAZM-LICENSE.txt`, one line per paragraph; HazmLicenseTest keeps
- * the two the same. The license text is not translated.
- */
-@Composable
-private fun LicensesDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    // A raw resource is read from the APK by AssetManager: about 1 KB, no disk read.
-    val hazmNotice = remember {
-        context.resources.openRawResource(R.raw.hazm_license).bufferedReader().use { it.readText() }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.about_licenses)) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(stringResource(R.string.licenses_hazm_intro))
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    hazmNotice.trim(),
-                    style = MaterialTheme.typography.bodySmall.copy(textDirection = TextDirection.Ltr),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
-        },
-    )
 }
 
 private data class LanguageOption(val tag: String, val title: String, val subtitle: String)

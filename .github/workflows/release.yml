@@ -31,9 +31,6 @@ jobs:
       fingerprint: ${{ steps.verify.outputs.fingerprint }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # The spam filter's Rust core: third_party/persian-sms-spam.
-          submodules: true
 
       # Cheap guard, before the six-minute build. The authoritative check runs
       # after assembling, against what was actually built; this one just turns
@@ -72,48 +69,6 @@ jobs:
           # pre-accepts the licenses; AGP provisions the platform and
           # build-tools it needs, including the apksigner used to verify below.
           packages: ''
-
-      # The Rust core, as in android.yml. Like the Gradle cache below, a tag
-      # build restores the entry a run on main saved.
-      - name: Install the Rust toolchain the core pins
-        working-directory: third_party/persian-sms-spam/core
-        run: rustup toolchain install
-
-      # One source for the version: the ndkVersion line in core:ml's build file.
-      - name: Install the NDK core:ml pins
-        run: |
-          NDK="$(sed -n 's/^ *ndkVersion = "\(.*\)"$/\1/p' core/ml/build.gradle.kts)"
-          if [ -z "$NDK" ]; then
-            echo "::error::could not read ndkVersion from core/ml/build.gradle.kts"
-            exit 1
-          fi
-          sdkmanager --install "ndk;$NDK"
-
-      # CARGO_HOME if the image sets one, else ~/.cargo. The key moves with the
-      # lock file, the toolchain and the submodule commit; restoring an older
-      # entry still saves rebuilding the dependencies.
-      - name: Locate cargo's home and the core's commit
-        id: cargo
-        run: |
-          echo "home=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_OUTPUT"
-          echo "core=$(git rev-parse HEAD:third_party/persian-sms-spam)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache cargo-ndk, crates and the core's build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ${{ steps.cargo.outputs.home }}/bin/cargo-ndk
-            ${{ steps.cargo.outputs.home }}/registry/index
-            ${{ steps.cargo.outputs.home }}/registry/cache
-            ${{ steps.cargo.outputs.home }}/git/db
-            core/ml/build/rust/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('third_party/persian-sms-spam/core/Cargo.lock', 'third_party/persian-sms-spam/core/rust-toolchain.toml') }}-${{ steps.cargo.outputs.core }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ hashFiles('third_party/persian-sms-spam/core/Cargo.lock', 'third_party/persian-sms-spam/core/rust-toolchain.toml') }}-
-            cargo-${{ runner.os }}-
-
-      - name: Install cargo-ndk
-        run: command -v cargo-ndk || cargo install cargo-ndk --locked --version 4.1.2
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0

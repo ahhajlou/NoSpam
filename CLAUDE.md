@@ -17,11 +17,7 @@ A full replacement SMS/MMS messenger for Android.
 - On-device spam classification. No network, no server round-trip.
 - Kotlin, Jetpack Compose, Material 3.
 - English first, built for more languages, with full RTL support. Persian is the
-  first RTL target.
-- The classifier's text processing (anonymizing, masking, Persian normalization,
-  n-grams) is the Rust core of persian-sms-spam, the training repo, compiled from
-  source here (§10), so the phone and training turn a message into the same
-  model input.
+  first RTL target and the classifier ships Persian normalization data.
 
 ## 2. Modules
 
@@ -566,8 +562,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 | Unit, including every Compose screen | `src/test` across 18 modules | 781 tests, 64.20% line coverage (2026-09-24) |
 | Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, all run against a real `ContentResolver` (2026-09-24). Tests that write the provider take the SMS role through `SmsRoleRule` and two stub components in the test manifest, and hand it back (see `docs/TESTING.md` §2) |
-| Instrumented, ml | `core/ml/src/androidTest` | 1 test: the Rust core's fixture parity, 512 cases, on the device's build of the core. Passing for all three ABIs the APK ships (2026-10-15): arm64-v8a and armeabi-v7a (forced 32-bit) on a Galaxy A26 with Android 16; x86_64 on a 16 KB-page emulator with Android 17. Run before each release (`docs/TESTING.md` §2) |
-| End-to-end | `.maestro/flows` | 20 flows; 13 run by default (destructive and manual-only tags are skipped), all 13 passing on 2026-10-15 on the API 37 emulator |
+| End-to-end | `.maestro/flows` | 18 flows; 11 run by default (debug, destructive and manual-only tags are skipped), all 11 passing on 2026-09-24 |
 
 Tests are written against behavior, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
@@ -580,18 +575,9 @@ instrumented copies asserted the same behavior as their JVM counterparts and
 were folded into them, and those modules' `androidTest` dependencies went with
 them. Instrumented tests are for what the JVM cannot tell the truth about —
 `core:database` against real SQLite, `core:telephony` against a real
-`ContentResolver` and `SubscriptionManager`, `core:ml` against the phone's
-build of the Rust core (the JVM checks the host build: same source, another
-target). Add a device suite only for that kind of code; a second copy of a
-screen test costs an emulator and asserts nothing new.
-
-**The JVM tests of `core:ml` and `feature:mldebug` load the host build of the
-Rust core** (`cargoHostBuild`, put on `java.library.path` by their `Test`
-tasks). `CoreParityTest` checks it against `spam_fixture.json`, which
-persian-sms-spam writes with the model: every stage's output, the n-grams and
-the trained pipeline's score (to 1e-6) for 512 inputs. Keep `NativeCore` out of
-Robolectric tests: a JNI library can be loaded by one class loader per JVM, and
-Robolectric gives each sandbox its own.
+`ContentResolver` and `SubscriptionManager`. Add a device suite only for that
+kind of code; a second copy of a screen test costs an emulator and asserts
+nothing new.
 
 This is also why Compose UI tests were not blocked by the emulator: **Compose
 instrumented tests fail on API 37** with `NoSuchMethodException:
@@ -643,42 +629,6 @@ daemon is pinned to a JDK 25 JetBrains toolchain through
 tools/run-e2e.sh                         # end-to-end, needs a device
 ```
 
-**The Rust core.** The spam filter's text processing (anonymize, mask URLs and
-numbers, normalize, `char_wb` n-grams) is persian-sms-spam's `core/`, a git
-submodule at `third_party/persian-sms-spam` (clone with `--recurse-submodules`,
-or `git submodule update --init`). `core:ml`'s build compiles its JNI crate
-from source with cargo: `cargoNdkBuild` runs cargo-ndk for arm64-v8a,
-armeabi-v7a and x86_64 into `build/rust/jniLibs`, registered as the module's
-jniLibs, and `cargoHostBuild` builds the same library for the machine running
-Gradle, for the JVM tests. Both are release builds with LTO for every variant
-(`cargoProfile`: 13% smaller than cargo's default, same speed, measured
-2026-10-15), share `build/rust/target`, and stay up to date until a Rust
-source, rules file, manifest, the lock file or `core/ml/build.gradle.kts`
-changes. The libraries are reproducible: the cargo tasks map the build
-machine's paths (`CARGO_HOME`, the workspace, the build directory) to fixed
-names, which rustc would otherwise write into them for panic messages, so the
-same source gives the same file on any machine and the APK carries no local
-paths. Requirements: rustup
-(the core's `rust-toolchain.toml` pins Rust and the Android targets),
-`cargo install cargo-ndk --locked`, and the NDK `ndkVersion` in
-`core/ml/build.gradle.kts` names (29.0.14206865, preinstalled on GitHub's
-ubuntu-24.04 runner; r28 and later align libraries for 16 KB pages); CI
-installs it when the runner lacks it. The JNI is
-hand-written: `NativeCore`'s package and class are encoded in the Rust function
-names, so renaming it means renaming those in the crate. The design and its
-reasons: `third_party/persian-sms-spam/docs/preprocessing-core-plan.md`.
-
-**Updating the model.** In persian-sms-spam, commit any change to `core/`, then
-`make export-android ANDROID_MODULE=<this checkout>/core/ml`; it refuses while
-`core/` has uncommitted changes, so the `coreGitSha` it records exists. Here,
-move the submodule to that commit, build, run the tests (`CoreParityTest` fails
-when the core and the model disagree), and commit the submodule move with the
-new `spam_model.json` and `spam_fixture.json`. A model whose `pipeline` (version
-and normalizer) differs from the core's is refused when the classifier loads,
-which the callers handle as a failed classifier. `coreGitSha` is not checked: a
-model trained on a fork with the same pipeline works, and the classifier test
-screen shows where it came from.
-
 **Release signing.** Full detail in [`docs/SIGNING.md`](docs/SIGNING.md);
 the summary is that `:app` has a `release` signing config that reads four
 values from `keystore.properties` at the repo root, falling back to the
@@ -729,8 +679,7 @@ reader could not tell which were safe to change.
 | `SQLiteOpenHelper` instead of Room | **Forced by a constraint** | Verified 2026-09-15: AGP 9 registers the `kotlin` Gradle extension itself, and KSP requires the standalone Kotlin plugin, which then cannot be applied. `android.builtInKotlin=false` works but is deprecated, disappears in AGP 10, and breaks every module's `compilerOptions` block. Wait for a KSP release supporting AGP built-in Kotlin, not for a newer Room. |
 | `core:testing` is an Android library, not JVM | **Deliberate** | Its fakes must implement interfaces that live in Android modules. See §2. |
 | No `build-logic` convention plugins | **Accidental drift** | 16 near-identical build files repeat the same `compileSdk`/`minSdk`/`jvmTarget` block. The threshold for doing this was passed long ago. |
-| R8 disabled in release | **Accidental drift** | `isMinifyEnabled = false` and an empty keep-rules file. The largest available size win, and it needs a keep-rule pass for the `@Serializable` routes. The default rules already keep `native` method names, which `NativeCore` needs. |
-| Native code compiled from source by the Gradle build, not shipped prebuilt | **Deliberate** (2026-10-15) | Anyone can check that the library matches its source, and F-Droid rejects prebuilt binaries. Every build machine needs rustup and cargo-ndk (§10). |
+| R8 disabled in release | **Accidental drift** | `isMinifyEnabled = false` and an empty keep-rules file. The largest available size win, and it needs a keep-rule pass for the `@Serializable` routes. |
 | `allowBackup="false"` and no device transfer | **Deliberate** (2026-09-23) | Was accidental "back up everything" through untouched template rules. See §4. |
 | Spam graduation ratio | **Removed 2026-10-02** | Replaced by the routing model in §5. |
 
@@ -764,7 +713,4 @@ Standing rules, not a one-time fix list.
 - `docs/ARCHITECTURE-REVIEW.md` — 2026-09-13 audit, current.
 - `REVIEW.md` — 2026-09-11 thread-safety and performance review. Mostly fixed;
   check its status table before acting on anything in it.
-- `third_party/persian-sms-spam/docs/preprocessing-core-plan.md` — why the text
-  processing is one Rust core shared with training, how it is versioned, and
-  the model ↔ core contract.
 - `docs/TESTING.md`, `docs/SPAM_PROTECTION.md`, `TASKS.md` — phase history.

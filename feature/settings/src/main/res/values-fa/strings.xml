@@ -34,8 +34,6 @@
     <string name="about_version">اطلاعات نسخه</string>
     <string name="about_terms">شرایط خدمات</string>
     <string name="terms_text">شرایط خدمات برای این نسخه هنوز منتشر نشده است.</string>
-    <string name="about_licenses">مجوزهای متن‌باز</string>
-    <string name="licenses_hazm_intro">فیلتر هرزنامه متن فارسی را با قاعده‌هایی برگرفته از hazm (github.com/roshan-research/hazm) نرمال‌سازی می‌کند که تحت این مجوز منتشر شده است:</string>
     <string name="scan_title">بررسی مجدد همه پیام‌ها</string>
     <string name="scan_sub">بررسی دوباره همه پیام‌ها با فیلتر هرزنامه فعلی؛ تصمیم‌های دستی شما حفظ می‌شود</string>
     <string name="recheck_started">بررسی مجدد در پس‌زمینه آغاز شد</string>

@@ -6,48 +6,37 @@ import android.content.Context
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.SpamLabel
 import com.nospam.nospam.core.model.SpamVerdict
+import java.util.Locale
 import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlinx.serialization.json.Json
 
 /**
- * On-device classifier reproducing persian-sms-spam's trained TF-IDF + LinearSVC
- * pipeline end to end. [NativeCore] turns the raw message into `char_wb`
- * n-grams with the same Rust code training uses; this class does the rest of
- * sklearn's TfidfVectorizer.transform (occurrence counts → 1+ln(sublinear_tf) →
- * idf → L2 row normalization) dotted with the LinearSVC coefficients plus
- * intercept.
+ * On-device classifier reproducing `baseline_tfidf.py`'s trained pipeline end to
+ * end: [HazmNormalizer.preprocess] then sklearn's exact TfidfVectorizer.transform
+ * (lowercase → char_wb n-grams → occurrence counts → 1+ln(sublinear_tf) → idf →
+ * L2 row normalization) dotted with the LinearSVC coefficients plus intercept.
  *
  * A score > [threshold] maps to `classes[1]`; a score <= threshold to
  * `classes[0]`. This is the binary-LinearSVC convention used at training time.
  *
- * A model whose [SpamModel.pipeline] differs from the core's is refused with
- * `IllegalStateException` when the classifier is built, which the callers treat
- * as a failed classifier.
+ * All regexes/regex sets are compiled once per instance ([normalizer] shares its
+ * precompiled state), so steady-state classification stays linear in message
+ * length — microseconds for a typical SMS — which is the whole reason tf-idf
+ * beat BERT for this filter.
  */
 class TfidfSpamClassifier(
     private val model: SpamModel,
+    val normalizer: HazmNormalizer,
     private val threshold: Double = 0.0,
 ) : SpamClassifier {
-
-    init {
-        val core = NativeCore.pipeline()
-        check(model.pipeline == core) {
-            "spam model was trained with pipeline ${model.pipeline}, but the app's core is $core"
-        }
-    }
-
-    /** The pipeline the model was trained with, equal to the core's. */
-    val pipeline: Pipeline get() = model.pipeline
-
-    /** The persian-sms-spam commit the model was exported from, if recorded. */
-    val coreGitSha: String? get() = model.coreGitSha
 
     override suspend fun classify(message: RawMessage): SpamVerdict =
         classifyText(message.body)
 
     override suspend fun classifyText(text: String): SpamVerdict {
-        val score = decision(NativeCore.ngrams(text))
+        val processed = normalizer.preprocess(text)
+        val score = decision(processed)
         val isSpam = when (model.classes.indexOf("spam")) {
             0 -> score <= threshold
             else -> score > threshold
@@ -59,11 +48,20 @@ class TfidfSpamClassifier(
         )
     }
 
-    /** sklearn's transform + decision_function over one message's n-grams. */
-    private fun decision(ngrams: Array<String>): Double {
+    /**
+     * sklearn's transform + decision_function. `normalized` is the output of
+     * [HazmNormalizer.preprocess]; this is exactly what the reference pipeline
+     * feeds into the TfidfVectorizer at inference time.
+     */
+    private fun decision(normalized: String): Double {
+        val minN = model.ngramRange?.getOrNull(0) ?: 2
+        val maxN = model.ngramRange?.getOrNull(1) ?: 4
         val useSublinear = model.sublinearTf ?: true
         val useL2 = (model.norm ?: "l2") == "l2"
         val idf = model.idf
+
+        val lowered = if (model.lowercase ?: true) normalized.lowercase(Locale.ROOT) else normalized
+        val ngrams = TfidfPreprocessor.getCharWbNgrams(lowered, minN, maxN)
 
         val counts = HashMap<String, Int>()
         for (ngram in ngrams) counts[ngram] = (counts[ngram] ?: 0) + 1
@@ -89,10 +87,10 @@ class TfidfSpamClassifier(
 
         fun fromAsset(context: Context, threshold: Double = 0.0): TfidfSpamClassifier {
             val modelString = context.assets.open("spam_model.json").bufferedReader().use { it.readText() }
-            return fromJson(modelString, threshold)
+            return TfidfSpamClassifier(json.decodeFromString<SpamModel>(modelString), HazmNormalizer.fromAssets(context), threshold)
         }
 
-        fun fromJson(modelJson: String, threshold: Double = 0.0): TfidfSpamClassifier =
-            TfidfSpamClassifier(json.decodeFromString<SpamModel>(modelJson), threshold)
+        fun fromJson(modelJson: String, normalizer: HazmNormalizer, threshold: Double = 0.0): TfidfSpamClassifier =
+            TfidfSpamClassifier(json.decodeFromString<SpamModel>(modelJson), normalizer, threshold)
     }
 }

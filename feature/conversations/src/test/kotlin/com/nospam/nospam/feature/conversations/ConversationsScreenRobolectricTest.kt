@@ -43,9 +43,6 @@ import org.robolectric.annotation.Config
 class ConversationsScreenRobolectricTest {
     @get:Rule val rule = createComposeRule()
 
-    // Stops each test's repository flows after the test; see RepositoryScopeRule.
-    @get:Rule val repositoryScope = RepositoryScopeRule()
-
     @Test fun `long press enters selection mode with the actions in the top bar`() {
         rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel()) }
         rule.onNodeWithText("Design Team Sync").performTouchInput { longClick() }
@@ -184,7 +181,6 @@ class ConversationsScreenRobolectricTest {
         val repo = com.nospam.nospam.core.data.ConversationsRepository(
             com.nospam.nospam.core.testing.FakeTelephonyDataSource(allRead),
             com.nospam.nospam.core.database.NoSpamDatabase.inMemory(),
-            externalScope = repositoryScope.scope,
         )
         rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(repo)) }
         rule.waitUntil(5_000) { rule.onAllNodesWithText("seen").fetchSemanticsNodes().isNotEmpty() }
@@ -199,7 +195,6 @@ class ConversationsScreenRobolectricTest {
         val repo = com.nospam.nospam.core.data.ConversationsRepository(
             com.nospam.nospam.core.testing.FakeTelephonyDataSource(listOf(conv)),
             com.nospam.nospam.core.database.NoSpamDatabase.inMemory(),
-            externalScope = repositoryScope.scope,
             drafts = kotlinx.coroutines.flow.flowOf(mapOf(1L to com.nospam.nospam.core.data.Draft("see you at five", 2L))),
         )
         rule.setContent { ConversationsScreen(title = "Inbox", viewModel = ConversationsViewModel(repo)) }

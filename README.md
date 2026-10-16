@@ -9,30 +9,10 @@ Kotlin + Jetpack Compose + Material 3, English first with full RTL support
 - Task tracker: [`TASKS.md`](TASKS.md)
 - Build, tests & coverage guide: [`docs/TESTING.md`](docs/TESTING.md)
 
-## Build
-
-Requirements: JDK 25 (JetBrains), the Android SDK and NDK, and Rust (rustup). The spam
-filter's text processing is Rust code from
-[persian-sms-spam](https://github.com/ahhajlou/persian-sms-spam), included as a git submodule
-and compiled by Gradle.
-
 ```bash
-git clone --recurse-submodules https://github.com/ahhajlou/NoSpam
-cd NoSpam
-cargo install cargo-ndk --locked   # once; rustup installs the Rust version and Android targets from rust-toolchain.toml
 ./gradlew :app:assembleDebug
-./gradlew build                    # every module: assemble + lint + unit tests
+./gradlew build          # every module: assemble + lint + unit tests
 ```
-
-Already cloned without submodules: `git submodule update --init`.
-
-The NDK version is `ndkVersion` in `core/ml/build.gradle.kts`; install it with the SDK
-Manager or `sdkmanager "ndk;<version>"`.
-
-The spam model (`core/ml/src/main/assets/spam_model.json`) is trained on a private SMS
-dataset and committed here, so building needs no dataset. To use your own model, train it
-with persian-sms-spam ("Train your own model" in its README) and run its
-`make export-android` against this checkout.
 
 ## License
 

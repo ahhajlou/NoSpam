@@ -12,9 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # The spam filter's Rust core: third_party/persian-sms-spam.
-          submodules: true
 
       - name: Set up JDK 25
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -39,51 +36,6 @@ jobs:
           # "tools platform-tools", so the override stays necessary.
           packages: ''
 
-      # The spam filter's text processing is Rust code from the persian-sms-spam
-      # submodule, which core:ml's Gradle build compiles: cargoNdkBuild for the
-      # APK, cargoHostBuild for the JVM tests. The runner has rustup; run in the
-      # core's workspace, it installs the Rust version and Android targets that
-      # rust-toolchain.toml pins.
-      - name: Install the Rust toolchain the core pins
-        working-directory: third_party/persian-sms-spam/core
-        run: rustup toolchain install
-
-      # One source for the version: the ndkVersion line in core:ml's build file.
-      - name: Install the NDK core:ml pins
-        run: |
-          NDK="$(sed -n 's/^ *ndkVersion = "\(.*\)"$/\1/p' core/ml/build.gradle.kts)"
-          if [ -z "$NDK" ]; then
-            echo "::error::could not read ndkVersion from core/ml/build.gradle.kts"
-            exit 1
-          fi
-          sdkmanager --install "ndk;$NDK"
-
-      # CARGO_HOME if the image sets one, else ~/.cargo. The key moves with the
-      # lock file, the toolchain and the submodule commit; restoring an older
-      # entry still saves rebuilding the dependencies.
-      - name: Locate cargo's home and the core's commit
-        id: cargo
-        run: |
-          echo "home=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_OUTPUT"
-          echo "core=$(git rev-parse HEAD:third_party/persian-sms-spam)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache cargo-ndk, crates and the core's build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ${{ steps.cargo.outputs.home }}/bin/cargo-ndk
-            ${{ steps.cargo.outputs.home }}/registry/index
-            ${{ steps.cargo.outputs.home }}/registry/cache
-            ${{ steps.cargo.outputs.home }}/git/db
-            core/ml/build/rust/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('third_party/persian-sms-spam/core/Cargo.lock', 'third_party/persian-sms-spam/core/rust-toolchain.toml') }}-${{ steps.cargo.outputs.core }}
-          restore-keys: |
-            cargo-${{ runner.os }}-${{ hashFiles('third_party/persian-sms-spam/core/Cargo.lock', 'third_party/persian-sms-spam/core/rust-toolchain.toml') }}-
-            cargo-${{ runner.os }}-
-
-      - name: Install cargo-ndk
-        run: command -v cargo-ndk || cargo install cargo-ndk --locked --version 4.1.2
-
       - name: Set up Gradle (caches dependencies, wrapper and build cache)
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
@@ -106,37 +58,19 @@ jobs:
       # that only shows up in release (app/src/release, and the release
       # classpath without feature:export / feature:mldebug). The Kover "ci"
       # variant merges debug variants only; see the root build.gradle.kts.
-      # Only two modules still had androidTest sources on 2026-09-20: the
+      # Only two modules still have androidTest sources (2026-09-20): the
       # Compose suites moved to the JVM, so assembling their test APKs
       # compiled nothing. core:database's ten suites were never in this list.
-      # core:ml has one since 2026-10-15: the Rust core's parity on a device.
-      # Gradle's test JVMs get 512 MB of heap, separate from the daemon's -Xmx in
-      # gradle.properties, and the Robolectric tests run out of it on the runner:
-      # :app's ContactPhotoCacheTest failed with OutOfMemoryError on 2026-10-15,
-      # as ShareIntentTest did for release.yml at v0.5.0. Same fix as release.yml:
-      # an init script in $RUNNER_TEMP raises it without touching the build
-      # files, and --max-workers bounds how many test JVMs run at once.
       - name: Build, compile device-test suites, and check coverage ratchet
-        run: |
-          cat > "$RUNNER_TEMP/ci-tests.init.gradle" <<'EOF'
-          allprojects {
-              tasks.withType(Test).configureEach {
-                  maxHeapSize = "1536m"
-              }
-          }
-          EOF
-          ./gradlew \
-            --init-script "$RUNNER_TEMP/ci-tests.init.gradle" \
-            --max-workers=2 \
-            assembleDebug testDebugUnitTest lintDebug \
-            :core:model:test :core:common:test \
-            :app:compileReleaseKotlin \
-            :baselineprofile:compileNonMinifiedReleaseKotlin \
-            :core:telephony:assembleDebugAndroidTest \
-            :core:database:assembleDebugAndroidTest \
-            :core:ml:assembleDebugAndroidTest \
-            :koverXmlReportCi :koverHtmlReportCi :koverVerifyCi \
-            --stacktrace
+        run: >
+          ./gradlew assembleDebug testDebugUnitTest lintDebug
+          :core:model:test :core:common:test
+          :app:compileReleaseKotlin
+          :baselineprofile:compileNonMinifiedReleaseKotlin
+          :core:telephony:assembleDebugAndroidTest
+          :core:database:assembleDebugAndroidTest
+          :koverXmlReportCi :koverHtmlReportCi :koverVerifyCi
+          --stacktrace
 
       - name: Upload merged coverage report
         if: always()

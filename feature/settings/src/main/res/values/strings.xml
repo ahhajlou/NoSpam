@@ -37,8 +37,6 @@
     <string name="about_version">Version info</string>
     <string name="about_terms">Terms of service</string>
     <string name="terms_text">Terms are not published yet for this build.</string>
-    <string name="about_licenses">Open-source licenses</string>
-    <string name="licenses_hazm_intro">The spam filter normalizes Persian text with rules derived from hazm (github.com/roshan-research/hazm), which is distributed under this license:</string>
     <string name="general_summary">Default SMS app, notifications, language</string>
     <string name="spam_summary">Filtering, blocked senders</string>
     <string name="advanced_summary">Re-check messages, storage</string>

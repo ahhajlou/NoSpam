@@ -11,8 +11,8 @@ import kotlinx.coroutines.withContext
 /**
  * A [SpamClassifier] that builds the real one on first use, on [dispatcher].
  *
- * Loading the model parses the 2.7 MB `spam_model.json` and loads the Rust
- * core. Objects that only hold a classifier took it as a constructor argument,
+ * Loading the model parses a 1.2 MB JSON asset, measured at ~540ms on a Galaxy
+ * A26. Objects that only hold a classifier took it as a constructor argument,
  * so building them loaded the model, or waited for a load already under way,
  * on whatever thread built them. A cold-start trace showed the main thread
  * blocked for 427ms of the inbox's first composition this way: creating the
