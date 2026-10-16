@@ -26,7 +26,7 @@ cargo install cargo-ndk --locked   # once; rustup installs the Rust version and 
 
 Already cloned without submodules: `git submodule update --init`.
 
-The NDK version is `ndkVersion` in `core/ml/build.gradle.kts`; install it with the SDK
+The NDK version is `ndk` in `gradle/libs.versions.toml`; install it with the SDK
 Manager or `sdkmanager "ndk;<version>"`.
 
 The spam model (`core/ml/src/main/assets/spam_model.json`) is trained on a private SMS

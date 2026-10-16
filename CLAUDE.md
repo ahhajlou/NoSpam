@@ -660,8 +660,9 @@ names, which rustc would otherwise write into them for panic messages, so the
 same source gives the same file on any machine and the APK carries no local
 paths. Requirements: rustup
 (the core's `rust-toolchain.toml` pins Rust and the Android targets),
-`cargo install cargo-ndk --locked`, and the NDK `ndkVersion` in
-`core/ml/build.gradle.kts` names (29.0.14206865, preinstalled on GitHub's
+`cargo install cargo-ndk --locked`, and the NDK `ndk` in
+`gradle/libs.versions.toml` names, for core:ml and for `:app`, which strips the
+libraries it packages with it (29.0.14206865, preinstalled on GitHub's
 ubuntu-24.04 runner; r28 and later align libraries for 16 KB pages); CI
 installs it when the runner lacks it. The JNI is
 hand-written: `NativeCore`'s package and class are encoded in the Rust function

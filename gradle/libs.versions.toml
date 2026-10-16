@@ -1,5 +1,10 @@
 [versions]
 agp = "9.4.0"
+# The NDK for every module that touches native code: core:ml links the Rust core
+# with it, :app strips the native libraries it packages with it. Preinstalled on
+# GitHub's ubuntu-24.04 runner (image 20261004); the workflows install it from
+# this line when the runner lacks it.
+ndk = "29.0.14206865"
 coreKtx = "1.13.0"
 dataStore = "1.1.1"
 junit = "4.13.2"
