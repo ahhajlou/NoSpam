@@ -58,7 +58,10 @@ fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Con
     composable<MlDebugRoute> {
         val vm: MlDebugViewModel = viewModel(
             factory = vmFactory {
-                container?.let { MlDebugViewModel(it.classifier) } ?: MlDebugViewModel()
+                // A model that failed to load (e.g. refused for its pipeline) shows
+                // "Classifier is not available" instead of crashing the screen.
+                container?.let { MlDebugViewModel(runCatching { it.classifier }.getOrNull()) }
+                    ?: MlDebugViewModel()
             }
         )
         DrawerDestinationScaffold(stringResource(R.string.drawer_mldebug), onOpenDrawer) {
