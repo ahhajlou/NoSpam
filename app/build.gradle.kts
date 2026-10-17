@@ -103,12 +103,19 @@ android {
             )
         }
     }
+    // Native libraries are stored compressed and unpacked at install time, only
+    // the phone's own ABI. Stored uncompressed (the default from minSdk 23), the
+    // universal APK carried the Rust core for all three ABIs at full size.
+    // Measured 2026-10-17 on a Galaxy A26: the APK 23.4 -> 19.7 MB, the installed
+    // app 22.9 -> 21.6 MB, and cold-start model load unchanged (1.16 s
+    // uncompressed, 1.17 and 1.15 s compressed, medians of 5).
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     // ABI splits disabled: one universal APK, which is what the release workflow
-    // signs, verifies and publishes. Since 2026-10-15 that has a cost: the Rust
-    // core (core:ml) adds 6.5 MB of native libraries, arm64-v8a 2.3 MB,
-    // armeabi-v7a 1.6 MB and x86_64 2.6 MB, stored uncompressed (minSdk 26), and
-    // a phone uses one of them. Splitting, or compressed jniLibs
-    // (packaging.jniLibs.useLegacyPackaging), would cut most of it.
+    // signs, verifies and publishes.
     // splits {
     //     abi {
     //         isEnable = true
