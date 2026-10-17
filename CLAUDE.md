@@ -128,7 +128,11 @@ message. Classification runs on its own and is waited for up to
 canceled, and the old `withTimeout(8_000)` around it only returned once the load
 finished. On 2026-10-13, with a debug build on a Galaxy A26, cold-start loads
 took 8-10s: two spam messages were announced as normal ones and one receiver was
-killed for an ANR. A message without a verdict in time is announced as its
+killed for an ANR. Release builds are far faster: on the same phone, in a
+background cold start (2026-10-17, median of 5), the model was loaded 1.54s
+after process start with the old Kotlin hazm port and 1.15s with the Rust core,
+whose first classification then takes about 0.28s more while it compiles its
+rules. A message without a verdict in time is announced as its
 sender is routed now (`ThreadSpamPolicy.decideUnclassified`: a sender in Spam or
 blocked stays silent), and the verdict is recorded when it arrives. If that late
 verdict says a silent message is real, `AppSmsReceiver` announces it then, within
