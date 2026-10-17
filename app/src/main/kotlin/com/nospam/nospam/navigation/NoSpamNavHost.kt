@@ -58,6 +58,7 @@ import com.nospam.nospam.feature.settings.AboutSettingsScreen
 import com.nospam.nospam.feature.settings.AdvancedSettingsScreen
 import com.nospam.nospam.feature.settings.GeneralSettingsScreen
 import com.nospam.nospam.feature.settings.GeneralSettingsViewModel
+import com.nospam.nospam.feature.settings.LicensesScreen
 import com.nospam.nospam.feature.settings.SettingsScreen
 import com.nospam.nospam.feature.settings.SettingsViewModel
 import com.nospam.nospam.feature.settings.SimSettingsScreen
@@ -80,6 +81,7 @@ import kotlinx.serialization.Serializable
 @Serializable object SettingsSendersRoute
 @Serializable object SettingsAdvancedRoute
 @Serializable object SettingsAboutRoute
+@Serializable object SettingsLicensesRoute
 @Serializable object OnboardingRoute
 @Serializable data class NewConversationRoute(val forwardBody: String? = null)
 @Serializable data class ThreadRoute(
@@ -432,7 +434,17 @@ fun NoSpamNavHost(
             )
         }
         composable<SettingsAboutRoute> {
-            AboutSettingsScreen(onNavigateUp = { navController.navigateUp() })
+            AboutSettingsScreen(
+                onNavigateUp = { navController.navigateUp() },
+                onOpenLicenses = { navController.navigate(SettingsLicensesRoute) { launchSingleTop = true } },
+            )
+        }
+        composable<SettingsLicensesRoute> {
+            val context = LocalContext.current
+            LicensesScreen(
+                loadLicenses = { loadOpenSourceLicenses(context) },
+                onNavigateUp = { navController.navigateUp() },
+            )
         }
         composable<OnboardingRoute> {
             OnboardingScreen(

@@ -124,16 +124,11 @@ class SettingsScreenRobolectricTest {
         rule.onNodeWithText("Close").assertIsDisplayed()
     }
 
-    @Test fun `about opens the open-source licenses with hazm's notice`() {
-        rule.setContent { AboutSettingsScreen() }
+    @Test fun `about's licenses entry opens the licenses page`() {
+        var opened = 0
+        rule.setContent { AboutSettingsScreen(onOpenLicenses = { opened++ }) }
         rule.onNodeWithText("Open-source licenses").performClick()
-        rule.waitUntil(5_000) {
-            rule.onAllNodesWithText("Copyright (c) 2013 Alireza Nourian", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
-        rule.onNodeWithText("derived from hazm", substring = true).assertIsDisplayed()
-        rule.onNodeWithText("Close").performClick()
         rule.waitForIdle()
-        rule.onAllNodesWithText("Alireza Nourian", substring = true).assertCountEquals(0)
+        assertEquals(1, opened)
     }
 }
