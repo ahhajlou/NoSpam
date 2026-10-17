@@ -537,11 +537,17 @@ not as a flag passed to `NoSpamTheme`. Night mode also reaches what Compose does
 not draw: the window background, the system bar icons (`enableEdgeToEdge`'s auto
 style reads the configuration) and AppCompat views such as the emoji picker, and
 `NoSpamTheme`'s default `isSystemInDarkTheme()` then reflects it. It must be set
-before the first activity exists, or AppCompat recreates the activity and a
-forced theme flashes the system one: `NoSpamApplication.applyAppearance()` reads
-it there, blocking, but only when `ui_settings` exists on disk (measured 21-38ms
-for the read on a debug emulator, 1ms for the existence check). Dynamic color is
-a `StateFlow` the activity passes to `NoSpamTheme`.
+before the first activity's AppCompat delegate exists, or AppCompat recreates
+the activity and a forced theme flashes the system one. `NoSpamApplication`
+starts reading it off the main thread in `onCreate`, only when `ui_settings`
+exists on disk, and `MainActivity.attachBaseContext` waits for that read
+(`applyAppearance`) before calling super, which creates the delegate. A cold
+start for an incoming SMS has no activity and never waits for it. Until
+2026-10-17 `onCreate` read it blocking, which held up everything after it,
+including an SMS receiver's insert. With Dark chosen (`benchmarkRelease` build,
+API 37 emulator, 15 cold launches each) the main thread waited a median 13ms
+(10-17) then and waits 5ms (0-22) now, and the activity is still created once.
+Dynamic color is a `StateFlow` the activity passes to `NoSpamTheme`.
 
 **Open item:** the export only defines a light scheme. Either hand-tune a dark
 scheme with the same role semantics, or generate one from the seed color

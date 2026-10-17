@@ -2,6 +2,7 @@
 
 package com.nospam.nospam
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -26,6 +27,13 @@ open class MainActivity : AppCompatActivity() {
      * the app that opened it, instead of going to the inbox.
      */
     protected open val leavesAtStart: Boolean = false
+
+    override fun attachBaseContext(newBase: Context) {
+        // Before super, which creates the AppCompat delegate: the user's theme
+        // must be in place by then (NoSpamApplication.applyAppearance).
+        (newBase.applicationContext as NoSpamApplication).applyAppearance()
+        super.attachBaseContext(newBase)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Suppress Samsung Typeface / AppLocalesStorageHelper disk read violations (Fix 4).
