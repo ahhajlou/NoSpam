@@ -565,9 +565,9 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 
 ## 9. Testing
 
-| Layer | Where | State as of 2026-09-24 |
+| Layer | Where | State (dated per row) |
 |---|---|---|
-| Unit, including every Compose screen | `src/test` across 18 modules | 781 tests, 64.20% line coverage (2026-09-24) |
+| Unit, including every Compose screen | `src/test` across 18 modules | 1,120 tests, 68.94% line coverage in the CI report (2026-10-17) |
 | Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, all run against a real `ContentResolver` (2026-09-24). Tests that write the provider take the SMS role through `SmsRoleRule` and two stub components in the test manifest, and hand it back (see `docs/TESTING.md` §2) |
 | Instrumented, ml | `core/ml/src/androidTest` | 1 test: the Rust core's fixture parity, 512 cases, on the device's build of the core. Passing for all three ABIs the APK ships (2026-10-15): arm64-v8a and armeabi-v7a (forced 32-bit) on a Galaxy A26 with Android 16; x86_64 on a 16 KB-page emulator with Android 17. Run before each release (`docs/TESTING.md` §2) |
