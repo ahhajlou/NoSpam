@@ -673,6 +673,18 @@ hand-written: `NativeCore`'s package and class are encoded in the Rust function
 names, so renaming it means renaming those in the crate. The design and its
 reasons: `third_party/persian-sms-spam/docs/preprocessing-core-plan.md`.
 
+**Open-source licenses.** Settings → About → Open-source licenses lists
+hazm's notice, the crates in the Rust core and the Android and Kotlin libraries,
+each with its license text, from data generated at build time. The AboutLibraries
+plugin (`com.mikepenz.aboutlibraries.plugin.android`, in `:app`) writes
+`res/raw/aboutlibraries.json`. It runs in offline mode, so builds never touch the
+network, and then has no license texts of its own: they come from
+`app/aboutlibraries/licenses` (Apache-2.0 and MIT today). core:ml's `rustLicenses`
+task writes `res/raw/rust_licenses.json` from `cargo tree` and each crate's own
+license file. A dependency under a license not yet in that folder fails
+`OpenSourceLicensesLoaderTest` (`:app`): add the license's text there. The page
+reads the data only when opened, off the main thread.
+
 **Updating the model.** In persian-sms-spam, commit any change to `core/`, then
 `make export-android ANDROID_MODULE=<this checkout>/core/ml`; it refuses while
 `core/` has uncommitted changes, so the `coreGitSha` it records exists. Here,

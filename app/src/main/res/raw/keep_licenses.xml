@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The open-source licenses page's data. Kept explicitly because AboutLibraries'
+     README warns that optimized resource shrinking (AGP 9's default once R8 is on)
+     can drop its generated aboutlibraries.json; resource shrinking is off today. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/aboutlibraries,@raw/rust_licenses,@raw/hazm_license" />

@@ -35,6 +35,11 @@
     <string name="about_terms">شرایط خدمات</string>
     <string name="terms_text">شرایط خدمات برای این نسخه هنوز منتشر نشده است.</string>
     <string name="about_licenses">مجوزهای متن‌باز</string>
+    <string name="licenses_section_data">داده‌های فیلتر هرزنامه</string>
+    <string name="licenses_section_rust">هستهٔ فیلتر هرزنامه (کتابخانه‌های Rust)</string>
+    <string name="licenses_section_android">کتابخانه‌های اندروید و کاتلین</string>
+    <string name="licenses_hazm_summary">قاعده‌های نرمال‌سازی فارسی · MIT</string>
+    <string name="licenses_authors">نویسندگان: %1$s</string>
     <string name="licenses_hazm_intro">فیلتر هرزنامه متن فارسی را با قاعده‌هایی برگرفته از hazm (github.com/roshan-research/hazm) نرمال‌سازی می‌کند که تحت این مجوز منتشر شده است:</string>
     <string name="scan_title">بررسی مجدد همه پیام‌ها</string>
     <string name="scan_sub">بررسی دوباره همه پیام‌ها با فیلتر هرزنامه فعلی؛ تصمیم‌های دستی شما حفظ می‌شود</string>

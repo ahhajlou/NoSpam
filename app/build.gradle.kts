@@ -5,6 +5,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.baselineprofile)
+    alias(libs.plugins.aboutlibraries.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -195,4 +196,16 @@ dependencies {
     testImplementation(project(":core:testing"))
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// The Android and Kotlin libraries for the open-source licenses page
+// (Settings -> About), generated into res/raw/aboutlibraries.json at build time.
+aboutLibraries {
+    // No network during the build, which F-Droid builds without and which must give
+    // the same result every time. Offline, the plugin has no license texts of its
+    // own; aboutlibraries/licenses holds them (Apache-2.0, MIT).
+    offlineMode = true
+    collect {
+        configPath = file("aboutlibraries")
+    }
 }
