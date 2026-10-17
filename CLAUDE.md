@@ -130,9 +130,13 @@ finished. On 2026-10-13, with a debug build on a Galaxy A26, cold-start loads
 took 8-10s: two spam messages were announced as normal ones and one receiver was
 killed for an ANR. Release builds are far faster: on the same phone, in a
 background cold start (2026-10-17, median of 5), the model was loaded 1.54s
-after process start with the old Kotlin hazm port and 1.15s with the Rust core,
-whose first classification then takes about 0.28s more while it compiles its
-rules. A message without a verdict in time is announced as its
+after process start with the old Kotlin hazm port and 1.15s with the Rust core.
+The core compiles its rules on first use, about 0.28s there, which the first
+classification used to pay on top. `TfidfSpamClassifier.fromJson` now has that
+done on a second thread while it parses the model, which takes longer, so it
+adds nothing to the load (on the API 37 emulator, 2026-10-17, median of 10:
+first classification 144ms → 17ms, parse to first verdict 623ms → 427ms). A
+message without a verdict in time is announced as its
 sender is routed now (`ThreadSpamPolicy.decideUnclassified`: a sender in Spam or
 blocked stays silent), and the verdict is recorded when it arrives. If that late
 verdict says a silent message is real, `AppSmsReceiver` announces it then, within

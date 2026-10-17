@@ -6,6 +6,7 @@ import android.content.Context
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.SpamLabel
 import com.nospam.nospam.core.model.SpamVerdict
+import kotlin.concurrent.thread
 import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlinx.serialization.json.Json
@@ -92,7 +93,16 @@ class TfidfSpamClassifier(
             return fromJson(modelString, threshold)
         }
 
-        fun fromJson(modelJson: String, threshold: Double = 0.0): TfidfSpamClassifier =
-            TfidfSpamClassifier(json.decodeFromString<SpamModel>(modelJson), threshold)
+        /**
+         * The Rust core compiles its rules ([NativeCore.warmUp]) on a second thread
+         * while this one parses the model, which takes longer: the first message no
+         * longer pays for the compile, and the load takes no longer. A core that
+         * fails to load there is reported by its first use here.
+         */
+        fun fromJson(modelJson: String, threshold: Double = 0.0): TfidfSpamClassifier {
+            val warmUp = thread(isDaemon = true, name = "spam-core-warm-up") { runCatching { NativeCore.warmUp() } }
+            return TfidfSpamClassifier(json.decodeFromString<SpamModel>(modelJson), threshold)
+                .also { warmUp.join() }
+        }
     }
 }
