@@ -134,9 +134,9 @@ after process start with the old Kotlin hazm port and 1.15s with the Rust core.
 The core compiles its rules on first use, about 0.28s there, which the first
 classification used to pay on top. `TfidfSpamClassifier.fromJson` now has that
 done on a second thread while it parses the model, which takes longer, so it
-adds nothing to the load (on the API 37 emulator, 2026-10-17, median of 10:
-first classification 144ms → 17ms, parse to first verdict 623ms → 427ms). A
-message without a verdict in time is announced as its
+adds nothing to the load (same phone, 2026-10-17, app_process harness, median
+of 10: first classification 259ms → 40ms, model read to first verdict 1.16s →
+0.96s). A message without a verdict in time is announced as its
 sender is routed now (`ThreadSpamPolicy.decideUnclassified`: a sender in Spam or
 blocked stays silent), and the verdict is recorded when it arrives. If that late
 verdict says a silent message is real, `AppSmsReceiver` announces it then, within
