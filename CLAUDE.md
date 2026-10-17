@@ -130,9 +130,13 @@ finished. On 2026-10-13, with a debug build on a Galaxy A26, cold-start loads
 took 8-10s: two spam messages were announced as normal ones and one receiver was
 killed for an ANR. Release builds are far faster: on the same phone, in a
 background cold start (2026-10-17, median of 5), the model was loaded 1.54s
-after process start with the old Kotlin hazm port and 1.15s with the Rust core,
-whose first classification then takes about 0.28s more while it compiles its
-rules. A message without a verdict in time is announced as its
+after process start with the old Kotlin hazm port and 1.15s with the Rust core.
+The core compiles its rules on first use, about 0.28s there, which the first
+classification used to pay on top. `TfidfSpamClassifier.fromJson` now has that
+done on a second thread while it parses the model, which takes longer, so it
+adds nothing to the load (same phone, 2026-10-17, app_process harness, median
+of 10: first classification 259ms → 40ms, model read to first verdict 1.16s →
+0.96s). A message without a verdict in time is announced as its
 sender is routed now (`ThreadSpamPolicy.decideUnclassified`: a sender in Spam or
 blocked stays silent), and the verdict is recorded when it arrives. If that late
 verdict says a silent message is real, `AppSmsReceiver` announces it then, within
@@ -533,11 +537,17 @@ not as a flag passed to `NoSpamTheme`. Night mode also reaches what Compose does
 not draw: the window background, the system bar icons (`enableEdgeToEdge`'s auto
 style reads the configuration) and AppCompat views such as the emoji picker, and
 `NoSpamTheme`'s default `isSystemInDarkTheme()` then reflects it. It must be set
-before the first activity exists, or AppCompat recreates the activity and a
-forced theme flashes the system one: `NoSpamApplication.applyAppearance()` reads
-it there, blocking, but only when `ui_settings` exists on disk (measured 21-38ms
-for the read on a debug emulator, 1ms for the existence check). Dynamic color is
-a `StateFlow` the activity passes to `NoSpamTheme`.
+before the first activity's AppCompat delegate exists, or AppCompat recreates
+the activity and a forced theme flashes the system one. `NoSpamApplication`
+starts reading it off the main thread in `onCreate`, only when `ui_settings`
+exists on disk, and `MainActivity.attachBaseContext` waits for that read
+(`applyAppearance`) before calling super, which creates the delegate. A cold
+start for an incoming SMS has no activity and never waits for it. Until
+2026-10-17 `onCreate` read it blocking, which held up everything after it,
+including an SMS receiver's insert. With Dark chosen (`benchmarkRelease` build,
+API 37 emulator, 15 cold launches each) the main thread waited a median 13ms
+(10-17) then and waits 5ms (0-22) now, and the activity is still created once.
+Dynamic color is a `StateFlow` the activity passes to `NoSpamTheme`.
 
 **Open item:** the export only defines a light scheme. Either hand-tune a dark
 scheme with the same role semantics, or generate one from the seed color

@@ -17,6 +17,7 @@ import com.nospam.nospam.core.telephony.SendOptionsProvider
 import com.nospam.nospam.core.telephony.SendOptionsRegistry
 import com.nospam.nospam.ui.toNightMode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,6 +40,10 @@ class NoSpamApplication : Application() {
     /** Wallpaper colors on or off, as stored; current from before the first activity. */
     lateinit var dynamicColor: StateFlow<Boolean>
         private set
+
+    /** The stored theme and wallpaper-color choice, read from [onCreate] on (see [applyAppearance]). */
+    private lateinit var storedAppearance: Deferred<Pair<ThemeSetting, Boolean>>
+    private var appearanceApplied = false
 
     override fun onCreate() {
         Log.i("NoSpamPerf", "app started at ${android.os.SystemClock.elapsedRealtime()}ms")
@@ -70,7 +75,7 @@ class NoSpamApplication : Application() {
             StrictMode.setThreadPolicy(oldPolicy)
         }
         container = AppContainer(this)
-        applyAppearance()
+        readAppearance()
         installSendOptions()
         installDirectReply()
         NotificationHelper.createChannels(this)
@@ -139,25 +144,39 @@ class NoSpamApplication : Application() {
     }
 
     /**
-     * Puts the user's theme in place before the first activity is created.
-     * Applied any later, AppCompat recreates the activity, and someone who chose
-     * Light or Dark would see the system theme flash on every cold start. So the
-     * first value is read here, blocking: one small DataStore file, read on the
-     * IO dispatcher and capped at [APPEARANCE_READ_TIMEOUT_MS]. That read was
-     * measured at 21-38ms on a debug emulator, so it only happens when the user
-     * has changed an appearance setting; otherwise the defaults are known
-     * without reading. Changes after that apply as they are saved.
+     * Starts reading the user's theme off the main thread. Only an activity
+     * needs it ([applyAppearance]), so a cold start for an incoming SMS, which
+     * has no activity, never waits for it before the message is saved. The read
+     * is one small DataStore file, measured at 21-38ms on a debug emulator, and
+     * is skipped when the user has never changed an appearance setting: the
+     * defaults are known without reading.
      */
-    private fun applyAppearance() {
+    private fun readAppearance() {
         val settings = container.settingsRepository
-        val started = SystemClock.elapsedRealtime()
-        val defaults = ThemeSetting.SYSTEM to false
-        val (theme, dynamic) = if (!settings.hasAppearanceSettings()) defaults else runBlocking(Dispatchers.IO) {
-            withTimeoutOrNull(APPEARANCE_READ_TIMEOUT_MS) {
+        storedAppearance = appScope.async {
+            val stored = if (!settings.hasAppearanceSettings()) null else withTimeoutOrNull(APPEARANCE_READ_TIMEOUT_MS) {
                 settings.theme.first() to settings.dynamicColor.first()
             }
-        } ?: defaults
-        Log.i("NoSpamPerf", "appearance read in ${SystemClock.elapsedRealtime() - started}ms")
+            stored ?: (ThemeSetting.SYSTEM to false)
+        }
+    }
+
+    /**
+     * Puts the user's theme in place before the first activity's AppCompat
+     * delegate exists: [MainActivity] calls this before its own
+     * `attachBaseContext`. Applied any later, AppCompat recreates the activity,
+     * and someone who chose Light or Dark would see the system theme flash on
+     * every cold start. Waits, on the main thread, for what is left of the read
+     * [readAppearance] started; it is capped at [APPEARANCE_READ_TIMEOUT_MS].
+     * Only the first call does anything; changes after that apply as they are saved.
+     */
+    fun applyAppearance() {
+        if (appearanceApplied) return
+        appearanceApplied = true
+        val settings = container.settingsRepository
+        val started = SystemClock.elapsedRealtime()
+        val (theme, dynamic) = runBlocking { storedAppearance.await() }
+        Log.i("NoSpamPerf", "appearance waited for ${SystemClock.elapsedRealtime() - started}ms")
         AppCompatDelegate.setDefaultNightMode(theme.toNightMode())
         dynamicColor = settings.dynamicColor.stateIn(appScope, SharingStarted.Eagerly, dynamic)
         appScope.launch {

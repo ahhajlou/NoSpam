@@ -40,6 +40,15 @@ object NativeCore {
     /** The pipeline this core implements; a model must have been trained with it. */
     fun pipeline(): Pipeline = Pipeline(pipelineVersion(), normalizerMode())
 
+    /**
+     * Compiles the core's rules now instead of on the first message. The core
+     * compiles them once per process, on first use, whatever the text: about
+     * 0.28s on a Galaxy A26, which the first classification otherwise pays.
+     */
+    fun warmUp() {
+        ngrams("")
+    }
+
     fun pipelineStages(text: String): PipelineStages {
         val (anonymized, urlsMasked, numbersMasked, normalized) = stages(text)
         return PipelineStages(anonymized, urlsMasked, numbersMasked, normalized)
