@@ -22,10 +22,12 @@ import org.junit.Test
  *
  * On an emulator, not a phone in use: the run installs its own build over the
  * app and uninstalls it afterwards, taking the app's data and the SMS role
- * with it. The emulator needs conversations to show, and a Play Store image
- * cannot write the SMS provider from the shell, so send them in as real
- * incoming messages, some of them containing [SEEDED_SNIPPET], with the app
- * installed as the default SMS app:
+ * with it. Uninstall a NoSpam signed with another key first: its install then
+ * fails, the task still succeeds, and the profile file is left empty (check
+ * `git diff --stat`). The emulator needs conversations to show, and a Play
+ * Store image cannot write the SMS provider from the shell, so send them in as
+ * real incoming messages, one of them from a phone number and containing
+ * [SEEDED_SNIPPET], with the app installed as the default SMS app:
  *     adb -s emulator-5554 emu sms send +15552000001 "Meeting moved to 3pm"
  * They stay in the provider when the app is uninstalled.
  */
@@ -57,19 +59,31 @@ class StartupBaselineProfile {
         device.waitForIdle()
 
         // Needs messages on the device, or there is no list to scroll or open:
-        // see the class comment.
-        device.findObject(By.scrollable(true))?.let { list ->
-            repeat(2) { list.fling(Direction.DOWN) }
-            repeat(2) { list.fling(Direction.UP) }
-            device.waitForIdle()
+        // see the class comment. Both are checked, as the inbox is: a run that
+        // skipped them still wrote a profile, and on 2026-10-17 one had nothing
+        // of the conversation screen in it: the filter chips scroll too, and a
+        // fling meant for the list landed on them as a tap on "Known", which
+        // hid the seeded row. The list is the tallest scrollable view, once its
+        // rows have arrived, which is after the search bar.
+        device.wait(Until.hasObject(By.textContains(SEEDED_SNIPPET)), TIMEOUT_MS)
+        val list = checkNotNull(device.findObjects(By.scrollable(true)).maxByOrNull { it.visibleBounds.height() }) {
+            "The inbox has no conversations to scroll; see StartupBaselineProfile's comment"
         }
-        device.findObject(By.textContains(SEEDED_SNIPPET))?.let { row ->
-            row.click()
-            device.wait(Until.hasObject(By.text(COMPOSE_HINT)), TIMEOUT_MS)
-            device.waitForIdle()
-            device.pressBack()
-            device.wait(Until.hasObject(By.text(INBOX_SEARCH_HINT)), TIMEOUT_MS)
+        repeat(2) { list.fling(Direction.DOWN) }
+        repeat(2) { list.fling(Direction.UP) }
+        device.waitForIdle()
+        val row = device.findObject(By.textContains(SEEDED_SNIPPET))
+            ?: list.scrollUntil(Direction.DOWN, Until.findObject(By.textContains(SEEDED_SNIPPET)))
+        checkNotNull(row) { "No conversation shows \"$SEEDED_SNIPPET\"; see StartupBaselineProfile's comment" }
+        row.click()
+        // A sender ID's conversation has no compose box, so this also needs the
+        // message to come from a phone number.
+        check(device.wait(Until.hasObject(By.text(COMPOSE_HINT)), TIMEOUT_MS)) {
+            "The conversation with \"$SEEDED_SNIPPET\" opened without a compose box; send it from a phone number"
         }
+        device.waitForIdle()
+        device.pressBack()
+        device.wait(Until.hasObject(By.text(INBOX_SEARCH_HINT)), TIMEOUT_MS)
     }
 
     private companion object {
