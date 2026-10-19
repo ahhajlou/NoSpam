@@ -136,7 +136,9 @@ classification used to pay on top. `TfidfSpamClassifier.fromJson` now has that
 done on a second thread while it parses the model, which takes longer, so it
 adds nothing to the load (same phone, 2026-10-17, app_process harness, median
 of 10: first classification 259ms → 40ms, model read to first verdict 1.16s →
-0.96s). A message without a verdict in time is announced as its
+0.96s). In the app itself the warm-up thread runs from about 0.24s to 0.4s after
+process start, and the model is ready at 1.15s as before. A message without a
+verdict in time is announced as its
 sender is routed now (`ThreadSpamPolicy.decideUnclassified`: a sender in Spam or
 blocked stays silent), and the verdict is recorded when it arrives. If that late
 verdict says a silent message is real, `AppSmsReceiver` announces it then, within
@@ -581,7 +583,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 | Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, all run against a real `ContentResolver` (2026-09-24). Tests that write the provider take the SMS role through `SmsRoleRule` and two stub components in the test manifest, and hand it back (see `docs/TESTING.md` §2) |
 | Instrumented, ml | `core/ml/src/androidTest` | 1 test: the Rust core's fixture parity, 512 cases, on the device's build of the core. Passing for all three ABIs the APK ships (2026-10-15): arm64-v8a and armeabi-v7a (forced 32-bit) on a Galaxy A26 with Android 16; x86_64 on a 16 KB-page emulator with Android 17. Run before each release (`docs/TESTING.md` §2) |
-| End-to-end | `.maestro/flows` | 20 flows; 13 run by default (destructive and manual-only tags are skipped), all 13 passing on 2026-10-15 on the API 37 emulator |
+| End-to-end | `.maestro/flows` | 20 flows; 13 run by default (destructive and manual-only tags are skipped), all 13 passing on 2026-10-17 on the API 37 emulator. Three passed only on a rerun: the first run failed them for test-setup reasons (seeding before the app's first start after an install, a garbled `inputText`, an extra conversation on the emulator) |
 
 Tests are written against behavior, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
@@ -733,6 +735,13 @@ Performance work is measured on a **release** build, not debug: the same commit
 is roughly 1.75s debuggable and 0.91s release, because a debuggable APK JITs far
 more and runs StrictMode. Discard the first launch after install and take the
 median of three.
+
+Compare fresh installs with each other. On 2026-10-17 the release build in daily
+use since that afternoon drew its first frame in 216ms; the same APK reinstalled
+took 232ms (median of 20), most likely because ART had compiled more of the used
+install from its runtime profile. Measured on fresh installs, that day's three
+changes (#68) left launch unchanged on the Galaxy A26: first frame 232 → 230ms,
+inbox load 82 → 83ms, 20 alternating launches each.
 
 Compile the baseline profile **after** that first launch, not before:
 `ProfileInstaller` writes the APK's profile during it, so `adb shell cmd package
