@@ -578,6 +578,19 @@ fails:
   conversations in with `adb emu sms send` while NoSpam is the default SMS
   app. The generator's comment has the details.
 
+## Found during the e2e reliability work (2026-10-19) — open
+
+- [ ] A left swipe set to Delete sometimes does not open the confirmation
+  dialog: 1 in about 45 attempts on the API 37 emulator (debug build). Ruled
+  out: a late Undo, the row's swipe guard (`handled`), the new setting not
+  reaching the inbox, and the stall below on its own. When `swipe_actions`
+  fails this way again, start with `build/e2e/swipe_actions.log` and its
+  screenshot.
+- [ ] Returning to the inbox from Settings freezes the main thread for about
+  0.7 s ("Skipped 40 frames", in every run), and so does opening
+  Settings → General. Seen on the API 37 emulator, debug build. Measure it on a
+  release build on the Galaxy A26 before deciding whether it needs work.
+
 ## Project-wide
 - [x] **Verified on a dual-SIM phone 2026-10-02** (Galaxy A26, Irancell as SIM 1 and default SMS SIM, IR-MCI as SIM 2, NoSpam 0.3.2). Five conversations opened on the right SIM: only SIM 2, only SIM 1, both with SIM 1 latest, both with SIM 2 latest; a conversation with no history started on Irancell, the default. A message sent with IR-MCI picked was stored as SENT on subscription 2 and arrived on Irancell from the IR-MCI number. **The "SIM list is empty" case is closed, not a bug:** onboarding requires READ_PHONE_STATE and re-checks it on resume, so the app never runs without it; what remains (no SIM inserted, or SubscriptionManager failing) has nothing better to fall back to than the system default. Original item: Reply on the conversation's own SIM. **Done 2026-09-20 for threads with history:** `Message.subscriptionId` is now read from the provider and `ThreadViewModel` defaults the SIM picker to the SIM the thread last used (a manual pick sticks). **Done 2026-09-23 (phase 2, P2.7):** a thread with no SIM history now starts on the system default SMS SIM when it is active (unit-tested; the emulator has one SIM, so not seen on a device). **Still open:** when the SIM list is empty (phone permission missing, or single SIM) `sendMessage` still passes no subscription and `resolveSmsManager` falls back to the system default. Not tested on a dual-SIM device — the emulator has one SIM; the selection logic is covered by `ThreadViewModelContextTest` only
 - [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way
