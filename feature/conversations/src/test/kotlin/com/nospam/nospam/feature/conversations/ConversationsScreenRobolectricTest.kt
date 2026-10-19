@@ -125,6 +125,21 @@ class ConversationsScreenRobolectricTest {
         rule.onNodeWithText("alice", useUnmergedTree = true).assertIsDisplayed()
     }
 
+    @Test fun `the search field shows what was typed before the ViewModel answers`() {
+        // The ViewModel's query comes back a frame or more after each key; here
+        // it never does. Showing that query reset the field between keys and
+        // garbled fast typing, so the field must show its own text and report it.
+        val reported = mutableListOf<String>()
+        rule.setContent { InboxSearchField(query = "", onQueryChange = { reported += it }) }
+        rule.onNodeWithText("Search conversations").performTextInput("NSTEST_LONG1")
+        rule.onNodeWithText("NSTEST_LONG1", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals("NSTEST_LONG1", reported.last())
+
+        rule.onNodeWithContentDescription("Clear search").performClick()
+        rule.onNodeWithText("Search conversations").assertIsDisplayed()
+        assertEquals("", reported.last())
+    }
+
     @Test fun `a searched number reads left to right and a Persian word right to left in a Persian layout`() {
         fun searchedDirection(query: String): ResolvedTextDirection {
             val field = rule.onNode(hasSetTextAction())

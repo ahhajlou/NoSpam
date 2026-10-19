@@ -352,11 +352,23 @@ fun ConversationsScreen(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun InboxSearchField(
+internal fun InboxSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The field shows its own text, changed as each key arrives. [query] comes
+    // back from the ViewModel through its combine a frame or more after a key,
+    // and shown as it was, it reset the field between keys and dropped or
+    // reordered what was typed: "NSTEST_LONG1" typed by Maestro became
+    // "NSTE_LONG1S" (2026-10-19). The ViewModel never changes the query itself,
+    // so it is only read here when the field is created, which it is again when
+    // the list scrolls it back into view.
+    var text by remember { mutableStateOf(query) }
+    fun change(value: String) {
+        text = value
+        onQueryChange(value)
+    }
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -370,16 +382,16 @@ private fun InboxSearchField(
             LocalTextStyle provides LocalTextStyle.current.copy(textDirection = TextDirection.ContentOrLtr),
         ) {
             SearchBarDefaults.InputField(
-                query = query,
-                onQueryChange = onQueryChange,
+                query = text,
+                onQueryChange = ::change,
                 onSearch = {},
                 expanded = false,
                 onExpandedChange = {},
                 placeholder = { Text(stringResource(R.string.search_conversations)) },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = if (query.isNotEmpty()) {
+                trailingIcon = if (text.isNotEmpty()) {
                     {
-                        IconButton(onClick = { onQueryChange("") }) {
+                        IconButton(onClick = { change("") }) {
                             Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.clear_search))
                         }
                     }
