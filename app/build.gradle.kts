@@ -10,7 +10,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val appVersionName = "0.8.1"
+val appVersionName = "0.9.0-beta.1"
 
 // Release signing material never lives in this repository. It is read from
 // keystore.properties at the root (gitignored, see keystore.properties.template)
@@ -60,7 +60,7 @@ android {
         applicationId = "com.nospam.nospam"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
+        versionCode = 20
         versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
