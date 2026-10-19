@@ -168,7 +168,8 @@ The flows share one fixture pool in the Telephony provider and `nospam.db`, and
 several mutate it (block, archive, star, mark-not-spam), so without reseeding a
 flow silently breaks the next one's preconditions and the failure looks like a
 flake. `tools/seed.sh` is idempotent and only touches addresses prefixed
-`NSTEST_`, so teardown removes exactly what it created.
+`NSTEST_`, so teardown removes exactly what it created. What the runner checks
+before and during a run, and where each flow's log goes: CLAUDE.md §9.
 
 Eight of the twelve flows run by default. The runner skips three tags:
 

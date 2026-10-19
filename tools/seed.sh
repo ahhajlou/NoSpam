@@ -54,6 +54,29 @@ ensure_root() {
     fi
 }
 
+# A fresh install has no nospam.db until the app first runs, and every write
+# below then fails: `set -e` stopped the seed after its first fixture, having
+# already deleted the rest, and the first flow of tools/run-e2e.sh ran on an
+# almost empty inbox (2026-10-19). The app creates the database when its
+# process starts (NoSpamApplication opens it), so start it once and wait.
+db_ready() {
+    [ "$(sql "SELECT count(*) FROM sqlite_master WHERE name='archived_threads'" 2>/dev/null | tr -d '\r')" = "1" ]
+}
+
+ensure_db() {
+    db_ready && return 0
+    echo "nospam.db not created yet: starting $PKG once so it creates it."
+    adbs shell am start -W -n "${PKG}/.MainActivity" >/dev/null 2>&1 || true
+    local i
+    for i in $(seq 1 30); do
+        db_ready && break
+        sleep 1
+    done
+    # Stopped again, as the seed expects: a running app keeps what it read in memory.
+    adbs shell am force-stop "$PKG" >/dev/null 2>&1 || true
+    db_ready || { echo "ERROR: $PKG did not create $DB within 30s." >&2; exit 1; }
+}
+
 ensure_role_and_perms() {
     local holder
     holder="$(adbs shell cmd role get-role-holders android.app.role.SMS 2>/dev/null | tr -d '\r')"
@@ -69,8 +92,12 @@ ensure_role_and_perms() {
 # sql QUERY  — run one SQL statement against nospam.db as the app UID (run-as; the
 # app is debuggable so run-as works even without adb root, but we already have root
 # from ensure_root, which also lets sqlite3 open the file directly).
+#
+# Only on a database the app created: sqlite3 creates a missing file even to
+# read it, as an empty file owned by root that the app cannot open, so a missing
+# nospam.db is a failed statement instead (see ensure_db).
 sql() {
-    adbs shell "sqlite3 '$DB' \"$1\""
+    adbs shell "test -f '$DB' && sqlite3 '$DB' \"$1\""
 }
 
 # sms_insert ADDRESS BODY DATE_MILLIS TYPE(1=inbox,2=sent) READ(0/1)
@@ -434,6 +461,7 @@ fixup_flags() {
 seed_all() {
     ensure_root
     ensure_role_and_perms
+    ensure_db
     echo "Seeding fixtures (prefix ${PREFIX}, contact ${CONTACT_PHONE})..."
     teardown_all >/dev/null 2>&1 || true
     seed_contact_clean
@@ -546,17 +574,17 @@ case "${1:-}" in
     seed) seed_all ;;
     teardown) teardown_all ;;
     status) status_all ;;
-    pagebug) ensure_root; ensure_role_and_perms; reset_addresses "${PREFIX}PAGEBUG1"; seed_pagination_bug ;; # standalone re-seed of just the pagination-bug fixture
-    capflood) ensure_root; ensure_role_and_perms; reset_addresses "${PREFIX}CAPOLD1" "${PREFIX}CAPFLOOD1"; seed_cap_flood ;; # >3000 messages: the inbox must still list ${PREFIX}CAPOLD1
-    bulkspam) ensure_root; ensure_role_and_perms; reset_addresses "${PREFIX}BULK1"; seed_bulk_spam ;;
-    fixup) ensure_root; ensure_role_and_perms; fixup_flags ;;
+    pagebug) ensure_root; ensure_role_and_perms; ensure_db; reset_addresses "${PREFIX}PAGEBUG1"; seed_pagination_bug ;; # standalone re-seed of just the pagination-bug fixture
+    capflood) ensure_root; ensure_role_and_perms; ensure_db; reset_addresses "${PREFIX}CAPOLD1" "${PREFIX}CAPFLOOD1"; seed_cap_flood ;; # >3000 messages: the inbox must still list ${PREFIX}CAPOLD1
+    bulkspam) ensure_root; ensure_role_and_perms; ensure_db; reset_addresses "${PREFIX}BULK1"; seed_bulk_spam ;;
+    fixup) ensure_root; ensure_role_and_perms; ensure_db; fixup_flags ;;
     core)
         # Everything except the two heavy bulk loops (seed_long_thread's 220
         # messages, seed_pagination_bug's 210) — fast re-seed of the fixtures
         # every non-pagination flow needs, useful after a bulk "Delete all"
         # run wipes fixtures out (see the CAUTION comment in
         # .maestro/flows/settings_dialogs_and_switches.yaml).
-        ensure_root; ensure_role_and_perms
+        ensure_root; ensure_role_and_perms; ensure_db
         # Idempotency: clear what this entry point is about to re-create. Does
         # NOT touch LONG1/PAGEBUG1/HISTORY1, which `core` deliberately skips —
         # resetting those would delete heavy fixtures it never rebuilds.
@@ -581,7 +609,7 @@ case "${1:-}" in
     newfixtures)
         # Cheap top-up for fixtures added after the initial full seed, without
         # re-running the 220+210-message long-thread loops.
-        ensure_root; ensure_role_and_perms
+        ensure_root; ensure_role_and_perms; ensure_db
         seed_spam_static
         seed_spam_for_persistence
         seed_archived_for_persistence

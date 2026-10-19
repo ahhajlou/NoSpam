@@ -323,6 +323,7 @@ fun ThreadScreen(
                     NoReplyNotice()
                 } else ComposeBar(
                     draft = uiState.draft,
+                    currentDraft = { viewModel.uiState.value.draft },
                     onDraftChanged = viewModel::onDraftChanged,
                     onSend = {
                         viewModel.onSend()

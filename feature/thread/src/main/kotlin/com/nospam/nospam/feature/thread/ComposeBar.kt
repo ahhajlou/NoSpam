@@ -54,6 +54,9 @@ private val EMOJI_PANEL_HEIGHT = 280.dp
  * Message input: emoji toggle, the field itself, a SIM picker on multi-SIM
  * devices, and send. Send is disabled while the draft is blank, and the emoji
  * panel takes the keyboard's place rather than stacking on top of it.
+ *
+ * @param currentDraft the ViewModel's text as it is now, which [onDraftChanged]
+ *   updates at once; [draft] is the same text as of the last recomposition.
  */
 @Composable
 internal fun ComposeBar(
@@ -64,13 +67,20 @@ internal fun ComposeBar(
     selectedSimId: Int?,
     onSimSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    currentDraft: () -> String = { draft },
 ) {
     // The field owns the cursor; the ViewModel owns the text. An emoji is
     // inserted at the cursor, not appended, and an external change (a forwarded
-    // body) resets the cursor to the end.
+    // body, a saved draft, the box emptied after sending) resets the cursor to
+    // the end. [draft] arrives a frame after the ViewModel took a key and this
+    // effect runs later still, so the field is compared with [currentDraft]:
+    // compared with [draft], a key typed in between looked like an external
+    // change and was undone, which dropped letters from fast typing
+    // ("Automated Maestro reply" became "Autted Mao reply", 2026-10-19).
     var field by remember { mutableStateOf(TextFieldValue(draft, TextRange(draft.length))) }
     LaunchedEffect(draft) {
-        if (draft != field.text) field = TextFieldValue(draft, TextRange(draft.length))
+        val current = currentDraft()
+        if (current != field.text) field = TextFieldValue(current, TextRange(current.length))
     }
     var emojiOpen by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current

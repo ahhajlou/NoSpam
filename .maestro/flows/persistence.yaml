@@ -26,6 +26,11 @@ tags:
 
 # --- Starred ---
 # Star and mute sit in the selection bar's overflow (⋮) menu; pin is an icon.
+# Newer conversations on the device can push the row below the screen.
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_STAR1"
+    direction: DOWN
 - longPressOn: "NSTEST_STAR1"
 - tapOn: "More options"
 - tapOn: "Unstar"
