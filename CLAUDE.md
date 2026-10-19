@@ -82,6 +82,15 @@ domain types unit-testable without Robolectric.
    canceled, labeled, center, license (noun), gray, and the `-ize` forms
    (normalize, initialize, serialize). Do not mix in British spellings, and do
    not rename an identifier, resource or stored key just to change its spelling.
+8. A text field shows text that changes in the same frame as the key: its own
+   state, reported to the ViewModel, as `InboxSearchField` and `ComposeBar`
+   keep it. The exception to rule 3. Shown from the ViewModel's query, which
+   came back through `combine`, the inbox search garbled fast typing: 1 of 10
+   queries typed by adb came out right (2026-10-19). A field that takes the
+   ViewModel's text back compares it with the ViewModel's current value, not
+   the one it last recomposed with, or it undoes keys typed in between: the
+   compose box kept 0 of 10 messages whole. Text straight from one
+   `MutableStateFlow` kept up (the classifier test screen, 10 of 10).
 
 ## 4. Data layer
 
