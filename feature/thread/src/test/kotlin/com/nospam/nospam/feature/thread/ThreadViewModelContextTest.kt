@@ -5,6 +5,13 @@ package com.nospam.nospam.feature.thread
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.nospam.nospam.core.data.DraftRepository
+import org.junit.Assert.assertFalse
+import com.nospam.nospam.core.testing.FakeSpamClassifier
+import com.nospam.nospam.core.model.ThreadSpamState
+import com.nospam.nospam.core.model.Participant
+import com.nospam.nospam.core.database.entity.SenderStateEntity
+import com.nospam.nospam.core.database.NoSpamDatabase
+import com.nospam.nospam.core.data.SpamRepository
 import com.nospam.nospam.core.model.Message
 import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
@@ -100,5 +107,64 @@ class ThreadViewModelContextTest {
 
     private suspend fun awaitDraft(until: (String?) -> Boolean) = withTimeout(5_000) {
         while (!until(drafts.load(9L))) delay(20)
+    }
+
+    // Links
+
+    /** A thread with one received message holding a link, and [state] stored for its sender. */
+    private fun linksViewModel(
+        scheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
+        state: ThreadSpamState?,
+        userOverride: Boolean = false,
+        contactName: String? = null,
+    ): ThreadViewModel {
+        val db = NoSpamDatabase.inMemory()
+        if (state != null) {
+            kotlinx.coroutines.runBlocking {
+                db.senderStateDao.upsert(SenderStateEntity("+1555", state, spamCount = 2, isUserOverride = userOverride))
+            }
+        }
+        val telephony = FakeTelephonyDataSource().apply {
+            emitMessages(ThreadId(9), listOf(Message(MessageId(1), ThreadId(9), "+1555", "see example.com/abc", 1L, MessageType.INBOX, true)))
+            if (contactName != null) contacts["+1555"] = Participant("+1555", displayName = contactName)
+        }
+        return ThreadViewModel(
+            telephony, spamRepository = SpamRepository(db, FakeSpamClassifier.alwaysHam()),
+            linkDispatcher = StandardTestDispatcher(scheduler),
+        )
+    }
+
+    @Test fun `links are found in each message, and received ones wait for the spam checks`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val vm = linksViewModel(testScheduler, state = null)
+        vm.loadThread(9L, context = context)
+        assertFalse(vm.uiState.value.incomingLinks)
+        advanceUntilIdle()
+        assertEquals(listOf("http://example.com/abc"), vm.uiState.value.links[1L]?.map { it.target })
+        assertTrue(vm.uiState.value.incomingLinks)
+    }
+
+    @Test fun `a sender in Spam, reported or blocked gets no links in received messages`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        for ((state, userOverride) in listOf(
+            ThreadSpamState.SPAM to false,
+            ThreadSpamState.SPAM to true,
+            ThreadSpamState.BLOCKED to false,
+        )) {
+            val vm = linksViewModel(testScheduler, state, userOverride)
+            vm.loadThread(9L, context = context)
+            advanceUntilIdle()
+            assertFalse("$state, user override $userOverride", vm.uiState.value.incomingLinks)
+        }
+    }
+
+    @Test fun `a saved contact keeps links despite a spam state from before, not despite a report`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        for ((userOverride, expected) in listOf(false to true, true to false)) {
+            val vm = linksViewModel(testScheduler, ThreadSpamState.SPAM, userOverride, contactName = "Saved")
+            vm.loadThread(9L, context = context)
+            advanceUntilIdle()
+            assertEquals("user override $userOverride", expected, vm.uiState.value.incomingLinks)
+        }
     }
 }

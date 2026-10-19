@@ -55,4 +55,7 @@
     <string name="new_no_matches">مخاطبی با این عبارت پیدا نشد</string>
     <string name="spam_banner_suspected">پالایه‌ی روی دستگاه برخی پیام‌های این گفتگو را هرزنامه‌ی احتمالی تشخیص داده است.</string>
     <string name="spam_banner_in_spam">پالایه‌ی روی دستگاه این گفتگو را به هرزنامه منتقل کرده است.</string>
+    <string name="action_send_message">ارسال پیام</string>
+    <string name="action_email">ایمیل</string>
+    <string name="link_no_app">برنامه‌ای در این گوشی نمی‌تواند آن را باز کند</string>
 </resources>

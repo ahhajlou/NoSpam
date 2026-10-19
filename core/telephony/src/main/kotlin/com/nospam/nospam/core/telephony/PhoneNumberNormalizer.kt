@@ -98,6 +98,13 @@ object PhoneNumberNormalizer {
         }
     }
 
+    /**
+     * The country a number without "+" is read in, by the same rule as sender
+     * keys, so a number found in a message's text opens the conversation that
+     * number's messages land in. Can ask the SIM over binder: call it off Main.
+     */
+    fun region(context: Context): String = getCountryIso(context)
+
     fun normalizedVariants(context: Context, raw: String): List<String> {
         val trimmed = raw.trim()
         val normalized = normalize(context, trimmed)

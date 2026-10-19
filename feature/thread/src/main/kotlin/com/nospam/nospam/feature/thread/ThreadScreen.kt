@@ -11,6 +11,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -36,11 +37,14 @@ import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Report
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
@@ -101,6 +105,8 @@ fun ThreadScreen(
     contactName: String? = null,
     contactPhotoUri: String? = null,
     onForward: (String) -> Unit = {},
+    /** "Send message" on a phone number in a message, with that number in E.164. */
+    onOpenConversation: (String) -> Unit = {},
     onNavigateUp: () -> Unit = {},
     onArchive: (Long) -> Unit = {},
     onBlock: (String) -> Unit = {},
@@ -178,6 +184,11 @@ fun ThreadScreen(
     // Tap reveals a message's time; one at a time, as in Google Messages.
     var timestampFor by remember { mutableStateOf<Long?>(null) }
     var confirm by rememberSaveable { mutableStateOf<ThreadConfirm?>(null) }
+    // The phone number or email address whose menu is open, with its message's id.
+    var linkMenu by remember { mutableStateOf<Pair<Long, MessageLink>?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val cannotOpen = stringResource(R.string.link_no_app)
+    val reportCannotOpen = { scope.launch { snackbar.showSnackbar(cannotOpen) } }
 
     val title = uiState.contactName ?: (uiState.address ?: address)?.let(::isolateIfPhoneNumber) ?: ""
     val conversationActions = buildList {
@@ -258,6 +269,7 @@ fun ThreadScreen(
                 )
             }
         },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         // Scaffold applies the bars' insets; the IME is not part of them, so it
         // is added after consuming, which keeps the compose bar above the keyboard
@@ -285,10 +297,48 @@ fun ThreadScreen(
                         // msgs are ASC; reverse within the group so the latest is at index 0
                         items(msgs.reversed(), key = { it.id.value }) { msg ->
                             val id = msg.id.value
+                            val suspected = id in uiState.spamMessageIds && !msg.type.isOutgoing
+                            // The user's own messages always; a received one only
+                            // once it is known not to be spam (incomingLinks).
+                            val linked = msg.type.isOutgoing || (uiState.incomingLinks && !suspected)
                             MessageBubble(
                                 msg = msg,
                                 selected = id in selection.ids,
-                                suspected = id in uiState.spamMessageIds && !msg.type.isOutgoing,
+                                suspected = suspected,
+                                links = if (linked) uiState.links[id].orEmpty() else emptyList(),
+                                onLinkClick = { link ->
+                                    when {
+                                        selection.isActive -> selection.toggle(id)
+                                        // A web link opens at once, as in Google Messages.
+                                        link.kind == LinkKind.URL -> if (!openLink(context, link.target)) reportCannotOpen()
+                                        else -> linkMenu = id to link
+                                    }
+                                },
+                                menuLink = linkMenu?.takeIf { it.first == id }?.second,
+                                onDismissLinkMenu = { linkMenu = null },
+                                linkMenuItems = { link ->
+                                    val close = { linkMenu = null }
+                                    if (link.kind == LinkKind.PHONE) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_call)) },
+                                            onClick = { close(); dial(context, link.target) },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_send_message)) },
+                                            onClick = { close(); onOpenConversation(link.target) },
+                                        )
+                                    } else if (link.kind == LinkKind.EMAIL) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.action_email)) },
+                                            onClick = { close(); if (!composeEmail(context, link.target)) reportCannotOpen() },
+                                        )
+                                    }
+                                    // As written, so a number copies with the digits it was sent in.
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_copy)) },
+                                        onClick = { close(); copyToClipboard(context, msg.body.substring(link.start, link.end)) },
+                                    )
+                                },
                                 showTimestamp = timestampFor == id,
                                 showDelivered = id == deliveredId,
                                 onClick = {
@@ -427,6 +477,11 @@ private fun MessageBubble(
     msg: Message,
     selected: Boolean,
     suspected: Boolean,
+    links: List<MessageLink>,
+    onLinkClick: (MessageLink) -> Unit,
+    menuLink: MessageLink?,
+    onDismissLinkMenu: () -> Unit,
+    linkMenuItems: @Composable ColumnScope.(MessageLink) -> Unit,
     showTimestamp: Boolean,
     showDelivered: Boolean,
     onClick: () -> Unit,
@@ -467,12 +522,15 @@ private fun MessageBubble(
                 .background(if (isMe) colors.primary else colors.surfaceContainerHigh)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
-            Text(
-                msg.body,
+            MessageText(
+                body = msg.body,
+                links = links,
                 color = if (isMe) colors.onPrimary else colors.onSurface,
-                // The message decides its own direction: an English message in a
-                // Persian thread would otherwise have its punctuation moved.
-                style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content),
+                onLinkClick = onLinkClick,
+                onLinkLongPress = onLongClick,
+                menuLink = menuLink,
+                onDismissMenu = onDismissLinkMenu,
+                menuItems = linkMenuItems,
             )
         }
         when (msg.type) {
