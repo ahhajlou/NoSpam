@@ -502,6 +502,14 @@ fun NoSpamNavHost(
                 contactName = args.contactName,
                 contactPhotoUri = args.contactPhotoUri,
                 onForward = { body -> navController.navigate(NewConversationRoute(forwardBody = body)) },
+                // "Send message" on a number in a message: that number's conversation,
+                // unless it is this one, which would only stack a second copy.
+                onOpenConversation = { number ->
+                    scope.launch {
+                        val threadId = container?.telephony?.getOrCreateThreadId(number) ?: -1L
+                        if (threadId != args.threadId) navController.navigate(ThreadRoute(threadId, number))
+                    }
+                },
                 onNavigateUp = { navController.upOrInbox() },
                 onVisibilityChange = { id, visible ->
                     val holder = container?.visibleThread

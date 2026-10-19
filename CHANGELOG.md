@@ -10,6 +10,10 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 
 ## [Unreleased]
 
+### Added
+
+- Links, phone numbers and email addresses in messages can be tapped: a link opens in your browser, a number can be called, messaged or copied, and an address emailed or copied. Messages flagged as spam keep them as plain text.
+
 ## [0.8.1] - 2026-10-19
 
 ### Fixed

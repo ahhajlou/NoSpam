@@ -55,4 +55,7 @@
     <string name="new_no_matches">No contacts match that</string>
     <string name="spam_banner_suspected">The on-device filter flagged messages here as possible spam.</string>
     <string name="spam_banner_in_spam">The on-device filter moved this conversation to Spam.</string>
+    <string name="action_send_message">Send message</string>
+    <string name="action_email">Email</string>
+    <string name="link_no_app">No app on this phone can open that</string>
 </resources>

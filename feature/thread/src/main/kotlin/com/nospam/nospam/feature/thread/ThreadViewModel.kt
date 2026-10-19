@@ -16,14 +16,23 @@ import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.model.isAlphanumericSender
 import com.nospam.nospam.core.model.isOutgoing
+import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
 import com.nospam.nospam.core.telephony.SendOptions
 import com.nospam.nospam.core.telephony.TelephonyDataSource
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class ThreadUiState(
     val threadId: Long,
@@ -51,6 +60,15 @@ data class ThreadUiState(
      * shows anything but that conversation.
      */
     val isLoading: Boolean = true,
+    /** The links, phone numbers and email addresses in each message, by message id. */
+    val links: Map<Long, List<MessageLink>> = emptyMap(),
+    /**
+     * Whether links in received messages can be tapped. Not before the contact
+     * and spam lookups answer, so a link never shows on a message about to be
+     * labeled spam, and never for a sender in Spam or blocked. A message labeled
+     * suspected spam ([spamMessageIds]) keeps them as text in any case.
+     */
+    val incomingLinks: Boolean = false,
 ) {
     /** False for an alphanumeric sender ID, which a reply cannot reach. */
     val canReply: Boolean get() = address?.let { !isAlphanumericSender(it) } ?: true
@@ -84,6 +102,8 @@ class ThreadViewModel(
     private val settings: SettingsRepository? = null,
     /** Called once a message the user sent was handed to the radio: the sent sound. */
     private val onMessageQueued: suspend () -> Unit = {},
+    /** Where links are looked for; a test passes its own to control when that runs. */
+    private val linkDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     // The other party for threads reached from New Conversation, which have
     // no messages yet. Mutable because one VM instance can serve successive
@@ -110,6 +130,14 @@ class ThreadViewModel(
     private var contactChecked = false
     private var senderJob: Job? = null
     private var observedSender: String? = null
+    // Whether the sender's state and the thread's verdicts have answered once:
+    // links in received messages wait for both (see [ThreadUiState.incomingLinks]).
+    private var senderChecked = false
+    private var verdictsChecked = false
+    private var linksJob: Job? = null
+    /** The country numbers without "+" in message text are read in; null until known. */
+    private val numberRegion = MutableStateFlow<String?>(null)
+    private var linksRegion: String? = null
     private var lastRemote: List<Message> = emptyList()
     // Optimistic rows (negative ids) not yet confirmed by the provider.
     private var optimistic: List<Message> = emptyList()
@@ -136,6 +164,7 @@ class ThreadViewModel(
         contactPhotoUri: String? = null,
     ) {
         if (address != null) pendingAddress = address
+        startLinks(context)
         // A forwarded message's body wins over any previously-saved draft for
         // this thread; skip the saved-draft load so it doesn't get overwritten.
         val drafts = this.drafts
@@ -171,6 +200,7 @@ class ThreadViewModel(
                 address = address ?: "+15550101",
                 contactName = "Alice",
                 isLoading = false,
+                incomingLinks = true,
             )
             return
         }
@@ -184,7 +214,7 @@ class ThreadViewModel(
             threadId = id, messages = emptyList(), spamMessageIds = emptySet(),
             hasMoreOlder = false, loadingOlder = false,
             address = pendingAddress, contactName = contactName, contactPhotoUri = contactPhotoUri, spamBanner = null,
-            isLoading = true,
+            isLoading = true, incomingLinks = false,
         )
         // A name from the list came from the same contact lookup.
         contactChecked = contactName != null
@@ -193,6 +223,8 @@ class ThreadViewModel(
         senderState = null
         senderJob?.cancel()
         observedSender = null
+        senderChecked = false
+        verdictsChecked = false
         pendingAddress?.let(::observeSender)
         messagesJob?.cancel()
         messagesJob = viewModelScope.launch {
@@ -231,6 +263,7 @@ class ThreadViewModel(
             verdictsJob = viewModelScope.launch {
                 repo.observeThreadSpamMessageIds(id).collect { ids ->
                     threadSpamIds = ids
+                    verdictsChecked = true
                     publishSpamIds()
                 }
             }
@@ -267,6 +300,7 @@ class ThreadViewModel(
         senderJob = viewModelScope.launch {
             repo.observeSenderState(address).collect {
                 senderState = it
+                senderChecked = true
                 publishSpamIds()
             }
         }
@@ -290,7 +324,46 @@ class ThreadViewModel(
             ids.isNotEmpty() -> SpamBanner.SUSPECTED_MESSAGES
             else -> null
         }
-        _uiState.value = _uiState.value.copy(spamMessageIds = ids, spamBanner = banner)
+        // The user's own decisions hold for a saved contact too; an automatic
+        // state recorded before the sender was saved does not.
+        val senderInSpam = when (sender?.state) {
+            ThreadSpamState.BLOCKED -> true
+            ThreadSpamState.SPAM -> sender?.isUserOverride == true || _uiState.value.contactName == null
+            else -> false
+        }
+        val checked = spamRepository == null || observedSender == null || (senderChecked && verdictsChecked)
+        _uiState.value = _uiState.value.copy(
+            spamMessageIds = ids, spamBanner = banner, incomingLinks = checked && !senderInSpam,
+        )
+    }
+
+    /**
+     * Finds the links in each message, off the main thread: the first search
+     * loads libphonenumber's metadata (45 ms on a desktop JVM), and each message
+     * then costs tens of microseconds, too much to repeat as bubbles scroll in.
+     * A message is searched once per region, since a body never changes under
+     * its id. Reading the region takes a context, so without one (unit tests of
+     * everything else) no links are looked for.
+     */
+    private fun startLinks(context: android.content.Context?) {
+        val app = context?.applicationContext ?: return
+        if (numberRegion.value == null) {
+            viewModelScope.launch {
+                numberRegion.value = withContext(linkDispatcher) { PhoneNumberNormalizer.region(app) }
+            }
+        }
+        if (linksJob != null) return
+        linksJob = viewModelScope.launch {
+            combine(_uiState.map { it.messages }.distinctUntilChanged(), numberRegion.filterNotNull(), ::Pair)
+                .collectLatest { (messages, region) ->
+                    val known = if (region == linksRegion) _uiState.value.links else emptyMap()
+                    val links = withContext(linkDispatcher) {
+                        messages.associate { it.id.value to (known[it.id.value] ?: findMessageLinks(it.body, region)) }
+                    }
+                    linksRegion = region
+                    _uiState.value = _uiState.value.copy(links = links)
+                }
+        }
     }
 
     /**

@@ -344,6 +344,11 @@ in `TODO.md` under "Spam routing — agreed model". Read that before touching it
   follow the messages: a conversation holding a message flagged right now
   (`Conversation.hasSuspectedSpam`). Deleting a message drops its verdict and
   keeps the sender's counts.
+- **Links in a received message can be tapped only once it is known not to be
+  spam** (`ThreadUiState.incomingLinks`): not before the contact and spam
+  lookups answer, never in a message labeled suspected spam or from a sender in
+  Spam or blocked. There they stay text until the warning in `TODO.md` ("Links
+  in messages") exists. The user's own messages always have theirs.
 
 What survives from before: two levels, immutable per-message `MessageVerdict`
 evidence plus a derived per-sender `SenderState`; keying on normalized address
@@ -629,6 +634,14 @@ instrumented tests fail on API 37** with `NoSuchMethodException:
 android.hardware.input.InputManager.getInstance` — Espresso reflects into a
 platform method that no longer exists, which is not app logic.
 
+**A regular expression can match differently on the JVM and on the phone.**
+Since JDK 19, `\b` and `\w` see only ASCII letters unless the pattern asks
+otherwise; Android's regex (ICU) sees every letter. Next to Persian text a JVM
+test can therefore pass on a match the phone never makes: with Unicode word
+boundaries, `https://example.irلینک` matched as one link, Persian word
+included. `findMessageLinks` runs its patterns over an ASCII-only copy of the
+text for this reason; check any new pattern the same way.
+
 The Robolectric setup: `@RunWith(RobolectricTestRunner::class)`
 plus `@Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")` in a module's
 `src/test`, with `testOptions.unitTests.isIncludeAndroidResources = true`. The
@@ -835,6 +848,15 @@ Standing rules, not a one-time fix list.
   caller to the system or a signature-matched app.
 - Prefer `androidx.core.content.IntentSanitizer` if the app ever forwards an
   incoming `Intent`.
+- **A link in a message opens only as http or https, with `CATEGORY_BROWSABLE`**
+  (`openLink`, feature:thread): whoever sent the message wrote it.
+  `findMessageLinks` drops every other scheme, and any match that starts right
+  after a letter, which is how `аpple.com` with a Cyrillic "а" would open
+  `pple.com`. Without a scheme a link must end in a real top-level domain,
+  from IANA's list frozen in `TopLevelDomains.kt` (`tools/update-tlds.sh`
+  refreshes it), and not in `.zip`, `.mov`, `.docs` or `.java`, which Google
+  Messages also leaves unlinked. AndroidX's stricter `PatternsCompat.AUTOLINK_*`
+  patterns would do the same but are `@RestrictTo`, and lint fails the build.
 
 ## 13. Companion documents
 

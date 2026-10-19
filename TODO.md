@@ -578,6 +578,24 @@ fails:
   conversations in with `adb emu sms send` while NoSpam is the default SMS
   app. The generator's comment has the details.
 
+## Links in messages — follow-ups (agreed 2026-10-19)
+
+Links, phone numbers and email addresses in message bubbles can be tapped
+(`findMessageLinks`, `MessageText`, branch `feature/message-links`). Left for
+later, each its own task:
+- [ ] Spam: a received message labeled suspected spam, or from a sender in Spam
+  or blocked, shows its links as plain text. The agreed next step is a warning
+  instead ("This message may be spam", the link's host, Open anyway / Copy).
+- [ ] Dates and times ("tomorrow at 3pm"): Google Messages underlines them and
+  offers the calendar.
+- [ ] Now and then, `tools/update-tlds.sh` for new top-level domains (the list
+  was IANA's version 2026101900). A stale list only leaves the newest unlinked.
+- Known limits, chosen: a host in Persian letters (`بانک.ir`) is not linked,
+  because the patterns see only ASCII so that the JVM tests and the phone agree
+  (CLAUDE.md §9); Iranian service numbers (`5000…`, `3000…`) are not linked,
+  because libphonenumber's `VALID` does not know them and `POSSIBLE` linked
+  one-time codes, amounts and dates. Google Messages links both.
+
 ## Found during the e2e reliability work (2026-10-19) — open
 
 - [ ] A left swipe set to Delete sometimes does not open the confirmation
