@@ -10,6 +10,8 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-19
+
 ### Fixed
 
 - Typing fast no longer drops or reorders letters in the message box or in the inbox search.
