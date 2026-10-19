@@ -1,0 +1,33 @@
+name: Changelog
+
+# A pull request that changes the app either adds its line to CHANGELOG.md or
+# says "No changelog: <reason>" in its description; see tools/check-changelog.sh.
+# Runs again when the description is edited, so adding that line clears it.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    name: CHANGELOG.md covers the change
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The diff needs the base branch's history; the submodule's own
+          # contents do not matter, only whether its commit moved.
+          fetch-depth: 0
+
+      - name: Check the change is in CHANGELOG.md
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          # Through the environment, never pasted into the script: the
+          # description is text anyone opening a pull request can write.
+          DESCRIPTION: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n' "$DESCRIPTION" > "$RUNNER_TEMP/description.md"
+          bash tools/check-changelog.sh "$BASE" "$HEAD" "$RUNNER_TEMP/description.md"
