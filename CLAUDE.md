@@ -592,7 +592,7 @@ Shapes → `androidx.compose.material3.Shapes`: `sm`=4dp, default=8dp, `md`=12dp
 | Instrumented, storage | `core/database/src/androidTest` | 50 tests (44 + 6 batch-write, 2026-09-23), all passing on a device |
 | Instrumented, telephony | `core/telephony/src/androidTest` | 13 tests, all run against a real `ContentResolver` (2026-09-24). Tests that write the provider take the SMS role through `SmsRoleRule` and two stub components in the test manifest, and hand it back (see `docs/TESTING.md` §2) |
 | Instrumented, ml | `core/ml/src/androidTest` | 1 test: the Rust core's fixture parity, 512 cases, on the device's build of the core. Passing for all three ABIs the APK ships (2026-10-15): arm64-v8a and armeabi-v7a (forced 32-bit) on a Galaxy A26 with Android 16; x86_64 on a 16 KB-page emulator with Android 17. Run before each release (`docs/TESTING.md` §2) |
-| End-to-end | `.maestro/flows` | 20 flows; 13 run by default (destructive and manual-only tags are skipped), all 13 passing on 2026-10-17 on the API 37 emulator. Three passed only on a rerun: the first run failed them for test-setup reasons (seeding before the app's first start after an install, a garbled `inputText`, an extra conversation on the emulator) |
+| End-to-end | `.maestro/flows` | 20 flows; 13 run by default (destructive and manual-only tags are skipped), all 13 passing in two runs in a row on 2026-10-19 on the API 37 emulator, with a newer conversation on it than the fixtures. A run from a fresh install passed 12 that day; the 13th was fixed then (the clipboard preview, below) |
 
 Tests are written against behavior, not implementation. The shared fakes in
 `core:testing` are the substitution point; do not hand-roll a local fake.
@@ -634,6 +634,26 @@ find any node".
 reseeds before every flow, because flows mutate shared fixtures and otherwise
 break each other in ways that look like flakes. `tools/seed.sh` is idempotent —
 it resets the addresses it is about to write before writing them.
+
+Since 2026-10-19 `seed.sh` starts the app once when `nospam.db` does not exist
+yet (a fresh install), and never runs `sqlite3` on a missing file, which creates
+an empty one owned by root that the app cannot open; before, the seed deleted
+the fixtures, stopped at the missing database, and the first flow ran on an
+almost empty inbox. `run-e2e.sh` stops at once when a device is unauthorized or
+offline (Maestro then reports the requested one "not connected" and every flow
+fails) or when several are attached without `ANDROID_SERIAL`; fails a flow whose
+seeding failed rather than running it; keeps each flow's output in `build/e2e/`
+and prints the failing step; and sets Android's "Time to take action"
+accessibility setting to 10s for the run, which Compose honors for the archive
+snackbar's Undo: at 4s, Maestro's waits around a swipe and a tap missed it in 1
+run of 8. Flows scroll to an inbox row before acting on it, because other
+conversations on the device push the fixtures down; `thread_send_and_spam_controls`
+centers the contact's row, because after its Copy step Android's clipboard
+preview covers the bottom-left corner for a few seconds and took the tap meant
+for a row at the bottom. One left swipe in about 45
+did not open `swipe_actions`' Delete dialog that day, and it is not explained:
+not a late Undo, not the row's swipe guard, and not on its own the ~0.7s
+main-thread stall of the debug build when the inbox returns from Settings.
 
 `tools/import_history_check.sh` (emulator only; it uninstalls NoSpam) restores
 history out of order the way backup tools do, with another app as the default

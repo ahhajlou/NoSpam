@@ -31,6 +31,20 @@ if ! adb devices | grep -qE "device$"; then
     echo "No device. Start an emulator from Android Studio, or a physical device over USB." >&2
     exit 1
 fi
+# Maestro does not run while any attached device is unauthorized or offline,
+# even with --udid naming another one: it reports the requested device "not
+# connected" and every flow fails (Maestro 2.10, 2026-10-17, with a phone on
+# USB whose debugging prompt had not been accepted).
+not_ready=$(adb devices | awk 'NR > 1 && NF == 2 && $2 != "device" { print $1 " (" $2 ")" }')
+if [ -n "$not_ready" ]; then
+    echo "Not ready: $not_ready. Unplug it or accept its USB debugging prompt: Maestro does not run while it is attached." >&2
+    exit 1
+fi
+# With two devices the install below goes to both, and adb refuses to pick one.
+if [ -z "${ANDROID_SERIAL:-}" ] && [ "$(adb devices | awk 'NR > 1 && $2 == "device"' | wc -l)" -gt 1 ]; then
+    echo "More than one device attached: set ANDROID_SERIAL to the one to test (e.g. ANDROID_SERIAL=emulator-5554)." >&2
+    exit 1
+fi
 [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] || {
     echo "Device attached but not finished booting." >&2; exit 1; }
 
@@ -45,7 +59,28 @@ done
 role=$(adb shell cmd role get-role-holders android.app.role.SMS 2>/dev/null | tr -d '\r')
 [ "$role" = "com.nospam.nospam" ] || { echo "SMS role not held (got '$role')" >&2; exit 1; }
 
+# The archive snackbar's Undo is on screen for 4s, and Maestro's waits for the
+# screen to settle after a swipe and before a tap take about that long:
+# swipe_actions tapped Undo after it had gone in 1 run of 8 (2026-10-19).
+# Android's "Time to take action" accessibility setting, which Compose's
+# snackbars honor for those with an action (only that one here), keeps it for
+# 10s. The device's own value is put back when the run ends.
+timeout_key=accessibility_interactive_ui_timeout_ms
+old_timeout=$(adb shell settings get secure "$timeout_key" | tr -d '\r')
+restore_timeout() {
+    if [ "$old_timeout" = "null" ]; then
+        adb shell settings delete secure "$timeout_key" >/dev/null 2>&1
+    else
+        adb shell settings put secure "$timeout_key" "$old_timeout" >/dev/null 2>&1
+    fi
+}
+trap restore_timeout EXIT
+adb shell settings put secure "$timeout_key" 10000
+
 pass=0; fail=0; failed_flows=""
+# Each flow's seed and Maestro output, for the failures this prints in one line.
+logs=build/e2e
+rm -rf "$logs" && mkdir -p "$logs"
 for flow in .maestro/flows/*.yaml; do
     name=$(basename "$flow" .yaml)
     # Tagged flows are opt-in: `destructive` rewrites global classifier state,
@@ -61,13 +96,20 @@ for flow in .maestro/flows/*.yaml; do
     done
 
     echo "-- reseed + $name"
-    bash tools/seed.sh core >/dev/null 2>&1
+    # A failed seed leaves the fixtures half made, and the flow would then fail
+    # for that instead: on a fresh install it once failed after deleting them.
+    if ! bash tools/seed.sh core > "$logs/$name.seed.log" 2>&1; then
+        echo "   FAIL $name: seeding failed ($(tail -1 "$logs/$name.seed.log")), see $logs/$name.seed.log"
+        fail=$((fail+1)); failed_flows="$failed_flows $name"
+        continue
+    fi
     # --udid: with more than one device attached (a phone plus the emulator)
     # Maestro would otherwise pick one itself, whichever adb and seed.sh used.
-    if maestro test ${ANDROID_SERIAL:+--udid "$ANDROID_SERIAL"} "$flow" >/dev/null 2>&1; then
+    if maestro test ${ANDROID_SERIAL:+--udid "$ANDROID_SERIAL"} "$flow" > "$logs/$name.log" 2>&1; then
         echo "   PASS $name"; pass=$((pass+1))
     else
-        echo "   FAIL $name"; fail=$((fail+1)); failed_flows="$failed_flows $name"
+        echo "   FAIL $name: $(grep -m1 'FAILED' "$logs/$name.log" | sed 's/\.\.\. FAILED$//'), see $logs/$name.log"
+        fail=$((fail+1)); failed_flows="$failed_flows $name"
     fi
 done
 

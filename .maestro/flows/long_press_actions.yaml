@@ -38,6 +38,12 @@ tags:
 - assertVisible: "1 selected"
 
 # --- Tapping another row while selecting adds it instead of opening it ---
+# NSTEST_STAR1 is the row below NSTEST_MUTE1, which can be the last one on the
+# screen: newer conversations on the device push the fixtures down.
+- scrollUntilVisible:
+    element:
+        text: "NSTEST_STAR1"
+    direction: DOWN
 - tapOn: "NSTEST_STAR1"
 - assertVisible: "2 selected"
 - tapOn: "More options"
@@ -47,9 +53,14 @@ tags:
 - assertVisible: "1 selected"
 
 # --- Pin from the bar; the action ends selection mode ---
+# The row moves to the Pinned section at the top, above the screen if the list
+# was scrolled down to reach it.
 - tapOn: "Pin"
 - assertVisible: "Inbox"
-- assertVisible: "Pinned"
+- scrollUntilVisible:
+    element:
+        text: "Pinned"
+    direction: UP
 - longPressOn: "NSTEST_MUTE1"
 - assertVisible: "Unpin"
 - tapOn: "Unpin"

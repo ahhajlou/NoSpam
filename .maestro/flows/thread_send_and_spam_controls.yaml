@@ -74,10 +74,14 @@ tags:
 - assertVisible: "You can't reply to this sender"
 - assertNotVisible: "SMS message"
 - back
+# Centered: the Copy above makes Android show its clipboard preview in the
+# bottom-left corner for a few seconds, and a row left at the bottom of the
+# screen was tapped through it, which opened nothing (2026-10-19).
 - scrollUntilVisible:
     element:
         text: "NoSpam QA Contact"
     direction: DOWN
+    centerElement: true
 - tapOn: "NoSpam QA Contact"
 - extendedWaitUntil:
     visible: "See you then."

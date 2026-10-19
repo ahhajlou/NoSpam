@@ -20,7 +20,9 @@ tags:
 - assertVisible: "Inbox"
 
 # Right swipe (default Archive) archives and offers Undo; Undo brings it back
-# and it stays back.
+# and it stays back. Undo is offered for 4s, about as long as Maestro takes to
+# settle after the swipe and before the tap: tools/run-e2e.sh gives it 10s
+# (see the accessibility setting there), and run on its own this step can miss.
 - scrollUntilVisible:
     element: "NSTEST_STAR1"
 - swipe:
