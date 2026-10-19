@@ -91,6 +91,9 @@ domain types unit-testable without Robolectric.
    the one it last recomposed with, or it undoes keys typed in between: the
    compose box kept 0 of 10 messages whole. Text straight from one
    `MutableStateFlow` kept up (the classifier test screen, 10 of 10).
+9. A change the people who install the app would notice adds a line under
+   `[Unreleased]` in `CHANGELOG.md`, in their words, in the same PR. That file
+   is the release notes (§10).
 
 ## 4. Data layer
 
@@ -759,6 +762,15 @@ and broke this step three times. `tools/verify-signing.sh` is the
 same two checks for local use (keystore.properties or `--expect <sha256>`); it
 fails rather than warns when it cannot tell whose key signed the APK. Keep the
 two in step.
+
+**Release notes come from `CHANGELOG.md`** (Keep a Changelog format, one line
+per entry). The GitHub Release's description is the tagged version's section,
+printed by `tools/changelog-section.sh`, with GitHub's list of merged PRs
+appended; a tag whose version has no section fails before the build. To
+release: rename `[Unreleased]` to the version and date, bump the version, tag.
+What does not change between releases, such as installing or checking the
+signing key, belongs in the README, not in each release (until 2026-10-19 every
+description repeated how to verify the signature).
 
 Performance work is measured on a **release** build, not debug: the same commit
 is roughly 1.75s debuggable and 0.91s release, because a debuggable APK JITs far
