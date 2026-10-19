@@ -4,9 +4,9 @@ All notable changes to NoSpam, newest first, in the format of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each version's section
 is the description of its GitHub Release, so write for the people who install
 the app. Add a line under [Unreleased] with each change they would notice, one
-line per entry (a release page shows every line break); to release, rename that
-heading to the version and date. Versions before 0.8.0 are described on their
-[GitHub Releases](https://github.com/ahhajlou/NoSpam/releases).
+line per entry (a release page shows every line break). `tools/release.sh
+<version>` turns that section into the release's. Versions before 0.8.0 are
+described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases).
 
 ## [Unreleased]
 
