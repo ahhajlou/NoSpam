@@ -60,7 +60,13 @@ fun NavGraphBuilder.debugToolDestinations(container: AppContainer?, context: Con
             factory = vmFactory {
                 // A model that failed to load (e.g. refused for its pipeline) shows
                 // "Classifier is not available" instead of crashing the screen.
-                container?.let { MlDebugViewModel(runCatching { it.classifier }.getOrNull()) }
+                container?.let {
+                    MlDebugViewModel(
+                        runCatching { it.classifier }.getOrNull(),
+                        stats = it.classifyStats.stats,
+                        onResetStats = it.classifyStats::reset,
+                    )
+                }
                     ?: MlDebugViewModel()
             }
         )

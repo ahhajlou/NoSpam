@@ -21,6 +21,9 @@ enum class PreferenceFile(val fileName: String) {
 
     /** Per-SIM settings, keyed `sim_<subscriptionId>_…`. */
     SIM_SETTINGS("sim_settings"),
+
+    /** Temporary counters of incoming-SMS spam checks (TODO.md, "Late spam checks"). */
+    CLASSIFY_STATS("classify_stats"),
 }
 
 /**

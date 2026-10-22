@@ -161,6 +161,11 @@ verdict says a silent message is real, `AppSmsReceiver` announces it then, withi
 posted is never changed. Send retries and verdict pruning run after the
 notification.
 
+Each outcome of that check is counted (checked, late, failed, and late then
+judged spam after a normal notification) and shown on the classifier test
+screen. This is temporary, to measure on a release build whether late checks
+leak spam: see `TODO.md`, "Late spam checks: temporary diagnostics".
+
 **Messages left without a verdict** (the process was killed mid-classification,
 or the classifier failed) are picked up by `SmsIngressUseCase.classifyMissed`, at
 app start and after each incoming SMS: received messages from the last 7 days

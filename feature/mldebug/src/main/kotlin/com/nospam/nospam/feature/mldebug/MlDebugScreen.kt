@@ -26,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,6 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nospam.nospam.core.designsystem.component.isolateLtr
 import com.nospam.nospam.core.designsystem.theme.NoSpamTheme
+import com.nospam.nospam.core.model.ClassifyStats
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
@@ -131,6 +135,8 @@ fun MlDebugScreen(
             }
             null -> Unit
         }
+
+        uiState.stats?.let { StatsCard(it, onReset = viewModel::resetStats) }
 
         uiState.result?.let { result ->
             Card(
@@ -224,6 +230,40 @@ fun MlDebugScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Temporary counters of incoming-SMS spam checks (TODO.md, "Late spam checks"). */
+@Composable
+private fun StatsCard(stats: ClassifyStats, onReset: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.mldebug_stats_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.mldebug_stats_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // Not isolated: in Persian the date has month names, and an LTR
+            // isolate would put its words in the wrong order.
+            TraceRow(
+                label = stringResource(R.string.mldebug_stats_since),
+                value = stats.since?.let {
+                    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
+                } ?: stringResource(R.string.mldebug_stats_none),
+                textDirection = TextDirection.Content
+            )
+            TraceRow(stringResource(R.string.mldebug_stats_checked), isolateLtr(stats.checked.toString()))
+            TraceRow(stringResource(R.string.mldebug_stats_late), isolateLtr(stats.late.toString()))
+            TraceRow(stringResource(R.string.mldebug_stats_failed), isolateLtr(stats.failed.toString()))
+            TraceRow(stringResource(R.string.mldebug_stats_leaked), isolateLtr(stats.leaked.toString()))
+            OutlinedButton(onClick = onReset, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.mldebug_stats_reset))
             }
         }
     }

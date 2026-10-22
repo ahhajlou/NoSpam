@@ -8,7 +8,9 @@ import com.nospam.nospam.core.ml.TfidfSpamClassifier
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.SpamLabel
 import com.nospam.nospam.core.model.SpamVerdict
+import com.nospam.nospam.core.model.ClassifyStats
 import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -146,5 +148,30 @@ class MlDebugViewModelTest {
         assertNull(vm.uiState.value.result)
         assertNull(vm.uiState.value.error)
         assertEquals("second", vm.uiState.value.input)
+    }
+
+    @Test
+    fun `stats it is given are shown and none hides the section`() = runTest(dispatcher) {
+        assertNull(MlDebugViewModel().uiState.value.stats)
+
+        val stats = MutableStateFlow(ClassifyStats(since = 5L, checked = 3, late = 2, failed = 1, leaked = 1))
+        val vm = MlDebugViewModel(stats = stats)
+        advanceUntilIdle()
+        assertEquals(ClassifyStats(since = 5L, checked = 3, late = 2, failed = 1, leaked = 1), vm.uiState.value.stats)
+
+        stats.value = ClassifyStats(since = 5L, checked = 4)
+        advanceUntilIdle()
+        assertEquals(4L, vm.uiState.value.stats?.checked)
+    }
+
+    @Test
+    fun `reset stats calls the reset function`() = runTest(dispatcher) {
+        var resets = 0
+        val vm = MlDebugViewModel(stats = MutableStateFlow(ClassifyStats()), onResetStats = { resets++ })
+
+        vm.resetStats()
+        advanceUntilIdle()
+
+        assertEquals(1, resets)
     }
 }

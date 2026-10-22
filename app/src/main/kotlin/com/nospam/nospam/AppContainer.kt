@@ -13,6 +13,7 @@ import com.nospam.nospam.core.notifications.BundledMessageSoundPlayer
 import com.nospam.nospam.core.notifications.MessageSoundPlayer
 import android.content.Context
 import com.nospam.nospam.core.data.BlocklistRepository
+import com.nospam.nospam.core.data.ClassifyStatsRepository
 import com.nospam.nospam.core.data.ConversationsRepository
 import com.nospam.nospam.core.data.DraftRepository
 import com.nospam.nospam.core.data.ExportRepository
@@ -146,11 +147,15 @@ class AppContainer(private val context: Context) {
      */
     val exportRepository: ExportRepository by lazy { ExportRepository(telephony, database) }
 
+    /** Temporary counters of incoming-SMS spam checks (TODO.md, "Late spam checks"). */
+    val classifyStats: ClassifyStatsRepository by lazy { ClassifyStatsRepository(preferences) }
+
     val smsIngress: SmsIngressUseCase by lazy {
         SmsIngressUseCase(
             telephony, deferredClassifier, database, appContext,
             isSpamProtectionEnabled = { settingsRepository.isSpamProtectionEnabled() },
             spamStateWriter = spamStateWriter,
+            classifyStats = classifyStats,
         )
     }
 
