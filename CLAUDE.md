@@ -284,9 +284,15 @@ newest message, and replaced the one before it.
 core:model, shared by the notification and the thread screen): a 4-8 digit
 number that a keyword names, the nearest one before it or the first after,
 Persian read head first ("رمز برداشت از کارت شما" is a password, "کد پیگیری" a
-tracking number). The notification's first action is "Copy 123456"
-(`MessageNotificationReceiver`, which accepts only 4-8 digits) and a chip sits
-under a received message, suspected spam included; both mark the clip
+tracking number). The notification shows the code as a "⧉ 123456" chip, a
+contextual action (`NotificationHelper.copyCodeAction`; "Copy 123456" before
+Android 10), handled by `MessageNotificationReceiver`, which accepts only 4-8
+digits. Google Messages posts no such action: the chip on its notification is
+Android System Intelligence's, added to any app's notification for English
+codes only (API 37 emulator, 2026-10-23). A notification with our chip turns
+those system chips off, or English codes showed twice; that also drops the
+system's suggested replies there, not the Reply action. A chip also sits under
+a received message in the thread, suspected spam included; both mark the clip
 sensitive so Android 13+ hides it in the clipboard preview. The rules were
 tuned on the 8,779 messages of persian-sms-spam's `sms_labeled.jsonl`
 (2026-10-23); `OneTimeCodeTest` holds their wording with made-up digits. A

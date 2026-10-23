@@ -256,8 +256,7 @@ object NotificationHelper {
         dismissIntent: PendingIntent? = null,
         /**
          * The one-time code in [messageBody] and what copies it, which targets
-         * a receiver owned by the app. Shown as the first action, "Copy 123456",
-         * as Google Messages does.
+         * a receiver owned by the app. See [copyCodeAction].
          */
         oneTimeCode: String? = null,
         copyCodeIntent: PendingIntent? = null,
@@ -350,11 +349,12 @@ object NotificationHelper {
             .setNumber(unreadCount)
             .apply {
                 if (oneTimeCode != null && copyCodeIntent != null) {
-                    addAction(
-                        NotificationCompat.Action.Builder(
-                            0, context.getString(R.string.notification_copy_code, oneTimeCode), copyCodeIntent,
-                        ).setShowsUserInterface(false).build()
-                    )
+                    addAction(copyCodeAction(context, oneTimeCode, copyCodeIntent))
+                    // Android System Intelligence adds a chip of its own for a
+                    // code it recognizes (English ones; Persian it misses),
+                    // which showed the code twice. This drops its suggested
+                    // replies on this notification too; the Reply action stays.
+                    setAllowSystemGeneratedContextualActions(false)
                 }
                 markReadIntent?.let {
                     addAction(
@@ -379,6 +379,22 @@ object NotificationHelper {
                     setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
                 }
             }
+            .build()
+    }
+
+    /**
+     * The "⧉ 123456" chip, drawn on the row above the actions, as Android
+     * System Intelligence draws the chip it adds to a code in Google Messages'
+     * notification (API 37 emulator, 2026-10-23). A contextual action is a chip
+     * from Android 10; before that it would be a plain button reading only the
+     * code, so there it is "Copy 123456".
+     */
+    internal fun copyCodeAction(context: Context, code: String, intent: PendingIntent): NotificationCompat.Action {
+        val contextual = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        val title = if (contextual) code else context.getString(R.string.notification_copy_code, code)
+        return NotificationCompat.Action.Builder(IconCompat.createWithResource(context, R.drawable.ic_content_copy), title, intent)
+            .setContextual(contextual)
+            .setShowsUserInterface(false)
             .build()
     }
 
