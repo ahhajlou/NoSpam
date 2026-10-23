@@ -297,7 +297,7 @@ sensitive so Android 13+ hides it in the clipboard preview. The rules were
 tuned on the 8,779 messages of persian-sms-spam's `sms_labeled.jsonl`
 (2026-10-23); `OneTimeCodeTest` holds their wording with made-up digits. A
 bare "کد" counts only in a message that reads like a code and not like an
-offer, or discount codes would be offered.
+offer, or discount codes would be offered. How to add a sender: `docs/ONE_TIME_CODES.md`.
 
 **After an inline reply the notification is posted again, never canceled**
 (`NotificationHelper.appendReply`): silently, with the reply added under "You",
@@ -902,6 +902,8 @@ Standing rules, not a one-time fix list.
 - `TODO.md` — open work, and the agreed spam routing model. Read before
   touching `ThreadSpamPolicy`.
 - `docs/SOUNDS.md` — the in-app message sounds, and how to change one.
+- `docs/ONE_TIME_CODES.md` — how one-time codes are found, and how to add a
+  sender the rules miss.
 - `docs/SIGNING.md` — release key: generating it, configuring it, CI secrets,
   and the safety rules. Read before touching the signing config or publishing
   a build.
