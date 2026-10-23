@@ -24,6 +24,9 @@ enum class PreferenceFile(val fileName: String) {
 
     /** Temporary counters of incoming-SMS spam checks (TODO.md, "Late spam checks"). */
     CLASSIFY_STATS("classify_stats"),
+
+    /** When each conversation's notification was last swiped away, `seen_<threadId>`. */
+    NOTIFICATIONS("notifications"),
 }
 
 /**

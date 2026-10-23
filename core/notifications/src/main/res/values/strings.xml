@@ -11,4 +11,5 @@
     <string name="notification_suspected_spam">Suspected spam</string>
     <!-- How a notification names the phone's owner, under an inline reply. -->
     <string name="notification_you">You</string>
+    <string name="notification_mark_read">Mark as read</string>
 </resources>
