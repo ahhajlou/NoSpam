@@ -22,7 +22,7 @@ how the previous version drifted into contradicting them.
 |---|---|---|---|
 | Unit, including every Compose screen | `src/test` in 17 modules | no | 339 tests |
 | Instrumented, storage | `core/database/src/androidTest` | yes | 44 tests in 10 files |
-| Instrumented, telephony | `core/telephony/src/androidTest` | yes | 13 tests, all run (2026-09-24) |
+| Instrumented, telephony | `core/telephony/src/androidTest` | yes | 28 tests, all run (2026-10-23) |
 | End-to-end | `.maestro/flows` | yes | 12 flows, 8 run by default |
 | Manual checks | `tools/*.sh` | yes | permission gate, block/unblock persistence |
 
@@ -108,7 +108,9 @@ asserting the same things; those were folded into the JVM suites and deleted.
   action, and an SMS insert/query round trip), `TelephonyMapperDeviceTest` (real
   `ContentValues` mapping, which JVM stubs cannot do) and
   `DeliveryReportDeviceTest` (real 3GPP status-report PDUs recorded on real
-  rows). 13 tests, all run.
+  rows) and `ProviderDeviceTest` (thread pagination over history restored out
+  of order, delete, read state, and the SIM a message is written with and sent
+  from). 28 tests, all run.
 
   Two things about this suite are easy to trip over. It is **self-instrumenting**:
   the test APK is `com.nospam.nospam.core.telephony.test`, and `:app`'s manifest
