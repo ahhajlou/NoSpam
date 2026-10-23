@@ -43,6 +43,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -306,6 +308,11 @@ fun ThreadScreen(
                                 selected = id in selection.ids,
                                 suspected = suspected,
                                 links = if (linked) uiState.links[id].orEmpty() else emptyList(),
+                                // Shown even on suspected spam: copying cannot
+                                // hurt, unlike opening a link, and a real code
+                                // the filter got wrong is when it is needed.
+                                code = uiState.codes[id],
+                                onCopyCode = { code -> copyToClipboard(context, code, sensitive = true) },
                                 onLinkClick = { link ->
                                     when {
                                         selection.isActive -> selection.toggle(id)
@@ -478,6 +485,8 @@ private fun MessageBubble(
     selected: Boolean,
     suspected: Boolean,
     links: List<MessageLink>,
+    code: String?,
+    onCopyCode: (String) -> Unit,
     onLinkClick: (MessageLink) -> Unit,
     menuLink: MessageLink?,
     onDismissLinkMenu: () -> Unit,
@@ -531,6 +540,16 @@ private fun MessageBubble(
                 menuLink = menuLink,
                 onDismissMenu = onDismissLinkMenu,
                 menuItems = linkMenuItems,
+            )
+        }
+        if (code != null) {
+            AssistChip(
+                onClick = { onCopyCode(code) },
+                label = { Text(stringResource(R.string.action_copy_code, code)) },
+                leadingIcon = {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(AssistChipDefaults.IconSize))
+                },
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
         when (msg.type) {
@@ -625,12 +644,23 @@ private fun formatMessageTime(millis: Long): String {
     }
 }
 
-internal fun copyToClipboard(context: android.content.Context, text: String) {
+/**
+ * @param sensitive a one-time code: the clipboard preview of Android 13+ hides
+ * it, as it does a password (`ClipDescription.EXTRA_IS_SENSITIVE`, which older
+ * versions ignore)
+ */
+internal fun copyToClipboard(context: android.content.Context, text: String, sensitive: Boolean = false) {
     val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     // The label is what the system clipboard UI shows for the entry, so it is
     // translated like anything else the user reads.
-    val label = context.getString(R.string.clipboard_label)
-    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+    val label = context.getString(if (sensitive) R.string.clipboard_label_code else R.string.clipboard_label)
+    val clip = android.content.ClipData.newPlainText(label, text)
+    if (sensitive) {
+        clip.description.extras = android.os.PersistableBundle().apply {
+            putBoolean("android.content.extra.IS_SENSITIVE", true)
+        }
+    }
+    clipboard.setPrimaryClip(clip)
 }
 
 internal fun shareText(context: android.content.Context, text: String) {

@@ -24,6 +24,7 @@ import com.nospam.nospam.core.designsystem.component.avatarBitmap
 import com.nospam.nospam.core.designsystem.component.circleAvatarBitmap
 import com.nospam.nospam.core.model.NotificationDecision
 import com.nospam.nospam.core.model.RawMessage
+import com.nospam.nospam.core.model.findOneTimeCode
 import com.nospam.nospam.core.notifications.NotificationHelper
 import com.nospam.nospam.core.notifications.NotificationLine
 import com.nospam.nospam.core.data.MessageNotificationRepository
@@ -180,6 +181,7 @@ class AppSmsReceiver : BroadcastReceiver() {
             .map { NotificationLine(it.body, it.date) }
         val unreadCount = (unread?.unreadCount ?: 0) + if (thisListed) 0 else 1
         val threadId = result.threadId.value
+        val code = findOneTimeCode(result.body)
         val notification = NotificationHelper.buildMessageNotification(
             context = context,
             threadId = result.threadId.value,
@@ -194,6 +196,8 @@ class AppSmsReceiver : BroadcastReceiver() {
             unreadCount = unreadCount,
             markReadIntent = MessageNotificationReceiver.markReadIntent(context, threadId),
             dismissIntent = MessageNotificationReceiver.dismissIntent(context, threadId),
+            oneTimeCode = code,
+            copyCodeIntent = code?.let { MessageNotificationReceiver.copyCodeIntent(context, threadId, it) },
         )
         NotificationManagerCompat.from(context).notify(
             NotificationHelper.notificationId(result.threadId.value),

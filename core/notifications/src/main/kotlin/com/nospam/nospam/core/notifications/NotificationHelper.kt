@@ -254,6 +254,13 @@ object NotificationHelper {
         markReadIntent: PendingIntent? = null,
         /** Sent when the user swipes the notification away, to record it as seen. */
         dismissIntent: PendingIntent? = null,
+        /**
+         * The one-time code in [messageBody] and what copies it, which targets
+         * a receiver owned by the app. Shown as the first action, "Copy 123456",
+         * as Google Messages does.
+         */
+        oneTimeCode: String? = null,
+        copyCodeIntent: PendingIntent? = null,
     ): android.app.Notification {
         // isSpam: a message that looks like spam but stays in the inbox, posted
         // on the low-importance channel and labeled so it reads as a warning.
@@ -342,6 +349,13 @@ object NotificationHelper {
             .setShortcutId("$SHORTCUT_ID_PREFIX$threadId")
             .setNumber(unreadCount)
             .apply {
+                if (oneTimeCode != null && copyCodeIntent != null) {
+                    addAction(
+                        NotificationCompat.Action.Builder(
+                            0, context.getString(R.string.notification_copy_code, oneTimeCode), copyCodeIntent,
+                        ).setShowsUserInterface(false).build()
+                    )
+                }
                 markReadIntent?.let {
                     addAction(
                         NotificationCompat.Action.Builder(0, context.getString(R.string.notification_mark_read), it)

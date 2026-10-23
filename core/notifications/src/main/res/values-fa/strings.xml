@@ -13,4 +13,7 @@
     <!-- How a notification names the phone's owner, under an inline reply. -->
     <string name="notification_you">شما</string>
     <string name="notification_mark_read">خوانده شد</string>
+    <string name="notification_copy_code">کپی %1$s</string>
+    <string name="notification_code_copied">کد کپی شد</string>
+    <string name="clipboard_label_code">کد یکبار مصرف</string>
 </resources>

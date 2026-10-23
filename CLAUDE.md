@@ -280,6 +280,19 @@ is per conversation in the `notifications` preferences file, written by
 notification's "Mark as read". Until then a notification showed only the
 newest message, and replaced the one before it.
 
+**One-time codes are found by rules, not by the model** (`findOneTimeCode`,
+core:model, shared by the notification and the thread screen): a 4-8 digit
+number that a keyword names, the nearest one before it or the first after,
+Persian read head first ("رمز برداشت از کارت شما" is a password, "کد پیگیری" a
+tracking number). The notification's first action is "Copy 123456"
+(`MessageNotificationReceiver`, which accepts only 4-8 digits) and a chip sits
+under a received message, suspected spam included; both mark the clip
+sensitive so Android 13+ hides it in the clipboard preview. The rules were
+tuned on the 8,779 messages of persian-sms-spam's `sms_labeled.jsonl`
+(2026-10-23); `OneTimeCodeTest` holds their wording with made-up digits. A
+bare "کد" counts only in a message that reads like a code and not like an
+offer, or discount codes would be offered.
+
 **After an inline reply the notification is posted again, never canceled**
 (`NotificationHelper.appendReply`): silently, with the reply added under "You",
 as Google Messages does. On Android 15+ a direct reply marks the notification
