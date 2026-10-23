@@ -52,15 +52,35 @@ in release builds anyway, as a developer tool in the drawer: the phone in daily
 use runs a release build, and the next training set is built from its messages.
 The items below are still required before it is offered to volunteers.
 
-- [x] **Done 2026-10-23 (`feat/export-masked-received`):** the export writes received messages only, each text through the Rust anonymizer (`ExportRepository.receivedMessages`); a masking failure fails the export rather than writing raw text. Original: **Export preprocessed text, not raw text.** The Rust core's anonymizer
+- [x] **Done 2026-10-23 (PR #80):** the export writes received messages only, each text through the Rust anonymizer (`ExportRepository.receivedMessages`); a masking failure fails the export rather than writing raw text. Original: **Export preprocessed text, not raw text.** The Rust core's anonymizer
   (`NativeCore.stages`, first stage) already masks passwords, codes, national
   IDs, card, IBAN and account numbers, phone numbers and emails before scoring. Running the same
   masking on export costs the model nothing and stops the corpus carrying phone
   numbers, OTP codes and account numbers. Cheapest and largest risk reduction —
   do this one first, even standalone.
-- [x] **Done 2026-10-23 (`feat/export-privacy-defaults`):** messages from saved contacts are exported only with "Include messages from contacts" on (off by default). Original: **Default to unknown senders only.** Contact conversations are the highest
+- [x] **Done 2026-10-23 (PR #80):** messages from saved contacts are exported only with "Include messages from contacts" on (off by default). Original: **Default to unknown senders only.** Contact conversations are the highest
   risk and the lowest training value for a spam model. Offer including them as
   an explicit extra choice, never the default.
+- [] **Less personal data around the text: sender and timestamp** (planned
+  2026-10-23, not started). Each line still carries the raw sender and the
+  exact time to the millisecond. In a contributor's file the sender of a
+  message from an unknown person is a stranger's phone number reaching us.
+  - Sender: keep sender IDs (any letter) and service numbers, because labeling
+    searches by sender (`label_viewer_gui.py`, e.g. to find a bank). Replace a
+    personal mobile number with a pseudonym such as `sender-7f3a`: a hash of
+    the number with a random salt made fresh for each export and never
+    written, so one sender's messages still group in a file but the number
+    cannot be recovered or linked across exports. Deciding "personal mobile"
+    needs a rule (Iranian mobiles are `+989…`; libphonenumber's number type
+    for others); service numbers (`5000…`, `3000…`) must stay as they are.
+  - Timestamp: round to the day. Training does not use the time of day.
+  - Open, decide before building: pseudonym or drop personal senders
+    entirely; day or no timestamp at all.
+  - In persian-sms-spam only the labeling viewer reads `address` (checked
+    2026-10-23: merge and training do not), so pseudonyms change nothing else.
+  - Tests: a mobile number becomes the same pseudonym within one export and a
+    different one in the next; sender IDs and service numbers are unchanged;
+    timestamps keep the day. Emulator export as for PR #80.
 - [] **Move out of the drawer, into Settings.** Something like "Help improve
   spam detection". Contribution should be discovered deliberately, not hit by a
   stray tap next to Inbox.
