@@ -17,7 +17,10 @@ in the clipboard preview. The notification keeps its place after a copy.
 Samsung's **Brief** pop-up style (Settings → Notifications → Notification
 pop-up style) is one line with no buttons, so the chip shows only once the
 notification is expanded. With **Detailed** the pop-up is the notification
-itself. An app cannot change either.
+itself. An app cannot change either. In the Brief pop-up Samsung underlines a
+code it recognizes itself and lets it be copied, whatever the app does: on a
+Galaxy A26 (One UI 8.5, 2026-10-23) "Code: 922616" was underlined with
+Android's generated actions off, and "رمز موقت: 55679" was not.
 
 Google Messages posts no copy action of its own: the chip on its notification
 comes from Android's notification assistant (Android System Intelligence on a
