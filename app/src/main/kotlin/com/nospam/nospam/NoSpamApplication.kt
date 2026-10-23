@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import com.nospam.nospam.core.data.BackfillStatus
 import com.nospam.nospam.core.model.ThemeSetting
+import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.notifications.NotificationHelper
 import com.nospam.nospam.core.telephony.DirectReplyListener
 import com.nospam.nospam.core.telephony.DirectReplyRegistry
@@ -202,11 +203,14 @@ class NoSpamApplication : Application() {
     /**
      * A notification the user replied to is posted again with the reply, never
      * canceled: Android 15+ ignores the cancel (see [NotificationHelper.appendReply]).
+     * Replying means its messages were seen, so the next message's
+     * notification does not list them again.
      */
     private fun installDirectReply() {
         DirectReplyRegistry.listener = DirectReplyListener { context, threadId, text ->
             runCatching { NotificationHelper.appendReply(context, threadId, text) }
                 .onFailure { Log.w("NoSpamApplication", "Could not update the replied notification", it) }
+            appScope.launch { container.messageNotifications.markSeen(ThreadId(threadId)) }
         }
     }
 

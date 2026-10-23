@@ -25,6 +25,8 @@ import com.nospam.nospam.core.designsystem.component.circleAvatarBitmap
 import com.nospam.nospam.core.model.NotificationDecision
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.notifications.NotificationHelper
+import com.nospam.nospam.core.notifications.NotificationLine
+import com.nospam.nospam.core.data.MessageNotificationRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -143,7 +145,7 @@ class AppSmsReceiver : BroadcastReceiver() {
                     .onFailure { Log.w(TAG, "Sender avatar failed", it) }
                     .getOrNull()
                 postNotification(
-                    context.applicationContext, result, subscriptionId, timestamp,
+                    context.applicationContext, app, result, subscriptionId, timestamp,
                     suspected = alert == IncomingAlert.NOTIFY_QUIET, avatar = avatar,
                 )
             }
@@ -153,9 +155,14 @@ class AppSmsReceiver : BroadcastReceiver() {
         return alert
     }
 
-    /** [suspected]: spam that stays in the inbox, posted quietly and labeled. */
-    private fun postNotification(
+    /**
+     * [suspected]: spam that stays in the inbox, posted quietly and labeled.
+     * Lists the conversation's other unread messages above this one, as Google
+     * Messages does; this message is always shown, even when flagged.
+     */
+    private suspend fun postNotification(
         context: Context,
+        app: NoSpamApplication,
         result: com.nospam.nospam.core.data.SmsIngressUseCase.Result,
         subscriptionId: Int?,
         timestamp: Long,
@@ -163,6 +170,16 @@ class AppSmsReceiver : BroadcastReceiver() {
         avatar: Bitmap?,
     ) {
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        val unread = runCatching {
+            app.container.messageNotifications.unread(result.threadId, includeFlagged = result.contact != null)
+        }.onFailure { Log.w(TAG, "Unread messages for the notification failed", it) }.getOrNull()
+        val listed = unread?.messages.orEmpty()
+        val thisListed = listed.any { it.id.value == result.messageId }
+        val earlier = listed.filter { it.id.value != result.messageId }
+            .takeLast(MessageNotificationRepository.MAX_MESSAGES - 1)
+            .map { NotificationLine(it.body, it.date) }
+        val unreadCount = (unread?.unreadCount ?: 0) + if (thisListed) 0 else 1
+        val threadId = result.threadId.value
         val notification = NotificationHelper.buildMessageNotification(
             context = context,
             threadId = result.threadId.value,
@@ -173,6 +190,10 @@ class AppSmsReceiver : BroadcastReceiver() {
             timestamp = timestamp,
             senderName = result.contact?.displayName,
             senderAvatar = avatar,
+            earlierMessages = earlier,
+            unreadCount = unreadCount,
+            markReadIntent = MessageNotificationReceiver.markReadIntent(context, threadId),
+            dismissIntent = MessageNotificationReceiver.dismissIntent(context, threadId),
         )
         NotificationManagerCompat.from(context).notify(
             NotificationHelper.notificationId(result.threadId.value),

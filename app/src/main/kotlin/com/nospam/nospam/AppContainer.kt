@@ -17,6 +17,7 @@ import com.nospam.nospam.core.data.ClassifyStatsRepository
 import com.nospam.nospam.core.data.ConversationsRepository
 import com.nospam.nospam.core.data.DraftRepository
 import com.nospam.nospam.core.data.ExportRepository
+import com.nospam.nospam.core.data.MessageNotificationRepository
 import com.nospam.nospam.core.data.SettingsRepository
 import com.nospam.nospam.core.data.SmsIngressUseCase
 import com.nospam.nospam.core.data.SpamBackfillUseCase
@@ -152,6 +153,9 @@ class AppContainer(private val context: Context) {
 
     /** Temporary counters of incoming-SMS spam checks (TODO.md, "Late spam checks"). */
     val classifyStats: ClassifyStatsRepository by lazy { ClassifyStatsRepository(preferences) }
+    val messageNotifications: MessageNotificationRepository by lazy {
+        MessageNotificationRepository(telephony, spamRepository, preferences)
+    }
 
     val smsIngress: SmsIngressUseCase by lazy {
         SmsIngressUseCase(

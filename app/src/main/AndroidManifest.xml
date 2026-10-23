@@ -118,6 +118,11 @@
                 android:value="true" />
         </service>
 
+        <!-- A message notification's "Mark as read" and swipe-away. No external callers. -->
+        <receiver
+            android:name=".sms.MessageNotificationReceiver"
+            android:exported="false" />
+
         <!-- Cancels the history-scan progress notification. No external callers. -->
         <receiver
             android:name=".BackfillCancelReceiver"

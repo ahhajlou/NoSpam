@@ -265,6 +265,21 @@ no child is left; a new cancel path must do the same. Suspected spam stays out
 of the group (its own channel, quiet). `dumpsys notification` does not list the
 summary reliably; check the shade.
 
+**A conversation's notification lists its unread messages**, as Google
+Messages does (`MessageNotificationRepository`, core:data): received, unread
+and newer than the last time its notification was swiped away or replied
+from, oldest first, at most 7, with every unread one counted (`setNumber`).
+Measured on Google Messages on the API 37 emulator, 2026-10-23: 7 shown of 12
+with a count of 12, and after a swipe-away only messages newer than it. It is
+rebuilt from the provider for each message, so it survives the process dying
+in between, and empties once the conversation is read. Messages flagged spam
+were kept silent and stay out of it, except a saved contact's, which are never
+classified; the message being announced is always shown. The swipe-away time
+is per conversation in the `notifications` preferences file, written by
+`MessageNotificationReceiver` (`:app`, not exported), which also handles the
+notification's "Mark as read". Until then a notification showed only the
+newest message, and replaced the one before it.
+
 **After an inline reply the notification is posted again, never canceled**
 (`NotificationHelper.appendReply`): silently, with the reply added under "You",
 as Google Messages does. On Android 15+ a direct reply marks the notification

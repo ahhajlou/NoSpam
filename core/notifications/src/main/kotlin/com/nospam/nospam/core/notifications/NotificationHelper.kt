@@ -243,6 +243,17 @@ object NotificationHelper {
          * notification shows an empty circle.
          */
         senderAvatar: Bitmap? = null,
+        /**
+         * The conversation's other unread messages to list above [messageBody],
+         * oldest first, as Google Messages lists them.
+         */
+        earlierMessages: List<NotificationLine> = emptyList(),
+        /** Every unread message, including any not listed. */
+        unreadCount: Int = earlierMessages.size + 1,
+        /** Marks the conversation read; targets a receiver owned by the app. */
+        markReadIntent: PendingIntent? = null,
+        /** Sent when the user swipes the notification away, to record it as seen. */
+        dismissIntent: PendingIntent? = null,
     ): android.app.Notification {
         // isSpam: a message that looks like spam but stays in the inbox, posted
         // on the low-importance channel and labeled so it reads as a warning.
@@ -258,7 +269,8 @@ object NotificationHelper {
         // by the contact.
         val user = Person.Builder().setName(context.getString(R.string.notification_you)).build()
         val style = NotificationCompat.MessagingStyle(user)
-            .addMessage(messageBody, timestamp, person)
+        earlierMessages.forEach { style.addMessage(it.text, it.timestamp, person) }
+        style.addMessage(messageBody, timestamp, person)
 
         val replyIntent = Intent(TelephonyConstants.ACTION_RESPOND_VIA_MESSAGE).apply {
             setClassName(context.packageName, "com.nospam.nospam.core.telephony.service.HeadlessSmsSendService")
@@ -328,8 +340,20 @@ object NotificationHelper {
             .setWhen(timestamp)
             .setShowWhen(true)
             .setShortcutId("$SHORTCUT_ID_PREFIX$threadId")
+            .setNumber(unreadCount)
+            .apply {
+                markReadIntent?.let {
+                    addAction(
+                        NotificationCompat.Action.Builder(0, context.getString(R.string.notification_mark_read), it)
+                            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+                            .setShowsUserInterface(false)
+                            .build()
+                    )
+                }
+            }
             // A sender ID cannot receive a reply, so it is not offered.
             .apply { if (!isAlphanumericSender(sender)) addAction(replyAction) }
+            .apply { dismissIntent?.let(::setDeleteIntent) }
             .setAutoCancel(true)
             .apply {
                 if (isSpam) {
@@ -387,3 +411,6 @@ object NotificationHelper {
             .notify(TAG_MESSAGES_SUMMARY, NOTIFICATION_ID_MESSAGES_SUMMARY, buildMessageSummary(context))
     }
 }
+
+/** One message listed in a conversation's notification. */
+data class NotificationLine(val text: CharSequence, val timestamp: Long)

@@ -12,4 +12,5 @@
     <string name="notification_suspected_spam">هرزنامه مشکوک</string>
     <!-- How a notification names the phone's owner, under an inline reply. -->
     <string name="notification_you">شما</string>
+    <string name="notification_mark_read">خوانده شد</string>
 </resources>
