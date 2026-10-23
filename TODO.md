@@ -609,6 +609,74 @@ later, each its own task:
   Settings → General. Seen on the API 37 emulator, debug build. Measure it on a
   release build on the Galaxy A26 before deciding whether it needs work.
 
+## Late spam checks: temporary diagnostics (built 2026-10-22, `feat/late-check-counters`) — measuring
+
+**Why.** On 2026-10-22, 2 of 13 spam messages on the Galaxy A26 got a normal
+heads-up notification (`+9890003157` at 13:16, `HAMRAH_AVAL` at 14:16). Each
+arrived on a cold start, and the check missed `CLASSIFY_BUDGET_MS` (3 s). With
+no verdict, `ThreadSpamPolicy.decideUnclassified` notifies unless the sender is
+in Spam or blocked. That was a known, disclosed trade-off of `d7b06d8`
+(2026-10-13).
+
+The cause this time: the phone had run a **debug** build since 2026-10-20
+01:14. That build loads the model in about 5.7 s, against about 1.15 s for a
+release build (2026-10-17).
+
+**Decided: no change to the wait or the fallback.**
+- Do not lengthen the 3 s wait. A long wait inside the SMS broadcast ran past
+  Android's 10 s limit on 2026-10-13, and the ANR killed that message's handling
+  with no notification at all. See the body of `d7b06d8`.
+- An earlier proposal to lengthen it to about 8 s was withdrawn for that
+  reason.
+
+**What gets added**, as one PR with no change to how messages are handled:
+- [x] **Saved counters**, each written when it happens so a later kill cannot
+  lose it: SMS checked, check late, check failed, and late + notified + judged
+  spam (the leak). Shown on the classifier test screen (`feature:mldebug`,
+  which ships in release builds).
+- Not added, decided 2026-10-22:
+  - log lines: the phone's log keeps only a few hours;
+  - a list of the last 20 late cases.
+
+**The PR must list here every file, class, string, stored key and storage file
+it adds**, so removing it is mechanical. Store the counters where they can be
+deleted without a `nospam.db` migration. On removal, also delete the stored
+data from installed apps; do not leave an orphaned file.
+
+**Built (the list for removal):**
+- Storage: `PreferenceFile.CLASSIFY_STATS` (file name `classify_stats`, i.e.
+  `files/datastore/classify_stats.preferences_pb`) in `core:preferences`
+  (`PreferencesDataSource.kt`), its delegate `classifyStatsDataStore` and `when`
+  branch in `DataStorePreferencesDataSource.kt`. Keys: `since`, `checked`,
+  `late`, `failed`, `leaked`.
+- On removal, delete the stored file from installed apps: on first start of the
+  removing version, delete `preferencesDataStoreFile("classify_stats")` before
+  any DataStore opens it (the delegate is gone by then, so a plain `File.delete`
+  is safe), and drop that code one release later.
+- `core:model`: `ClassifyStats.kt`.
+- `core:data`: `ClassifyStatsRepository.kt` (with `ClassifyEvent`); in
+  `SmsIngressUseCase.kt` the `classifyStats` parameter, `count()` and its four
+  call sites; test `ClassifyStatsRepositoryTest.kt` and the "spam check
+  counters" tests in `SmsIngressUseCaseTest.kt`.
+- `:app`: `AppContainer.classifyStats` and its use in `smsIngress`; the
+  `stats`/`onResetStats` arguments in `navigation/DebugTools.kt`.
+- `feature:mldebug`: `MlDebugUiState.stats`, the `stats`/`onResetStats`
+  constructor parameters, `init` and `resetStats()` in `MlDebugViewModel.kt`;
+  `StatsCard` in `MlDebugScreen.kt`; tests in `MlDebugViewModelTest.kt`.
+- Strings (values and values-fa): `mldebug_stats_title`,
+  `mldebug_stats_description`, `mldebug_stats_since`, `mldebug_stats_none`,
+  `mldebug_stats_checked`, `mldebug_stats_late`, `mldebug_stats_failed`,
+  `mldebug_stats_leaked`, `mldebug_stats_reset`.
+- `CHANGELOG.md` line under `[Unreleased]`, and the paragraph after
+  `CLASSIFY_BUDGET_MS` in `CLAUDE.md` §4.
+
+**When to decide** (only meaningful on a **release** build; reinstalling one
+wipes the app's data, so save the list of "Report spam" decisions first):
+- After about 2 weeks of normal use on the A26 with a release build: zero
+  leaks → remove the counters and their section of the screen.
+- Leaks → choose the next step from the numbers, after reading `d7b06d8` and
+  `bf630ed` for why the wait is 3 s.
+
 ## Project-wide
 - [x] **Verified on a dual-SIM phone 2026-10-02** (Galaxy A26, Irancell as SIM 1 and default SMS SIM, IR-MCI as SIM 2, NoSpam 0.3.2). Five conversations opened on the right SIM: only SIM 2, only SIM 1, both with SIM 1 latest, both with SIM 2 latest; a conversation with no history started on Irancell, the default. A message sent with IR-MCI picked was stored as SENT on subscription 2 and arrived on Irancell from the IR-MCI number. **The "SIM list is empty" case is closed, not a bug:** onboarding requires READ_PHONE_STATE and re-checks it on resume, so the app never runs without it; what remains (no SIM inserted, or SubscriptionManager failing) has nothing better to fall back to than the system default. Original item: Reply on the conversation's own SIM. **Done 2026-09-20 for threads with history:** `Message.subscriptionId` is now read from the provider and `ThreadViewModel` defaults the SIM picker to the SIM the thread last used (a manual pick sticks). **Done 2026-09-23 (phase 2, P2.7):** a thread with no SIM history now starts on the system default SMS SIM when it is active (unit-tested; the emulator has one SIM, so not seen on a device). **Still open:** when the SIM list is empty (phone permission missing, or single SIM) `sendMessage` still passes no subscription and `resolveSmsManager` falls back to the system default. Not tested on a dual-SIM device — the emulator has one SIM; the selection logic is covered by `ThreadViewModelContextTest` only
 - [] Re-verify the Room/KSP constraint in CLAUDE.md §11 on the current toolchain (AGP 9.4.0, KSP 2.3.6). It was verified on AGP 9.0.1 / KSP 2.3.2; the recorded condition for revisiting is "a KSP release supporting AGP built-in Kotlin". Not checked yet — do not assume either way

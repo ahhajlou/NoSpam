@@ -25,11 +25,14 @@ private val Context.draftsDataStore by preferencesDataStore(PreferenceFile.DRAFT
 private val Context.uiSettingsDataStore by preferencesDataStore(PreferenceFile.UI_SETTINGS.fileName)
 private val Context.simSettingsDataStore by preferencesDataStore(PreferenceFile.SIM_SETTINGS.fileName)
 
+private val Context.classifyStatsDataStore by preferencesDataStore(PreferenceFile.CLASSIFY_STATS.fileName)
+
 private fun Context.dataStoreFor(file: PreferenceFile): DataStore<Preferences> = when (file) {
     PreferenceFile.SETTINGS -> settingsDataStore
     PreferenceFile.DRAFTS -> draftsDataStore
     PreferenceFile.UI_SETTINGS -> uiSettingsDataStore
     PreferenceFile.SIM_SETTINGS -> simSettingsDataStore
+    PreferenceFile.CLASSIFY_STATS -> classifyStatsDataStore
 }
 
 class DataStorePreferencesDataSource internal constructor(

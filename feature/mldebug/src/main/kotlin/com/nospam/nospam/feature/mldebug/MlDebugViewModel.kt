@@ -9,11 +9,14 @@ import com.nospam.nospam.core.ml.Pipeline
 import com.nospam.nospam.core.ml.PipelineStages
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.ml.TfidfSpamClassifier
+import com.nospam.nospam.core.model.ClassifyStats
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** One full pass through the classifier pipeline, kept for inspection. */
@@ -37,6 +40,8 @@ data class MlDebugUiState(
     val isClassifying: Boolean = false,
     val result: MlResult? = null,
     val error: MlDebugError? = null,
+    /** Spam-check counters of incoming SMS; null hides the section. */
+    val stats: ClassifyStats? = null,
 )
 
 /**
@@ -49,10 +54,23 @@ data class MlDebugUiState(
 class MlDebugViewModel(
     private val classifier: SpamClassifier? = null,
     private val classifierDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    stats: Flow<ClassifyStats>? = null,
+    private val onResetStats: (suspend () -> Unit)? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MlDebugUiState())
     val uiState: StateFlow<MlDebugUiState> = _uiState.asStateFlow()
+
+    init {
+        stats?.let { flow ->
+            viewModelScope.launch { flow.collect { s -> _uiState.update { it.copy(stats = s) } } }
+        }
+    }
+
+    fun resetStats() {
+        val reset = onResetStats ?: return
+        viewModelScope.launch { reset() }
+    }
 
     fun onInputChanged(text: String) {
         _uiState.value = _uiState.value.copy(input = text, result = null, error = null)

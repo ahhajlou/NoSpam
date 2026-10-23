@@ -11,14 +11,17 @@ import com.nospam.nospam.core.database.entity.BlocklistEntity
 import com.nospam.nospam.core.database.entity.MessageVerdictEntity
 import com.nospam.nospam.core.database.entity.SenderStateEntity
 import com.nospam.nospam.core.database.entity.SpamVerdictEntity
+import com.nospam.nospam.core.model.ClassifyStats
 import com.nospam.nospam.core.model.NotificationDecision
 import com.nospam.nospam.core.model.Participant
 import com.nospam.nospam.core.model.RawMessage
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
 import com.nospam.nospam.core.testing.BlockingModelLoad
+import com.nospam.nospam.core.testing.FakePreferencesDataSource
 import com.nospam.nospam.core.testing.FakeSpamClassifier
 import com.nospam.nospam.core.testing.FakeTelephonyDataSource
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -307,5 +310,119 @@ class SmsIngressUseCaseTest {
         assertNotNull(db.messageVerdictDao.getByMessageId(1L))
         assertNull(db.messageVerdictDao.getByMessageId(2L))
         assertNotNull(db.messageVerdictDao.getByMessageId(3L))
+    }
+
+    // --- Temporary spam check counters (TODO.md, "Late spam checks") ---
+
+    private fun statsRepo() = ClassifyStatsRepository(FakePreferencesDataSource())
+
+    private suspend fun ClassifyStatsRepository.current() = stats.first()
+
+    private fun ingress(
+        classifier: com.nospam.nospam.core.ml.SpamClassifier,
+        db: NoSpamDatabase,
+        stats: ClassifyStatsRepository,
+        telephony: FakeTelephonyDataSource = telephony(),
+    ) = SmsIngressUseCase(telephony, classifier, db, classifyStats = stats)
+
+    @Test fun `a check in time counts as checked only`() = runTest {
+        val stats = statsRepo()
+        ingress(FakeSpamClassifier.alwaysSpam(), NoSpamDatabase.inMemory(), stats).handle(RawMessage("+98912", "win prize", 1L))
+
+        awaitReal { stats.current().checked == 1L }
+        val s = stats.current()
+        assertEquals(0L, s.late)
+        assertEquals(0L, s.failed)
+        assertEquals(0L, s.leaked)
+    }
+
+    @Test fun `late spam from a new sender announced normally is a leak`() = runTest {
+        val stats = statsRepo()
+        val load = BlockingModelLoad(FakeSpamClassifier.alwaysSpam(2.0))
+        val result = ingress(load.classifier, NoSpamDatabase.inMemory(), stats).handle(RawMessage("+98912", "win prize now", 1L))
+        assertEquals(NotificationDecision.NORMAL, result.notificationDecision)
+
+        load.release.countDown()
+        awaitReal { stats.current().leaked == 1L }
+        val s = stats.current()
+        assertEquals(1L, s.checked)
+        assertEquals(1L, s.late)
+        assertEquals(0L, s.failed)
+    }
+
+    @Test fun `late spam from a sender already in Spam is late but not a leak`() = runTest {
+        val stats = statsRepo()
+        val db = NoSpamDatabase.inMemory()
+        db.senderStateDao.upsert(SenderStateEntity("+98912", ThreadSpamState.SPAM, spamCount = 11))
+        val load = BlockingModelLoad(FakeSpamClassifier.alwaysSpam(2.0))
+        val result = ingress(load.classifier, db, stats).handle(RawMessage("+98912", "win prize now", 1L))
+
+        load.release.countDown()
+        awaitReal { result.lateDecision!!.isCompleted }
+        awaitReal { stats.current().late == 1L }
+        assertEquals(0L, stats.current().leaked)
+    }
+
+    @Test fun `late ham is late but not a leak`() = runTest {
+        val stats = statsRepo()
+        val load = BlockingModelLoad(FakeSpamClassifier.alwaysHam())
+        val result = ingress(load.classifier, NoSpamDatabase.inMemory(), stats).handle(RawMessage("+98912", "hello", 1L))
+
+        load.release.countDown()
+        awaitReal { result.lateDecision!!.isCompleted }
+        awaitReal { stats.current().late == 1L }
+        assertEquals(0L, stats.current().leaked)
+    }
+
+    @Test fun `a classifier that throws in time counts as failed`() = runTest {
+        val stats = statsRepo()
+        val failing = FakeSpamClassifier(verdictFor = { throw RuntimeException("model fail") })
+        ingress(failing, NoSpamDatabase.inMemory(), stats).handle(RawMessage("+98912", "hello", 1L))
+
+        awaitReal { stats.current().failed == 1L }
+        val s = stats.current()
+        assertEquals(1L, s.checked)
+        assertEquals(0L, s.late)
+    }
+
+    @Test fun `a classifier that throws late counts as late and failed`() = runTest {
+        val stats = statsRepo()
+        val load = BlockingModelLoad(FakeSpamClassifier(verdictFor = { throw RuntimeException("model fail") }))
+        val result = ingress(load.classifier, NoSpamDatabase.inMemory(), stats).handle(RawMessage("+98912", "hello", 1L))
+
+        load.release.countDown()
+        awaitReal { result.lateDecision!!.isCompleted }
+        awaitReal { stats.current().failed == 1L }
+        val s = stats.current()
+        assertEquals(1L, s.late)
+        assertEquals(0L, s.leaked)
+    }
+
+    @Test fun `a saved contact is not counted`() = runTest {
+        val stats = statsRepo()
+        ingress(FakeSpamClassifier.alwaysSpam(), NoSpamDatabase.inMemory(), stats, telephony(contactName = "Ali"))
+            .handle(RawMessage("+98912", "hello", 1L))
+
+        runCurrent()
+        assertEquals(ClassifyStats(), stats.current())
+    }
+
+    @Test fun `a blocked sender is not counted`() = runTest {
+        val stats = statsRepo()
+        val db = NoSpamDatabase.inMemory()
+        db.blocklistDao.insert(BlocklistEntity(address = "+98912", createdAt = 1))
+        ingress(FakeSpamClassifier.alwaysSpam(), db, stats).handle(RawMessage("+98912", "hello", 1L))
+
+        runCurrent()
+        assertEquals(ClassifyStats(), stats.current())
+    }
+
+    @Test fun `a counter that cannot be written never breaks ingress`() = runTest {
+        val prefs = FakePreferencesDataSource().apply { failWrites = true }
+        val result = ingress(FakeSpamClassifier.alwaysHam(), NoSpamDatabase.inMemory(), ClassifyStatsRepository(prefs))
+            .handle(RawMessage("+98912", "hello", 1L))
+
+        runCurrent()
+        assertEquals(NotificationDecision.NORMAL, result.notificationDecision)
     }
 }

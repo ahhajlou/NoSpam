@@ -18,4 +18,13 @@
     <string name="mldebug_core_commit">کامیت هسته (persian-sms-spam)</string>
     <string name="mldebug_error_unavailable">طبقه‌بند در دسترس نیست.</string>
     <string name="mldebug_error_failed">طبقه‌بندی ناموفق بود.</string>
+    <string name="mldebug_stats_title">بررسی هرزنامه برای پیام‌های دریافتی</string>
+    <string name="mldebug_stats_description">شمارنده‌های موقت برای فهمیدن اینکه آیا بررسی گاهی بعد از راه‌اندازی برنامه برای یک پیام تازه بیش از حد کند است.</string>
+    <string name="mldebug_stats_since">شمارش از</string>
+    <string name="mldebug_stats_none">هنوز چیزی شمرده نشده</string>
+    <string name="mldebug_stats_checked">پیام‌های بررسی‌شده</string>
+    <string name="mldebug_stats_late">بررسی دیر شد (نتیجه در ۳ ثانیه نرسید)</string>
+    <string name="mldebug_stats_failed">بررسی ناموفق بود</string>
+    <string name="mldebug_stats_leaked">دیر رسید و اعلان عادی داد، بعد هرزنامه تشخیص داده شد</string>
+    <string name="mldebug_stats_reset">صفر کردن شمارنده‌ها</string>
 </resources>

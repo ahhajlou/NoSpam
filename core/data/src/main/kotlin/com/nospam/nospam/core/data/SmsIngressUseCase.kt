@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -47,6 +48,8 @@ class SmsIngressUseCase(
     private val isSpamProtectionEnabled: suspend () -> Boolean = { true },
     private val spamStateWriter: SpamStateWriter = SpamStateWriter(db.senderStateDao),
     private val classifyBudgetMillis: Long = CLASSIFY_BUDGET_MS,
+    /** Temporary counters of the spam check outcomes; null counts nothing. */
+    private val classifyStats: ClassifyStatsRepository? = null,
 ) {
     /** Messages [handle] is still working on, late verdicts included: [classifyMissed] leaves them alone. */
     private val inFlight: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -125,8 +128,20 @@ class SmsIngressUseCase(
         // the load finished, which on a cold start was past the broadcast's 10s
         // limit. Now the wait really ends at the budget, and a verdict that
         // arrives later is still recorded below.
-        val classification = if (isContact) null else detachedScope().async { classifier.classify(message) }
+        val classification = if (isContact) null else detachedScope().async {
+            try {
+                classifier.classify(message)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                count(ClassifyEvent.FAILED)
+                throw e
+            }
+        }
         val verdict = classification?.let { awaitWithinBudget(it) }
+        // Counted after the wait, so the counter's file write stays out of the
+        // window it measures.
+        if (classification != null) count(ClassifyEvent.CHECKED)
 
         var notificationDecision: NotificationDecision
         var newState: ThreadSpamState? = null
@@ -140,10 +155,13 @@ class SmsIngressUseCase(
             if (classification != null && !classification.isCompleted) {
                 // Too slow, not failed: record the verdict when it lands, and hand its
                 // decision to the caller, which may announce a message kept silent here.
+                count(ClassifyEvent.LATE)
+                val announcedNormally = !isMuted && notificationDecision == NotificationDecision.NORMAL
                 lateDecision = detachedScope().async {
                     try {
                         val late = runCatching { classification.await() }.getOrNull() ?: return@async null
                         runCatching { record(late, messageId, threadId, normalized, isMuted, message.timestamp).notification }.getOrNull()
+                            ?.also { if (announcedNormally && it != NotificationDecision.NORMAL) count(ClassifyEvent.LEAKED) }
                     } finally {
                         messageId?.let(inFlight::remove)
                     }
@@ -338,6 +356,12 @@ class SmsIngressUseCase(
             NotificationDecision.SILENT, NotificationDecision.NORMAL -> { /* leave unread */ }
         }
         return policyOut
+    }
+
+    /** Counts [event] without delaying ingress: the write runs on its own and its errors stay inside. */
+    private suspend fun count(event: ClassifyEvent) {
+        val stats = classifyStats ?: return
+        detachedScope().launch { stats.increment(event) }
     }
 
     /** No verdict in time: announce as the sender is routed now ([ThreadSpamPolicy.decideUnclassified]). */

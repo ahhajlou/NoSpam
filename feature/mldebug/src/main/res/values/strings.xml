@@ -18,4 +18,13 @@
     <string name="mldebug_core_commit">Core commit (persian-sms-spam)</string>
     <string name="mldebug_error_unavailable">Classifier is not available.</string>
     <string name="mldebug_error_failed">Classification failed.</string>
+    <string name="mldebug_stats_title">Spam checks of incoming messages</string>
+    <string name="mldebug_stats_description">Temporary counters to find out whether the check is sometimes too slow after the phone starts the app for a new message.</string>
+    <string name="mldebug_stats_since">Counting since</string>
+    <string name="mldebug_stats_none">Nothing counted yet</string>
+    <string name="mldebug_stats_checked">Messages checked</string>
+    <string name="mldebug_stats_late">Check too slow (no verdict within 3 s)</string>
+    <string name="mldebug_stats_failed">Check failed</string>
+    <string name="mldebug_stats_leaked">Late and notified, then judged spam</string>
+    <string name="mldebug_stats_reset">Reset counters</string>
 </resources>

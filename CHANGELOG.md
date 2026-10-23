@@ -10,6 +10,10 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 
 ## [Unreleased]
 
+### Added
+
+- The classifier test screen now shows how often the spam check of an incoming message was too slow, and how many spam messages notified as normal because of it.
+
 ## [0.9.0-beta.1] - 2026-10-20
 
 ### Added
