@@ -84,7 +84,7 @@ internal suspend fun writeJsonlWithLabels(
 }
 
 /**
- * Debug-only corpus export. Reaches the message store and the stored verdicts
+ * Corpus export of received messages, text masked. Reaches the message store and the stored verdicts
  * through [ExportRepository] rather than `core:telephony`/`core:database`, so
  * this feature goes through the repository layer like every other one.
  */
@@ -126,7 +126,7 @@ class ExportViewModel(
                     installId = installId,
                 )
 
-                val messages = repository?.allMessages() ?: emptyList()
+                val messages = repository?.receivedMessages() ?: emptyList()
                 if (messages.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         _uiState.value = _uiState.value.copy(

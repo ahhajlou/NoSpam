@@ -49,10 +49,10 @@ appId: com.nospam.nospam
     id: "open_navigation_menu"
 - tapOn: "Export SMS"
 - assertVisible: "Export SMS"
-- assertVisible: "Export all SMS messages to a JSONL file.*"
+- assertVisible: "Export the SMS you received to a JSONL file.*"
 - assertVisible: "Include spam/ham labels"
-- assertVisible: "Export all SMS"
-- tapOn: "Export all SMS"
+- assertVisible: "Export received SMS"
+- tapOn: "Export received SMS"
 # The boundary: Android's file picker opens with our suggested name, and saving
 # is left to a person. Cancel it, or it stays on top of the next flow.
 - extendedWaitUntil:
@@ -64,4 +64,4 @@ appId: com.nospam.nospam
     times: 3
     commands:
       - pressKey: Back
-- assertVisible: "Export all SMS"
+- assertVisible: "Export received SMS"

@@ -52,7 +52,7 @@ in release builds anyway, as a developer tool in the drawer: the phone in daily
 use runs a release build, and the next training set is built from its messages.
 The items below are still required before it is offered to volunteers.
 
-- [] **Export preprocessed text, not raw text.** The Rust core's anonymizer
+- [x] **Done 2026-10-23 (`feat/export-masked-received`):** the export writes received messages only, each text through the Rust anonymizer (`ExportRepository.receivedMessages`); a masking failure fails the export rather than writing raw text. Original: **Export preprocessed text, not raw text.** The Rust core's anonymizer
   (`NativeCore.stages`, first stage) already masks passwords, codes, national
   IDs, card, IBAN and account numbers, phone numbers and emails before scoring. Running the same
   masking on export costs the model nothing and stops the corpus carrying phone

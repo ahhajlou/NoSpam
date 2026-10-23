@@ -14,6 +14,10 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 
 - The classifier test screen now shows how often the spam check of an incoming message was too slow, and how many spam messages notified as normal because of it.
 
+### Changed
+
+- Export SMS now exports only the messages you received, with passwords, codes, card and account numbers, national IDs, phone numbers and emails replaced by tags such as [CARD]. Messages you sent are no longer exported.
+
 ## [0.9.0-beta.1] - 2026-10-20
 
 ### Added

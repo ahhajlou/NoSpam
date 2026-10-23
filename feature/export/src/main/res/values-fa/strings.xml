@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="export_title">خروجی پیامک‌ها</string>
-    <string name="export_description">تمام پیامک‌ها را به یک فایل JSONL خروجی بگیرید. هر خط شامل یک پیام با شناسهٔ خروجیِ هر نصب، زمان، فرستنده و متن است.</string>
-    <string name="export_button">خروجی همهٔ پیامک‌ها</string>
+    <string name="export_description">پیامک‌های دریافتی را به یک فایل JSONL خروجی بگیرید. هر خط شامل یک پیام با شناسهٔ خروجیِ هر نصب، زمان، فرستنده و متن است. رمزها، کدها، شماره‌های کارت و حساب، کدهای ملی، شماره‌های تلفن و ایمیل‌ها در متن با برچسب‌هایی مثل [CARD] جایگزین می‌شوند. پیام‌هایی که خودتان فرستاده‌اید خروجی گرفته نمی‌شوند.</string>
+    <string name="export_button">خروجی پیامک‌های دریافتی</string>
     <string name="export_exporting">در حال خروجی گرفتن…</string>
     <string name="export_success">%1$d پیام به %2$s صادر شد</string>
     <string name="export_failed">خروجی ناموفق بود: %1$s</string>

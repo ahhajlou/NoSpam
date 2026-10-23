@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="export_title">Export SMS</string>
-    <string name="export_description">Export all SMS messages to a JSONL file. Each line contains one message with the per-install export ID, timestamp, sender and text.</string>
-    <string name="export_button">Export all SMS</string>
+    <string name="export_description">Export the SMS you received to a JSONL file. Each line contains one message with the per-install export ID, timestamp, sender and text. Passwords, codes, card and account numbers, national IDs, phone numbers and emails in the text are replaced with tags such as [CARD]. Messages you sent are not exported.</string>
+    <string name="export_button">Export received SMS</string>
     <string name="export_exporting">Exporting…</string>
     <string name="export_success">Exported %1$d messages to %2$s</string>
     <string name="export_failed">Export failed: %1$s</string>
