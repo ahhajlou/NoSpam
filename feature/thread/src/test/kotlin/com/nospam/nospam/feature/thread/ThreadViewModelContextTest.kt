@@ -167,4 +167,24 @@ class ThreadViewModelContextTest {
             assertEquals("user override $userOverride", expected, vm.uiState.value.incomingLinks)
         }
     }
+
+    // One-time codes
+
+    @Test fun `a received message's one-time code is offered, the user's own never`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val telephony = FakeTelephonyDataSource().apply {
+            emitMessages(
+                ThreadId(9),
+                listOf(
+                    Message(MessageId(1), ThreadId(9), "+1555", "کد تایید شما: ۴۸۲۹۱۳", 1L, MessageType.INBOX, true),
+                    Message(MessageId(2), ThreadId(9), "+1555", "Your code is 731624", 2L, MessageType.SENT, true),
+                    Message(MessageId(3), ThreadId(9), "+1555", "See you at 1830", 3L, MessageType.INBOX, true),
+                ),
+            )
+        }
+        val vm = ThreadViewModel(telephony, linkDispatcher = StandardTestDispatcher(testScheduler))
+        vm.loadThread(9L, context = context)
+        advanceUntilIdle()
+        assertEquals(mapOf(1L to "482913"), vm.uiState.value.codes)
+    }
 }

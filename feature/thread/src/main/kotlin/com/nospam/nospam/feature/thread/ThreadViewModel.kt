@@ -14,6 +14,7 @@ import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.SenderState
 import com.nospam.nospam.core.model.ThreadId
 import com.nospam.nospam.core.model.ThreadSpamState
+import com.nospam.nospam.core.model.findOneTimeCode
 import com.nospam.nospam.core.model.isAlphanumericSender
 import com.nospam.nospam.core.model.isOutgoing
 import com.nospam.nospam.core.telephony.PhoneNumberNormalizer
@@ -69,6 +70,8 @@ data class ThreadUiState(
      * suspected spam ([spamMessageIds]) keeps them as text in any case.
      */
     val incomingLinks: Boolean = false,
+    /** The one-time code in each received message that has one, by message id. */
+    val codes: Map<Long, String> = emptyMap(),
 ) {
     /** False for an alphanumeric sender ID, which a reply cannot reach. */
     val canReply: Boolean get() = address?.let { !isAlphanumericSender(it) } ?: true
@@ -138,6 +141,7 @@ class ThreadViewModel(
     /** The country numbers without "+" in message text are read in; null until known. */
     private val numberRegion = MutableStateFlow<String?>(null)
     private var linksRegion: String? = null
+    private var codesJob: Job? = null
     private var lastRemote: List<Message> = emptyList()
     // Optimistic rows (negative ids) not yet confirmed by the provider.
     private var optimistic: List<Message> = emptyList()
@@ -165,6 +169,7 @@ class ThreadViewModel(
     ) {
         if (address != null) pendingAddress = address
         startLinks(context)
+        if (context != null) startCodes()
         // A forwarded message's body wins over any previously-saved draft for
         // this thread; skip the saved-draft load so it doesn't get overwritten.
         val drafts = this.drafts
@@ -363,6 +368,27 @@ class ThreadViewModel(
                     linksRegion = region
                     _uiState.value = _uiState.value.copy(links = links)
                 }
+        }
+    }
+
+    /**
+     * Finds the one-time code in each received message, off the main thread
+     * and once per message, as [startLinks] does links, and like it only with
+     * a context, so unit tests of everything else run no search.
+     */
+    private fun startCodes() {
+        if (codesJob != null) return
+        codesJob = viewModelScope.launch {
+            _uiState.map { it.messages }.distinctUntilChanged().collectLatest { messages ->
+                val known = _uiState.value.codes
+                val codes = withContext(linkDispatcher) {
+                    messages.filter { !it.type.isOutgoing }.mapNotNull { message ->
+                        val id = message.id.value
+                        (known[id] ?: findOneTimeCode(message.body))?.let { id to it }
+                    }.toMap()
+                }
+                _uiState.value = _uiState.value.copy(codes = codes)
+            }
         }
     }
 

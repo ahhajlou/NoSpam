@@ -12,4 +12,10 @@
     <!-- How a notification names the phone's owner, under an inline reply. -->
     <string name="notification_you">You</string>
     <string name="notification_mark_read">Mark as read</string>
+    <!-- A notification's action that copies the message's one-time code, shown in it. -->
+    <string name="notification_copy_code">Copy %1$s</string>
+    <!-- Shown after that action on Android 12 and older, which say nothing themselves. -->
+    <string name="notification_code_copied">Code copied</string>
+    <!-- The clipboard entry's label, which the system's clipboard preview may show. -->
+    <string name="clipboard_label_code">One-time code</string>
 </resources>

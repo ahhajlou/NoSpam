@@ -58,4 +58,8 @@
     <string name="action_send_message">Send message</string>
     <string name="action_email">Email</string>
     <string name="link_no_app">No app on this phone can open that</string>
+    <!-- Under a received message: copies the one-time code in it, shown here. -->
+    <string name="action_copy_code">Copy %1$s</string>
+    <!-- The clipboard entry's label for a copied one-time code. -->
+    <string name="clipboard_label_code">One-time code</string>
 </resources>

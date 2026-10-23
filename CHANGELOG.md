@@ -15,6 +15,7 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 - The classifier test screen now shows how often the spam check of an incoming message was too slow, and how many spam messages notified as normal because of it.
 - After saving an export, a "Share file" button sends it straight to Telegram, email or any other app.
 - Message notifications have a "Mark as read" button.
+- A message with a one-time code, in English or Persian, shows the code as a button that copies it, on its notification and under the message in the conversation. Bank dynamic passwords (رمز پویا) count too; tracking numbers, amounts and discount codes do not.
 
 ### Changed
 
