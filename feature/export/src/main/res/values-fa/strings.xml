@@ -13,4 +13,6 @@
     <string name="export_include_labels_desc">برای هر پیام، برچسب هرزنامه/عادی را از طبقه‌بند روی دستگاه اضافه می‌کند.</string>
     <string name="export_include_contacts">شامل پیام‌های مخاطبان باشد</string>
     <string name="export_include_contacts_desc">خاموش: فقط پیام‌های فرستندگانی که در مخاطبان شما نیستند خروجی گرفته می‌شوند.</string>
+    <string name="export_share">اشتراک‌گذاری فایل</string>
+    <string name="export_share_chooser">اشتراک‌گذاری خروجی</string>
 </resources>

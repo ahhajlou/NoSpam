@@ -155,7 +155,11 @@ class ExportViewModelBehaviorTest {
         assertNull(state.error)
         assertEquals(1, state.exportedCount)
         assertEquals("export.jsonl", state.successFile)
+        assertEquals(uri, state.exportedUri)
         assertEquals("fallback-id", state.installId)
+        // The file stays shareable after the success message is dismissed.
+        vm.clearStatus()
+        assertEquals(uri, vm.uiState.value.exportedUri)
         assertTrue(output.toString(Charsets.UTF_8.name()).contains("fallback-id"))
     }
 

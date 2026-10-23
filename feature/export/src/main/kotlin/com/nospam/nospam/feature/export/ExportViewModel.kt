@@ -24,6 +24,8 @@ data class ExportUiState(
     val exportedCount: Int = 0,
     val error: String? = null,
     val successFile: String? = null,
+    /** The last file saved, for sharing it; kept after the success message is cleared. */
+    val exportedUri: Uri? = null,
     /** When on, each exported line carries a spam/ham label from on-device classification. */
     val includeLabels: Boolean = true,
     /** When on, messages from saved contacts are exported too. Off by default. */
@@ -160,6 +162,7 @@ class ExportViewModel(
                         isExporting = false,
                         exportedCount = messages.size,
                         successFile = fileName,
+                        exportedUri = uri,
                     )
                 }
             } catch (e: Exception) {

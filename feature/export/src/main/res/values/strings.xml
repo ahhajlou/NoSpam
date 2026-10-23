@@ -13,4 +13,6 @@
     <string name="export_include_labels_desc">Adds a spam/ham label to each message from on-device classification.</string>
     <string name="export_include_contacts">Include messages from contacts</string>
     <string name="export_include_contacts_desc">Off: only messages from senders who are not in your contacts are exported.</string>
+    <string name="export_share">Share file</string>
+    <string name="export_share_chooser">Share export</string>
 </resources>

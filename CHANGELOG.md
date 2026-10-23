@@ -13,6 +13,7 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 ### Added
 
 - The classifier test screen now shows how often the spam check of an incoming message was too slow, and how many spam messages notified as normal because of it.
+- After saving an export, a "Share file" button sends it straight to Telegram, email or any other app.
 
 ### Changed
 
