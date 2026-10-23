@@ -16,7 +16,7 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 
 ### Changed
 
-- Export SMS now exports only the messages you received, with passwords, codes, card and account numbers, national IDs, phone numbers and emails replaced by tags such as [CARD]. Messages you sent are no longer exported.
+- Export SMS now exports only the messages you received, with passwords, codes, card and account numbers, national IDs, phone numbers and emails replaced by tags such as [CARD]. Messages you sent are no longer exported, and messages from your contacts only when you turn on "Include messages from contacts".
 
 ## [0.9.0-beta.1] - 2026-10-20
 

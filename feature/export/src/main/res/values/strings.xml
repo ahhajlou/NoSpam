@@ -11,4 +11,6 @@
     <string name="export_install_id_label">Export ID (per install)</string>
     <string name="export_include_labels">Include spam/ham labels</string>
     <string name="export_include_labels_desc">Adds a spam/ham label to each message from on-device classification.</string>
+    <string name="export_include_contacts">Include messages from contacts</string>
+    <string name="export_include_contacts_desc">Off: only messages from senders who are not in your contacts are exported.</string>
 </resources>

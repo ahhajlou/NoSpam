@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -166,32 +168,19 @@ fun ExportScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stringResource(R.string.export_include_labels),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = uiState.includeLabels,
-                        onCheckedChange = viewModel::onToggleIncludeLabels,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.export_include_labels_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            ExportSwitch(
+                title = stringResource(R.string.export_include_contacts),
+                description = stringResource(R.string.export_include_contacts_desc),
+                checked = uiState.includeContacts,
+                onCheckedChange = viewModel::onToggleIncludeContacts,
+            )
+            Spacer(Modifier.height(12.dp))
+            ExportSwitch(
+                title = stringResource(R.string.export_include_labels),
+                description = stringResource(R.string.export_include_labels_desc),
+                checked = uiState.includeLabels,
+                onCheckedChange = viewModel::onToggleIncludeLabels,
+            )
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
@@ -232,6 +221,44 @@ fun ExportScreen(
             Spacer(Modifier.height(16.dp))
             SnackbarHost(hostState = snackbarHostState)
         }
+    }
+}
+
+@Composable
+private fun ExportSwitch(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    // The whole row toggles, as a settings row does, not only the switch.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

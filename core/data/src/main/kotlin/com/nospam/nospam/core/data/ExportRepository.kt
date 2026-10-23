@@ -27,11 +27,24 @@ class ExportRepository(
     /**
      * Every received SMS, oldest first, with its text masked. The user's own
      * messages are never exported: they are the most private and teach a spam
-     * model nothing. Throws [MaskingFailedException] rather than return a text
-     * unmasked.
+     * model nothing. Messages from saved contacts are left out unless
+     * [includeContacts]: they carry the most risk and the least value, since
+     * contacts bypass the classifier. Throws [MaskingFailedException] rather
+     * than return a text unmasked.
      */
-    suspend fun receivedMessages(): List<Message> =
-        telephony.getInboxMessagesSince(0L).map { it.copy(body = maskOrFail(it.body)) }
+    suspend fun receivedMessages(includeContacts: Boolean = false): List<Message> {
+        val received = telephony.getInboxMessagesSince(0L)
+        val kept = if (includeContacts) {
+            received
+        } else {
+            // One lookup per sender, not per message.
+            val contacts = received.map { it.address }.distinct()
+                .filter { telephony.lookupContact(it) != null }
+                .toSet()
+            received.filter { it.address !in contacts }
+        }
+        return kept.map { it.copy(body = maskOrFail(it.body)) }
+    }
 
     private fun maskOrFail(text: String): String =
         try {

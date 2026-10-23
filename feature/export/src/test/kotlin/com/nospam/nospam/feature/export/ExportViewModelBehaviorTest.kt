@@ -11,6 +11,7 @@ import com.nospam.nospam.core.model.MessageId
 import com.nospam.nospam.core.model.MessageType
 import com.nospam.nospam.core.model.ThreadId
 import io.mockk.coEvery
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import java.io.ByteArrayOutputStream
@@ -119,7 +120,7 @@ class ExportViewModelBehaviorTest {
     @Test
     fun `export with an empty corpus takes the same empty-messages error branch`() {
         val repository = mockk<ExportRepository> {
-            coEvery { receivedMessages() } returns emptyList()
+            coEvery { receivedMessages(any()) } returns emptyList()
         }
         val vm = ExportViewModel(repository = repository, installIdProvider = { "id" })
         val context = mockContext("nothing to export")
@@ -135,7 +136,7 @@ class ExportViewModelBehaviorTest {
     @Test
     fun `successful export resolves installId via the fallback without loadInstallId being called`() {
         val repository = mockk<ExportRepository> {
-            coEvery { receivedMessages() } returns listOf(message(1, "111", "hi", 1000L))
+            coEvery { receivedMessages(any()) } returns listOf(message(1, "111", "hi", 1000L))
             coEvery { labelFor(any()) } returns null
         }
         val vm = ExportViewModel(repository = repository, installIdProvider = { "fallback-id" })
@@ -161,7 +162,7 @@ class ExportViewModelBehaviorTest {
     @Test
     fun `successful export falls back to the uri string when there is no path segment`() {
         val repository = mockk<ExportRepository> {
-            coEvery { receivedMessages() } returns listOf(message(1, "111", "hi", 1000L))
+            coEvery { receivedMessages(any()) } returns listOf(message(1, "111", "hi", 1000L))
             coEvery { labelFor(any()) } returns null
         }
         val vm = ExportViewModel(repository = repository, installIdProvider = { "id" })
@@ -184,7 +185,7 @@ class ExportViewModelBehaviorTest {
     @Test
     fun `export surfaces an explicit message when the output stream cannot be opened`() {
         val repository = mockk<ExportRepository> {
-            coEvery { receivedMessages() } returns listOf(message(1, "111", "hi", 1000L))
+            coEvery { receivedMessages(any()) } returns listOf(message(1, "111", "hi", 1000L))
         }
         val vm = ExportViewModel(repository = repository, installIdProvider = { "id" })
 
@@ -205,7 +206,7 @@ class ExportViewModelBehaviorTest {
         // openOutputStream throwing exercises the outer try/catch just as a
         // failing labelProvider would; both land in the same catch branch.
         val repository = mockk<ExportRepository> {
-            coEvery { receivedMessages() } returns listOf(message(1, "111", "hi", 1000L))
+            coEvery { receivedMessages(any()) } returns listOf(message(1, "111", "hi", 1000L))
         }
         val vm = ExportViewModel(repository = repository, installIdProvider = { "id" })
 
@@ -224,7 +225,7 @@ class ExportViewModelBehaviorTest {
     @Test
     fun `a masking failure fails the export and writes nothing`() {
         val repository = mockk<ExportRepository> {
-            coEvery { receivedMessages() } throws MaskingFailedException(UnsatisfiedLinkError("no core"))
+            coEvery { receivedMessages(any()) } throws MaskingFailedException(UnsatisfiedLinkError("no core"))
         }
         val vm = ExportViewModel(repository = repository, installIdProvider = { "id" })
 
@@ -241,5 +242,26 @@ class ExportViewModelBehaviorTest {
         assertTrue(state.error!!.startsWith("Masking failed"))
         assertNull(state.successFile)
         assertEquals(0, output.size())
+    }
+
+    @Test
+    fun `contacts are left out unless the switch is on`() {
+        val repository = mockk<ExportRepository> {
+            coEvery { receivedMessages(any()) } returns emptyList()
+        }
+        val vm = ExportViewModel(repository = repository, installIdProvider = { "id" })
+        assertEquals(false, vm.uiState.value.includeContacts)
+
+        vm.export(mockContext(), mockk<Uri>(relaxed = true))
+        awaitTerminal(vm)
+        vm.clearStatus()
+        vm.onToggleIncludeContacts(true)
+        vm.export(mockContext(), mockk<Uri>(relaxed = true))
+        awaitTerminal(vm)
+
+        coVerifyOrder {
+            repository.receivedMessages(false)
+            repository.receivedMessages(true)
+        }
     }
 }

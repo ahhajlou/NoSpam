@@ -58,7 +58,7 @@ The items below are still required before it is offered to volunteers.
   masking on export costs the model nothing and stops the corpus carrying phone
   numbers, OTP codes and account numbers. Cheapest and largest risk reduction —
   do this one first, even standalone.
-- [] **Default to unknown senders only.** Contact conversations are the highest
+- [x] **Done 2026-10-23 (`feat/export-privacy-defaults`):** messages from saved contacts are exported only with "Include messages from contacts" on (off by default). Original: **Default to unknown senders only.** Contact conversations are the highest
   risk and the lowest training value for a spam model. Offer including them as
   an explicit extra choice, never the default.
 - [] **Move out of the drawer, into Settings.** Something like "Help improve
