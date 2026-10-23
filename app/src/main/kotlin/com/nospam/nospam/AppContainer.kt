@@ -26,6 +26,7 @@ import com.nospam.nospam.core.data.SpamStateWriter
 import com.nospam.nospam.core.database.NoSpamDatabase
 import com.nospam.nospam.core.designsystem.component.ContactPhotoLoader
 import com.nospam.nospam.core.ml.DeferredSpamClassifier
+import com.nospam.nospam.core.ml.NativeCore
 import com.nospam.nospam.core.ml.SpamClassifier
 import com.nospam.nospam.core.ml.TfidfSpamClassifier
 import com.nospam.nospam.core.preferences.DataStorePreferencesDataSource
@@ -145,7 +146,9 @@ class AppContainer(private val context: Context) {
      * Read-only corpus access for the debug export tool, so `feature:export`
      * goes through the repository layer like every other feature (CLAUDE.md §4).
      */
-    val exportRepository: ExportRepository by lazy { ExportRepository(telephony, database) }
+    val exportRepository: ExportRepository by lazy {
+        ExportRepository(telephony, database, mask = { NativeCore.pipelineStages(it).anonymized })
+    }
 
     /** Temporary counters of incoming-SMS spam checks (TODO.md, "Late spam checks"). */
     val classifyStats: ClassifyStatsRepository by lazy { ClassifyStatsRepository(preferences) }

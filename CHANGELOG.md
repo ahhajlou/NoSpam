@@ -13,6 +13,11 @@ described on their [GitHub Releases](https://github.com/ahhajlou/NoSpam/releases
 ### Added
 
 - The classifier test screen now shows how often the spam check of an incoming message was too slow, and how many spam messages notified as normal because of it.
+- After saving an export, a "Share file" button sends it straight to Telegram, email or any other app.
+
+### Changed
+
+- Export SMS now exports only the messages you received, with passwords, codes, card and account numbers, national IDs, phone numbers and emails replaced by tags such as [CARD]. Messages you sent are no longer exported, and messages from your contacts only when you turn on "Include messages from contacts".
 
 ## [0.9.0-beta.1] - 2026-10-20
 

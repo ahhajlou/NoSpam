@@ -4,6 +4,8 @@ package com.nospam.nospam.feature.export
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,7 +19,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,6 +29,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -37,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -85,7 +91,7 @@ fun ExportScreen(
     }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/jsonl")
+        contract = ActivityResultContracts.CreateDocument(EXPORT_MIME_TYPE)
     ) { uri: Uri? ->
         if (uri != null) {
             viewModel.export(context, uri)
@@ -166,32 +172,19 @@ fun ExportScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stringResource(R.string.export_include_labels),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = uiState.includeLabels,
-                        onCheckedChange = viewModel::onToggleIncludeLabels,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.export_include_labels_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            ExportSwitch(
+                title = stringResource(R.string.export_include_contacts),
+                description = stringResource(R.string.export_include_contacts_desc),
+                checked = uiState.includeContacts,
+                onCheckedChange = viewModel::onToggleIncludeContacts,
+            )
+            Spacer(Modifier.height(12.dp))
+            ExportSwitch(
+                title = stringResource(R.string.export_include_labels),
+                description = stringResource(R.string.export_include_labels_desc),
+                checked = uiState.includeLabels,
+                onCheckedChange = viewModel::onToggleIncludeLabels,
+            )
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
@@ -229,9 +222,81 @@ fun ExportScreen(
                     )
                 }
             }
+            uiState.exportedUri?.let { uri ->
+                val chooserTitle = stringResource(R.string.export_share_chooser)
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { context.startActivity(shareIntent(uri, chooserTitle)) },
+                    enabled = !uiState.isExporting,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(
+                        text = stringResource(R.string.export_share),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
             Spacer(Modifier.height(16.dp))
             SnackbarHost(hostState = snackbarHostState)
         }
+    }
+}
+
+/**
+ * The share sheet for a saved export. The file is the user's own document, so
+ * the receiving app gets read access to that one URI only. The URI is also the
+ * clip data, which is what passes that access on to the share sheet itself:
+ * without it the sheet could not read the file's name and showed its row id.
+ * Android 10+ ignores [title] for a share.
+ */
+private fun shareIntent(uri: Uri, title: String): Intent = Intent.createChooser(
+    Intent(Intent.ACTION_SEND).apply {
+        type = EXPORT_MIME_TYPE
+        putExtra(Intent.EXTRA_STREAM, uri)
+        clipData = ClipData.newRawUri(null, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    },
+    title,
+)
+
+private const val EXPORT_MIME_TYPE = "application/jsonl"
+
+@Composable
+private fun ExportSwitch(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    // The whole row toggles, as a settings row does, not only the switch.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = checked,
+                onCheckedChange = null,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

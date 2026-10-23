@@ -24,8 +24,12 @@ data class ExportUiState(
     val exportedCount: Int = 0,
     val error: String? = null,
     val successFile: String? = null,
+    /** The last file saved, for sharing it; kept after the success message is cleared. */
+    val exportedUri: Uri? = null,
     /** When on, each exported line carries a spam/ham label from on-device classification. */
     val includeLabels: Boolean = true,
+    /** When on, messages from saved contacts are exported too. Off by default. */
+    val includeContacts: Boolean = false,
     /** Random per-install id stamped on every exported line; never a device identifier. */
     val installId: String = "",
 )
@@ -84,7 +88,7 @@ internal suspend fun writeJsonlWithLabels(
 }
 
 /**
- * Debug-only corpus export. Reaches the message store and the stored verdicts
+ * Corpus export of received messages, text masked. Reaches the message store and the stored verdicts
  * through [ExportRepository] rather than `core:telephony`/`core:database`, so
  * this feature goes through the repository layer like every other one.
  */
@@ -114,6 +118,10 @@ class ExportViewModel(
         _uiState.value = _uiState.value.copy(includeLabels = include)
     }
 
+    fun onToggleIncludeContacts(include: Boolean) {
+        _uiState.value = _uiState.value.copy(includeContacts = include)
+    }
+
     fun export(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             val installId = _uiState.value.installId.ifEmpty { installIdProvider() }
@@ -126,7 +134,7 @@ class ExportViewModel(
                     installId = installId,
                 )
 
-                val messages = repository?.allMessages() ?: emptyList()
+                val messages = repository?.receivedMessages(_uiState.value.includeContacts) ?: emptyList()
                 if (messages.isEmpty()) {
                     withContext(Dispatchers.Main) {
                         _uiState.value = _uiState.value.copy(
@@ -154,6 +162,7 @@ class ExportViewModel(
                         isExporting = false,
                         exportedCount = messages.size,
                         successFile = fileName,
+                        exportedUri = uri,
                     )
                 }
             } catch (e: Exception) {
